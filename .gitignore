@@ -1,0 +1,47 @@
+# ── 비밀키 · 환경변수 (NFR-SEC-02: 저장소에 커밋 금지) ──
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+credentials.json
+service-account*.json
+
+# ── Python ──
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+
+# ── Node / Next.js ──
+node_modules/
+.next/
+out/
+.turbo/
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pnpm-store/
+
+# ── 에디터 · OS ──
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── 로컬 산출물 ──
+*.log
+coverage/
+.coverage
+htmlcov/
+tmp/
+_scratch/
