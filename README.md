@@ -80,17 +80,17 @@
 | 영역 | 선택 | 선정 이유 (요약) |
 |---|---|---|
 | 백엔드 | Python 3.12 + FastAPI | Pydantic 스키마 검증이 학습 분해의 "고정 JSON 스키마" 요구와 맞물림 |
-| 프론트엔드 | Next.js (App Router) + TypeScript | 공모전 검색이 비회원 공개라 초기 로딩·SEO가 중요 |
+| 프론트엔드 | Next.js (App Router) + **JavaScript** | 공모전 검색이 비회원 공개라 초기 로딩·SEO가 중요 · **Vercel 경험 활용** |
 | LLM (주) | Claude Opus 5 | 도구 호출 + 고정 JSON 스키마 준수가 동시에 필요한 구간 |
 | LLM (보조) | Claude Haiku 4.5 | 추천 이유 1문장처럼 짧고 잦은 호출은 분리해 비용 관리 |
 | 임베딩 | `text-embedding-3-small` (1536차원) | 한국어 공고 검색 정확도 대비 비용 우위 |
-| DB · 벡터 | Supabase (PostgreSQL + pgvector, HNSW) | 업무 데이터·벡터·메모리를 한 DB에서 조인 |
-| 캐시 · 카운터 | Upstash Redis | 실시간 학습량 집계 (쓰기가 잦고 속도가 중요) |
-| 자동화 | n8n | 배치 실행 이력·재시도·실패 알림이 UI로 보임 |
-| 배포 | Vercel · Railway | GitHub 연동 자동 배포 |
+| DB · 인증 · 벡터 | Supabase (PostgreSQL + pgvector + Auth) | 업무 데이터·벡터·메모리를 한 DB에서 조인 · 가입/로그인이 설정으로 해결 |
+| 실시간 집계 | PostgreSQL (1차) → Redis (확장 시) | 실사용자 5~10명 규모에서는 테이블 집계로 충분 · 배울 기술을 하나 줄임 |
+| 자동화 | **Make** | **팀이 이미 쓸 줄 아는 도구** · 반복은 Python에서 돌리고 Make는 트리거만 담당 |
+| 배포 | **Vercel** (프론트) · Railway (백엔드) | GitHub 연동 자동 배포 · **Vercel 경험 활용** |
 | CI | GitHub Actions | PR 시 lint · test |
 
-전체 선정 근거는 [기획서 5-2절](기획서_학습플래너.md)을 참고.
+전체 선정 근거는 [기획서 5-2절](기획서_학습플래너.md)을, 팀이 새로 배워야 할 항목은 [학습 로드맵](docs/학습로드맵.md)을 참고.
 
 ---
 
@@ -99,6 +99,7 @@
 | 문서 | 내용 |
 |---|---|
 | [기획서_학습플래너.md](기획서_학습플래너.md) | 문제 정의 · 타겟 · AI 활용 방식 · 기술 접근 · 일정 · 팀 역할 · 리스크 |
+| [docs/학습로드맵.md](docs/학습로드맵.md) | 팀 보유 기술(Vercel·Make·Python) 기준 **추가 학습 항목** · 스택 조정 근거 · 역할별 학습 순서 |
 | `기능명세서_학습플래너.xlsx` | 기능 69개 상세 명세 + AI 기능 명세(Agent 도구표, RAG 파라미터, 폴백 정책, 평가 방법) |
 | `-1.png` | 4개 파이프라인 다이어그램 |
 
