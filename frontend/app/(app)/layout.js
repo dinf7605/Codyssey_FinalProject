@@ -2,7 +2,7 @@ import TopBar from '@/components/TopBar';
 import SideNav from '@/components/SideNav';
 import BottomNav from '@/components/BottomNav';
 import { levelOf } from '@/lib/growth';
-import { user } from '@/lib/mock';
+import { user, goal } from '@/lib/mock';
 
 // 로그인 후 화면들의 공통 껍데기.
 //   모바일 — 상단 막대 + 하단 탭
@@ -14,9 +14,9 @@ export default function AppLayout({ children }) {
 
   return (
     <div className="app">
-      <SideNav nickname={user.nickname} levelName={name} streakDays={user.streakDays} />
+      <SideNav nickname={user.nickname} levelName={name} streakDays={user.streakDays} goal={goal} />
       <div className="app-body">
-        <TopBar nickname={user.nickname} streakDays={user.streakDays} levelName={name} />
+        <TopBar nickname={user.nickname} streakDays={user.streakDays} levelName={name} goal={goal} />
         <main className="shell page">{children}</main>
       </div>
       <BottomNav />

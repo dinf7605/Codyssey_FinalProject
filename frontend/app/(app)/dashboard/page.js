@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import ProfileSummary from '@/components/ProfileSummary';
 import DayTimeline from '@/components/DayTimeline';
 import StudyGrass from '@/components/StudyGrass';
 import PaceSignal from '@/components/PaceSignal';
@@ -19,7 +20,7 @@ import { goal, pace, todayBlocks, contests, user, studyHistory, hourPattern } fr
 // 기록이 없는 사람에게 빈 그래프를 보여주는 대신 오늘 할 일만 두고 시작한다.
 
 export default function DashboardPage() {
-  const actual = levelOf(user.totalMinutes).level;
+  const { level: actual, name: levelName } = levelOf(user.totalMinutes);
   const [level, setLevel] = useState(actual);
 
   const remaining = todayBlocks.filter((b) => !b.done).length;
@@ -37,6 +38,9 @@ export default function DashboardPage() {
           {remaining > 0 ? '오늘 ' + remaining + '개 남았어요' : '오늘 할 일을 다 마쳤어요'}
         </h1>
       </header>
+
+      {/* 목표·마감·학습시간 목표는 레벨과 무관하게 항상 보인다 */}
+      <ProfileSummary user={user} goal={goal} levelName={levelName} weekMinutes={weekMinutes} />
 
       <GrowthPreview level={level} onChange={setLevel} />
 

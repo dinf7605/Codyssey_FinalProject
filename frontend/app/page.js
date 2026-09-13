@@ -33,6 +33,17 @@ const QA = [
 export default function LandingPage() {
   return (
     <div className="landing">
+    {/* 로그인·회원가입은 푸터가 아니라 상단에 둔다 — 찾으러 내려가지 않게 */}
+    <header className="landing-head">
+      <div className="shell landing-head-in">
+        <Link href="/" className="brand">StudyPace</Link>
+        <nav className="landing-head-nav" aria-label="계정">
+          <Link href="/login" className="btn btn-sm btn-quiet">로그인</Link>
+          <Link href="/signup" className="btn btn-sm landing-signup">회원가입</Link>
+        </nav>
+      </div>
+    </header>
+
     <main className="shell page" style={{ paddingBottom: 'var(--gap-6)' }}>
       <div className="landing-top">
       <section className="hero">
@@ -103,13 +114,10 @@ export default function LandingPage() {
       </section>
 
       <footer className="landing-foot" style={{ borderTop: '1px solid var(--rule)', paddingTop: 'var(--gap-4)', display: 'flex', flexDirection: 'column', gap: 9 }}>
-        <div style={{ display: 'flex', gap: 18, fontSize: 13 }}>
-          <Link href="/login">로그인</Link>
-          <Link href="/signup">회원가입</Link>
-        </div>
         <p className="dim micro">
           캘린더는 빈 시간대만 읽으며 일정 제목과 참석자는 저장하지 않습니다.
         </p>
+        <Link href="/signup" className="micro accent-text">회원가입</Link>
       </footer>
     </main>
     </div>

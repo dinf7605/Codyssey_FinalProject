@@ -426,3 +426,48 @@ button { font: inherit; color: inherit; cursor: pointer; background: none; borde
   .app { grid-template-columns: 260px minmax(0, 1fr); }
   .shell { max-width: 1080px; }
 }
+
+/* ── 프로필 요약 (로그인 후 첫 화면의 기준점) ────────── */
+.profile { padding: var(--gap-4) var(--gap-4) var(--gap-3); display: flex; flex-direction: column; gap: var(--gap-4); }
+.profile-head { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--gap-3); }
+.profile-name { font-family: var(--f-display); font-size: 19px; font-weight: 700; }
+.profile-goal { align-items: flex-end; gap: 3px; text-align: right; min-width: 0; }
+.profile-goal-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+.profile-dday { display: flex; align-items: baseline; gap: 9px; }
+.profile-dday .num-big { color: var(--accent); }
+.profile-week { display: flex; flex-direction: column; gap: 6px; }
+.profile-week-top { display: flex; justify-content: space-between; align-items: baseline; }
+.profile-week-top b { font-weight: 600; color: var(--ink); }
+.profile-stats { display: grid; grid-template-columns: repeat(3, 1fr); border-top: 1px solid var(--rule); padding-top: var(--gap-3); }
+.profile-stat { display: flex; flex-direction: column; gap: 2px; align-items: center; }
+.profile-stat + .profile-stat { border-left: 1px solid var(--rule); }
+.profile-stat-value { font-size: 17px; font-weight: 600; line-height: 1.2; }
+.profile-stat-sub { font-size: 12px; font-weight: 400; color: var(--ink-3); }
+
+/* ── 사이드바 계정 블록의 목표·D-Day ─────────────────── */
+.sidenav-goal { display: flex; flex-direction: column; gap: 2px; margin-bottom: 9px; }
+.sidenav-goal-title { font-size: 12px; color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sidenav-dday { font-size: 17px; font-weight: 600; color: var(--accent); line-height: 1.1; }
+
+/* ── 랜딩 상단 헤더 ──────────────────────────────────── */
+.landing-head { border-bottom: 1px solid var(--rule); background: var(--paper); padding-top: env(safe-area-inset-top); }
+.landing-head-in { height: 56px; display: flex; align-items: center; justify-content: space-between; gap: var(--gap-3); }
+.landing-head-nav { display: flex; align-items: center; gap: 6px; }
+.landing-signup { background: var(--ink); border-color: var(--ink); color: var(--paper); font-weight: 600; }
+
+@media (min-width: 900px) {
+  .landing-head .shell { max-width: 1100px; margin: 0 auto; padding: 0 40px; }
+  .landing-head-in { height: 64px; }
+  .landing-head-nav { gap: 10px; }
+  .profile { padding: var(--gap-5); gap: var(--gap-5); }
+  .profile-name { font-size: 22px; }
+  .profile-stat-value { font-size: 19px; }
+}
