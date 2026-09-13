@@ -1,8 +1,9 @@
 import os
-from routers import auth, notifications, settings, admin, batch  # 한 줄로 모아서 import
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
+
+from routers import admin, auth, batch, notifications, plan, settings, study
 
 # ── .env 파일 읽기 ──
 load_dotenv()
@@ -14,6 +15,8 @@ app.include_router(notifications.router)
 app.include_router(settings.router)
 app.include_router(admin.router)
 app.include_router(batch.router)
+app.include_router(plan.router)    # FR-PLAN-* (담당 C)
+app.include_router(study.router)   # FR-STUDY-* (담당 C)
 
 # ── CORS 설정 (프론트-백엔드 도메인 통신 허가) ──
 # .env의 FRONTEND_ORIGIN 값을 읽고, 없으면 로컬 기본값 사용
@@ -26,6 +29,7 @@ app.add_middleware(
     allow_methods=["*"],               # GET, POST 등 모든 메서드 허용
     allow_headers=["*"],               # 모든 헤더 허용
 )
+
 
 # ── /health 엔드포인트 (서버 생존 신호등) ──
 @app.get("/health")
