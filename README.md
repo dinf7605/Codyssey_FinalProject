@@ -12,7 +12,7 @@
 | 팀 구성 | 5인 · 전원 비전공자 · AI 도구를 활용해 개발 |
 | 핵심 AI 기술 요소 | **AI Agent · RAG · 자동화 워크플로우 · Long-term Memory** (4개) |
 | 기능 규모 | 총 69개 — Must 38 / Should 25 / Could 4 / Won't 2 |
-| 현재 단계 | **기획 완료** · 개발 착수 전 |
+| 현재 단계 | 기획 완료 · **프론트 화면 틀 + 백엔드 뼈대 구축** |
 
 ---
 
@@ -99,6 +99,7 @@
 | 문서 | 내용 |
 |---|---|
 | [기획서_학습플래너.md](기획서_학습플래너.md) | 문제 정의 · 타겟 · AI 활용 방식 · 기술 접근 · 일정 · 팀 역할 · 리스크 |
+| [frontend/README.md](frontend/README.md) | 프론트엔드 실행 방법 · 폴더 구조 · 화면↔기능 ID 매핑 · 모바일 대응 |
 | [docs/학습로드맵.md](docs/학습로드맵.md) | 팀 보유 기술(Vercel·Make·Python) 기준 **추가 학습 항목** · 스택 조정 근거 · 역할별 학습 순서 |
 | `기능명세서_학습플래너.xlsx` | 기능 69개 상세 명세 + AI 기능 명세(Agent 도구표, RAG 파라미터, 폴백 정책, 평가 방법) |
 | `-1.png` | 4개 파이프라인 다이어그램 |
@@ -122,8 +123,22 @@
 
 ## 실행 방법
 
-개발 착수 전이라 아직 소스 코드가 없다.
-1주차(09-14~20) 셋업 완료 후 이 절에 로컬 실행 절차와 필요한 환경변수(`.env.example`)를 채운다.
+```bash
+# 백엔드 (FastAPI)
+cd backend
+pip install -r requirements.txt
+uvicorn main:app --reload          # http://localhost:8000/docs
+
+# 프론트엔드 (Next.js)
+cd frontend
+npm install
+npm run dev                        # http://localhost:3000
+```
+
+환경변수는 루트의 `.env.example`을 복사해 `.env`로 만들어 채운다.
+프론트는 `frontend/.env.local`에 `NEXT_PUBLIC_API_BASE`를 넣는다.
+
+자세한 내용은 [frontend/README.md](frontend/README.md) 참고.
 
 ---
 
