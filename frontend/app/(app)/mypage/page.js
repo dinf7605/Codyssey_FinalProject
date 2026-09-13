@@ -1,6 +1,6 @@
 import SectionTitle from '@/components/SectionTitle';
 import StudyGrass from '@/components/StudyGrass';
-import { levelOf, nextUnlock, LEVELS } from '@/lib/growth';
+import { levelOf, nextUnlock, LEVELS, UNLOCK_LABEL } from '@/lib/growth';
 import { user, memories, goal, studyHistory } from '@/lib/mock';
 
 // FR-MEM-01 메모리 조회 / FR-MEM-02 메모리 삭제 / FR-MY-01~05
@@ -61,7 +61,7 @@ export default function MyPage() {
                 <b style={{ color: l.level <= current.level ? 'var(--ink)' : 'var(--ink-3)' }}>
                   레벨 {l.level} · {l.name}
                 </b>
-                <span>{l.unlocks.length ? l.unlocks.join(', ') : '오늘의 학습'}</span>
+                <span>{l.unlocks.length ? l.unlocks.map((u) => UNLOCK_LABEL[u]).join(' · ') : '오늘의 학습'}</span>
               </div>
               <span className="mono micro dim">{l.minHours}시간</span>
             </div>

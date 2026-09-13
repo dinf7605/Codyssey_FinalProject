@@ -5,6 +5,7 @@ import Link from 'next/link';
 
 export default function SignupPage() {
   return (
+    <div className="focus">
     <main className="shell page">
       <header style={{ paddingTop: 'var(--gap-5)' }}>
         <h1 style={{ fontSize: 22 }}>회원가입</h1>
@@ -73,5 +74,6 @@ export default function SignupPage() {
         이미 계정이 있나요? <Link href="/login" className="accent-text">로그인</Link>
       </p>
     </main>
+    </div>
   );
 }

@@ -1,5 +1,5 @@
 // 탭과 목록에 쓰는 선 아이콘.
-// 기호 문자(◉ ▦ ◈)는 기기·폰트마다 다르게 보이고 미완성처럼 읽혀서 SVG로 직접 그린다.
+// 기호 문자는 기기·폰트마다 다르게 보이고 미완성처럼 읽혀서 SVG로 직접 그린다.
 
 const base = {
   width: 24,
@@ -56,3 +56,10 @@ export function IconCheck(props) {
     </svg>
   );
 }
+
+export const ICONS = {
+  today: IconToday,
+  schedule: IconSchedule,
+  contest: IconContest,
+  me: IconMe,
+};

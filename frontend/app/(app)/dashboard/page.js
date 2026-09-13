@@ -40,6 +40,8 @@ export default function DashboardPage() {
 
       <GrowthPreview level={level} onChange={setLevel} />
 
+      <div className="cols">
+        <div className="col col-main">
       {/* 오늘 — 레벨과 무관하게 항상 보인다 */}
       <section className="sec">
         <SectionTitle moreHref="/schedule">오늘의 학습</SectionTitle>
@@ -78,6 +80,11 @@ export default function DashboardPage() {
 
       {/* 레벨 3 — 진도 신호등 */}
       {isOpen(level, 'pace') && <PaceSignal goal={goal} pace={pace} />}
+        </div>
+
+        {/* PC에서는 기록 계열을 오른쪽 기둥으로 보낸다.
+            모바일에서는 그대로 아래로 이어진다 (.cols가 세로 배치) */}
+        <div className="col col-side">
 
       {/* 레벨 4 — 학습 잔디 */}
       {isOpen(level, 'grass') && (
@@ -167,6 +174,8 @@ export default function DashboardPage() {
           <p className="micro dim">{next.items.join(' · ')}이(가) 열립니다</p>
         </div>
       )}
+        </div>
+      </div>
     </>
   );
 }

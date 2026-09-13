@@ -6,6 +6,7 @@ import Link from 'next/link';
 
 export default function LoginPage() {
   return (
+    <div className="focus">
     <main className="shell page">
       <header style={{ paddingTop: 'var(--gap-5)' }}>
         <h1 style={{ fontSize: 22 }}>로그인</h1>
@@ -38,5 +39,6 @@ export default function LoginPage() {
         <span className="muted">비밀번호 재설정</span>
       </div>
     </main>
+    </div>
   );
 }

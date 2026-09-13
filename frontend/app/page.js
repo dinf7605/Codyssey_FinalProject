@@ -32,7 +32,9 @@ const QA = [
 
 export default function LandingPage() {
   return (
+    <div className="landing">
     <main className="shell page" style={{ paddingBottom: 'var(--gap-6)' }}>
+      <div className="landing-top">
       <section className="hero">
         <h1 className="title">
           이 자격증,
@@ -48,7 +50,7 @@ export default function LandingPage() {
           <Link href="/onboarding" className="btn btn-primary">내게 맞는 목표 찾기</Link>
           <Link href="/contests" className="btn">공모전 먼저 둘러보기</Link>
         </div>
-        <p className="hint" style={{ marginTop: 10, textAlign: 'center' }}>
+        <p className="hint hero-hint" style={{ marginTop: 10, textAlign: 'center' }}>
           가입 없이 목표 추천까지 이용할 수 있습니다
         </p>
       </section>
@@ -78,6 +80,7 @@ export default function LandingPage() {
           화면의 일정은 예시입니다. 실제 일정은 입력하신 가용 시간과 목표에 따라 AI가 생성하며, 부정확할 수 있습니다.
         </AiNotice>
       </section>
+      </div>
 
       <section className="qa">
         {QA.map((item) => (
@@ -99,7 +102,7 @@ export default function LandingPage() {
         </p>
       </section>
 
-      <footer style={{ borderTop: '1px solid var(--rule)', paddingTop: 'var(--gap-4)', display: 'flex', flexDirection: 'column', gap: 9 }}>
+      <footer className="landing-foot" style={{ borderTop: '1px solid var(--rule)', paddingTop: 'var(--gap-4)', display: 'flex', flexDirection: 'column', gap: 9 }}>
         <div style={{ display: 'flex', gap: 18, fontSize: 13 }}>
           <Link href="/login">로그인</Link>
           <Link href="/signup">회원가입</Link>
@@ -109,5 +112,6 @@ export default function LandingPage() {
         </p>
       </footer>
     </main>
+    </div>
   );
 }

@@ -12,7 +12,7 @@ export const LEVELS = [
   { level: 5, name: '최상급', minHours: 150, unlocks: ['insight'] },
 ];
 
-const LABEL = {
+export const UNLOCK_LABEL = {
   streak: '연속 학습 기록',
   pace: '진도 신호등',
   contests: '맞춤 공모전 추천',
@@ -53,7 +53,7 @@ export function nextUnlock(totalMinutes) {
     name: next.name,
     remainingHours: Math.ceil(next.minHours - hours),
     percent: Math.max(0, Math.min(100, Math.round((done / span) * 100))),
-    items: next.unlocks.map((u) => LABEL[u]),
+    items: next.unlocks.map((u) => UNLOCK_LABEL[u]),
   };
 }
 
@@ -66,7 +66,7 @@ export function nextFromLevel(level) {
     name: next.name,
     remainingHours: null,
     percent: 0,
-    items: next.unlocks.map((u) => LABEL[u]),
+    items: next.unlocks.map((u) => UNLOCK_LABEL[u]),
   };
 }
 

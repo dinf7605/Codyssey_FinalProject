@@ -33,6 +33,7 @@ export default function OnboardingPage() {
   }
 
   return (
+    <div className="focus">
     <main className="shell page" style={{ paddingBottom: 'var(--gap-6)' }}>
       <header className="stack" style={{ gap: 'var(--gap-3)', paddingTop: 'var(--gap-4)' }}>
         <div className="stepper">
@@ -180,6 +181,7 @@ export default function OnboardingPage() {
         )}
       </div>
     </main>
+    </div>
   );
 }
 

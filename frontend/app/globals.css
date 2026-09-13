@@ -123,10 +123,7 @@ button { font: inherit; color: inherit; cursor: pointer; background: none; borde
   flex-direction: column;
   gap: var(--gap-6);
 }
-@media (min-width: 900px) {
-  :root { --shell: 720px; }
-  .page { padding-bottom: var(--gap-6); }
-}
+
 
 /* ── 타이포 ──────────────────────────────────────────── */
 .title { font-family: var(--f-display); font-size: 26px; font-weight: 700; line-height: 1.35; letter-spacing: -0.01em; }
@@ -231,11 +228,7 @@ button { font: inherit; color: inherit; cursor: pointer; background: none; borde
 .tab { min-height: var(--tabbar-h); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: var(--ink-3); font-size: 11px; }
 .tab svg { width: 21px; height: 21px; }
 .tab-active { color: var(--ink); }
-@media (min-width: 900px) {
-  .tabbar { position: sticky; top: 0; max-width: var(--shell); margin: 0 auto; grid-template-columns: repeat(4, auto); justify-content: start; border: 0; border-bottom: 1px solid var(--rule); background: var(--paper); }
-  .tab { min-height: 46px; flex-direction: row; gap: 7px; padding: 0 16px; font-size: 13px; }
-  .tab svg { width: 17px; height: 17px; }
-}
+
 
 /* ── 폼 ──────────────────────────────────────────────── */
 .field { display: flex; flex-direction: column; gap: 7px; }
@@ -317,3 +310,119 @@ button { font: inherit; color: inherit; cursor: pointer; background: none; borde
 /* ── 개발용 미리보기 ─────────────────────────────────── */
 .devbar { display: flex; align-items: center; gap: 8px; padding: 9px 12px; border: 1px dashed var(--rule-2); border-radius: var(--radius-sm); font-size: 12px; color: var(--ink-3); }
 .devbar select { font: inherit; color: var(--ink); background: var(--surface); border: 1px solid var(--rule-2); border-radius: 4px; padding: 3px 6px; }
+
+
+/* ══════════════════════════════════════════════════════
+   PC (>= 900px)
+   모바일 레이아웃을 넓히기만 하면 가운데 기둥 하나에
+   양옆이 비어 미완성으로 읽힌다. 구조 자체를 바꾼다.
+   ══════════════════════════════════════════════════════ */
+
+.sidenav { display: none; }
+.cols { display: flex; flex-direction: column; gap: var(--gap-6); }
+/* 컬럼 안의 섹션 간격은 화면 크기와 무관하게 필요하다 */
+.col { display: flex; flex-direction: column; gap: var(--gap-6); min-width: 0; }
+
+@media (min-width: 900px) {
+  :root { --shell: 100%; }
+
+  /* 왼쪽 사이드바 + 본문 */
+  .app { display: grid; grid-template-columns: 232px minmax(0, 1fr); align-items: start; }
+  .app-body { min-width: 0; }
+
+  .topbar { display: none; }   /* 사이드바가 브랜드·계정을 맡는다 */
+  .tabbar { display: none; }
+
+  .sidenav {
+    display: block;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    border-right: 1px solid var(--rule);
+    background: var(--surface-2);
+  }
+  .sidenav-in {
+    display: flex;
+    flex-direction: column;
+    gap: 28px;
+    padding: 26px 16px;
+    height: 100%;
+  }
+  .sidenav-brand { padding: 0 10px; font-size: 19px; }
+  .sidenav-list { display: flex; flex-direction: column; gap: 2px; }
+  .sidenav-item {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    padding: 10px 12px;
+    border-radius: var(--radius-sm);
+    font-size: 14px;
+    color: var(--ink-2);
+  }
+  .sidenav-active { background: var(--surface); color: var(--ink); font-weight: 600; box-shadow: inset 0 0 0 1px var(--rule); }
+  .sidenav-user {
+    margin-top: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 12px;
+    border-top: 1px solid var(--rule);
+  }
+  .sidenav-user-name { font-size: 13px; font-weight: 600; }
+
+  /* 본문 — 읽기 좋은 폭으로 제한하고 위아래 여백을 넉넉히 */
+  .shell { max-width: 1000px; margin: 0 auto; padding: 0 40px; }
+  .page { padding-top: 40px; padding-bottom: 64px; gap: 44px; }
+
+  .title { font-size: 30px; }
+  .hero .title { font-size: 42px; }
+}
+
+/* 대시보드 2단 — 하루(주)와 기록(부)을 나란히 둔다 */
+@media (min-width: 1160px) {
+  .cols {
+    display: grid;
+    grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+    gap: 48px;
+    align-items: start;
+  }
+  .col { gap: 44px; }
+  .col-side { position: sticky; top: 40px; }
+}
+
+/* 랜딩 — 히어로와 일정 미리보기를 나란히 */
+@media (min-width: 900px) {
+  .landing .shell { max-width: 1100px; margin: 0 auto; }
+  .landing-top { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 420px); gap: 56px; align-items: center; }
+  .hero { padding-top: 24px; }
+  .hero-cta { flex-direction: row; }
+  .hero-cta .btn { width: auto; padding: 0 26px; }
+  .hero-hint { text-align: left !important; }
+  .qa { display: grid; grid-template-columns: 1fr 1fr; gap: 0 48px; }
+  .qa-item:nth-last-child(2) { border-bottom: 0; }
+  .landing-foot { flex-direction: row !important; justify-content: space-between; align-items: center; }
+}
+
+/* 온보딩·인증은 집중 흐름이라 좁은 기둥을 유지한다 */
+@media (min-width: 900px) {
+  .focus .shell { max-width: 520px; margin: 0 auto; padding: 0 24px; }
+  .focus .page { padding-top: 56px; }
+}
+
+/* 마우스가 있는 환경에서만 hover — 터치에서 눌린 상태가 남는 것을 막는다 */
+@media (hover: hover) {
+  .sidenav-item:hover { background: var(--surface); color: var(--ink); }
+  .row:hover .row-main b { color: var(--accent); }
+  .ct:hover .ct-title { color: var(--accent); }
+  .tl-item:hover .tl-time { color: var(--ink); }
+  .chip:hover { border-color: var(--ink-3); }
+  .btn:hover:not(:disabled) { border-color: var(--ink-3); }
+  .btn-primary:hover:not(:disabled) { opacity: 0.88; }
+  .grass-cell:hover { outline: 1.5px solid var(--ink-3); outline-offset: 1px; }
+}
+
+/* 아주 넓은 화면에서 사이드바만 늘어나지 않게 */
+@media (min-width: 1600px) {
+  .app { grid-template-columns: 260px minmax(0, 1fr); }
+  .shell { max-width: 1080px; }
+}
