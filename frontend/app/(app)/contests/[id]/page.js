@@ -26,14 +26,14 @@ export default function ContestDetailPage() {
     <>
       <header className="stack" style={{ gap: 'var(--gap-2)' }}>
         <div style={{ display: 'flex', gap: 'var(--gap-2)', flexWrap: 'wrap' }}>
-          <span className="badge mono">{dday(contest.dDay)}</span>
-          <span className="badge">{contest.field}</span>
+          <span className="pill mono">{dday(contest.dDay)}</span>
+          <span className="pill">{contest.field}</span>
         </div>
         <h1 style={{ fontSize: 19, lineHeight: 1.4 }}>{contest.title}</h1>
         <p className="muted tiny">{contest.host} · 마감 {contest.deadline}</p>
       </header>
 
-      <section className="card" style={{ padding: 'var(--gap-4)' }}>
+      <section className="panel" style={{ padding: 'var(--gap-4)' }}>
         <div style={{ display: 'flex', gap: 'var(--gap-2)', alignItems: 'center', marginBottom: 'var(--gap-2)' }}>
           <h2 style={{ fontSize: 15 }}>추천 이유</h2>
           <AiBadge />
@@ -46,7 +46,7 @@ export default function ContestDetailPage() {
         </div>
       </section>
 
-      <section className="card" style={{ padding: 'var(--gap-4)' }}>
+      <section className="panel" style={{ padding: 'var(--gap-4)' }}>
         <h2 style={{ fontSize: 15 }}>얼마나 준비해야 할까요</h2>
         <p className="muted tiny" style={{ marginTop: 4 }}>
           주당 투입 가능 시간을 넣으면 최소 준비 기간을 계산합니다

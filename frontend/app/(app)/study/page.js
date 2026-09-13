@@ -34,7 +34,7 @@ export default function StudyPage() {
         <p className="muted tiny">{block.subject} · {block.scope}</p>
       </header>
 
-      <section className="card" style={{ padding: 'var(--gap-6) var(--gap-4)' }}>
+      <section className="panel" style={{ padding: 'var(--gap-6) var(--gap-4)' }}>
         <p className="timer">{format(seconds)}</p>
         <p className="dim tiny" style={{ textAlign: 'center', marginTop: 6 }}>
           예상 {block.minutes}분
@@ -61,7 +61,7 @@ export default function StudyPage() {
       </section>
 
       <section>
-        <div className="section-title">
+        <div className="sec-head">
           <h2>학습 메모</h2>
           <span className="dim tiny">선택</span>
         </div>

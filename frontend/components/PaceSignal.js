@@ -8,22 +8,20 @@ export default function PaceSignal({ goal, pace }) {
   const percent = Math.round((goal.unitsDone / goal.unitsTotal) * 100);
 
   return (
-    <section className="card pace">
-      <div className="pace-head">
-        <div className="stack" style={{ gap: 2, minWidth: 0 }}>
-          <span className="dim tiny">진행 중인 목표</span>
-          <h2 className="pace-title">{goal.title}</h2>
-        </div>
-        <span className="badge mono">{dday(goal.dDay)}</span>
+    <section className="sec">
+      <div className="sec-head">
+        <h2 className="h-sec">{goal.title}</h2>
+        <span className="mono tiny dim">{dday(goal.dDay)}</span>
       </div>
 
-      <div className="pace-progress">
-        <div className="pace-progress-label">
-          <span className="muted">
+      <div className="stack" style={{ gap: 8 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+          <span className="tiny muted">
             {goal.unitsDone} / {goal.unitsTotal} 단원
           </span>
-          <span className="mono strong">{percent}%</span>
+          <span className="mono" style={{ fontSize: 13, fontWeight: 600 }}>{percent}%</span>
         </div>
+
         <div
           className="bar"
           role="progressbar"
@@ -34,13 +32,11 @@ export default function PaceSignal({ goal, pace }) {
         >
           <div className="bar-fill" style={{ width: percent + '%' }} />
         </div>
-      </div>
 
-      <div className="pace-foot">
-        <span className={view.tone === 'muted' ? 'badge' : 'badge badge-' + view.tone}>
-          {view.label}
-        </span>
-        <p className="pace-next">{pace.nextCheckpoint}</p>
+        <div style={{ display: 'flex', gap: 9, alignItems: 'baseline', marginTop: 4 }}>
+          <span className={view.tone === 'muted' ? 'tag' : 'tag tag-' + view.tone}>{view.label}</span>
+          <p className="tiny muted" style={{ flex: 1 }}>{pace.nextCheckpoint}</p>
+        </div>
       </div>
     </section>
   );

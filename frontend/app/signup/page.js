@@ -30,7 +30,7 @@ export default function SignupPage() {
           <input id="su-nick" type="text" className="input" maxLength={10} placeholder="2~10자" />
         </div>
 
-        <fieldset className="card" style={{ padding: 'var(--gap-4)', display: 'flex', flexDirection: 'column', gap: 'var(--gap-3)' }}>
+        <fieldset className="panel" style={{ padding: 'var(--gap-4)', display: 'flex', flexDirection: 'column', gap: 'var(--gap-3)' }}>
           <legend className="tiny strong" style={{ padding: '0 6px' }}>약관 동의</legend>
 
           <label style={{ display: 'flex', gap: 10, alignItems: 'flex-start', fontSize: 13 }}>

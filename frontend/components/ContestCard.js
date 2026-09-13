@@ -2,29 +2,25 @@ import Link from 'next/link';
 import { AiBadge } from './AiNotice';
 import { dday } from '@/lib/ui';
 
-// FR-CONT-04 유사 공모전 추천 + FR-CONT-05 추천 이유 표시
-// 추천 이유에는 'AI 추천' 배지를 항상 붙인다 (NFR-ETHIC-01).
+// FR-CONT-04 추천 / FR-CONT-05 추천 이유
+// 카드로 띄우지 않고 규칙선으로 나눈 목록으로 둔다 — 길어져도 화면이 소란스럽지 않다.
 
 export default function ContestCard({ contest }) {
   const urgent = contest.dDay <= 7;
 
   return (
-    <li className="card">
-      <Link href={'/contests/' + contest.id} className="contest-link">
-        <div className="contest-badges">
-          <span className={urgent ? 'badge mono badge-late' : 'badge mono'}>
-            {dday(contest.dDay)}
-          </span>
-          <span className="badge">{contest.field}</span>
+    <li>
+      <Link href={'/contests/' + contest.id} className="ct">
+        <div className="ct-top">
+          <span className={urgent ? 'tag tag-late' : 'tag tag-accent'}>{dday(contest.dDay)}</span>
+          <span className="micro dim">{contest.field}</span>
           {contest.aiGenerated && <AiBadge />}
         </div>
-
-        <h3 className="contest-title">{contest.title}</h3>
-        <p className="dim tiny contest-host">
+        <h3 className="ct-title">{contest.title}</h3>
+        <p className="ct-host">
           {contest.host} · 마감 {contest.deadline}
         </p>
-
-        {contest.reason && <p className="contest-reason">{contest.reason}</p>}
+        {contest.reason && <p className="ct-reason">{contest.reason}</p>}
       </Link>
     </li>
   );

@@ -91,7 +91,7 @@ export default function OnboardingPage() {
             ))}
           </div>
 
-          <div className="card" style={{ padding: 'var(--gap-3) var(--gap-4)', display: 'flex', justifyContent: 'space-between' }}>
+          <div className="panel" style={{ padding: 'var(--gap-3) var(--gap-4)', display: 'flex', justifyContent: 'space-between' }}>
             <span className="muted tiny">선택한 주간 학습 시간</span>
             <span className="mono strong">{weeklyHours}시간</span>
           </div>
@@ -118,7 +118,7 @@ export default function OnboardingPage() {
                 <button
                   type="button"
                   onClick={() => setPicked(g.id)}
-                  className="card"
+                  className="panel"
                   style={{
                     width: '100%',
                     textAlign: 'left',
@@ -129,8 +129,8 @@ export default function OnboardingPage() {
                 >
                   <div style={{ display: 'flex', gap: 'var(--gap-2)', marginBottom: 8 }}>
                     <AiBadge />
-                    <span className="badge mono">{g.weeks}주 예상</span>
-                    <span className="badge mono">주 {g.hoursPerWeek}시간</span>
+                    <span className="pill mono">{g.weeks}주 예상</span>
+                    <span className="pill mono">주 {g.hoursPerWeek}시간</span>
                   </div>
                   <b style={{ fontSize: 16 }}>{g.title}</b>
                   <p style={{ fontSize: 13, color: 'var(--ink-2)', marginTop: 6, lineHeight: 1.6 }}>

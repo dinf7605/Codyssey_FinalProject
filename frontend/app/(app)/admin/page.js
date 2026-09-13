@@ -21,7 +21,7 @@ export default function AdminPage() {
 
       <section>
         <SectionTitle>AI 사용량</SectionTitle>
-        <div className="card rows">
+        <div className="rows">
           {USAGE.map((u) => (
             <div className="row" key={u.feature}>
               <div className="row-main">
@@ -39,27 +39,27 @@ export default function AdminPage() {
 
       <section>
         <SectionTitle>수집 공고 점검</SectionTitle>
-        <div className="card rows">
+        <div className="rows">
           <div className="row">
             <div className="row-main">
               <b>마감일 누락</b>
               <span>파싱 실패로 검수가 필요한 공고</span>
             </div>
-            <span className="badge badge-warn mono">3건</span>
+            <span className="pill mono" style={{ color: 'var(--warn)' }}>3건</span>
           </div>
           <div className="row">
             <div className="row-main">
               <b>중복 의심</b>
               <span>주최 + 제목 + 마감일이 유사한 공고</span>
             </div>
-            <span className="badge mono">1건</span>
+            <span className="pill mono">1건</span>
           </div>
           <div className="row">
             <div className="row-main">
               <b>미색인</b>
               <span>임베딩 실패 · 다음 배치에서 재처리</span>
             </div>
-            <span className="badge mono">0건</span>
+            <span className="pill mono">0건</span>
           </div>
         </div>
       </section>
