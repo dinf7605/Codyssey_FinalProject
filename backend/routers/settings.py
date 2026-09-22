@@ -1,7 +1,9 @@
 from fastapi import APIRouter, HTTPException
 from schemas.user import WithdrawRequest
+from db import supabase              # ← 추가!
 
 router = APIRouter(prefix="/settings", tags=["settings"])
+
 
 @router.get("/ping")
 def settings_ping():
@@ -15,16 +17,16 @@ def withdraw_user(req: WithdrawRequest):
     if not req.confirm:
         raise HTTPException(status_code=400, detail="탈퇴 확인이 필요합니다")
 
-    # ── 삭제 순서 (TODO: DB 연결 후 구현) ──
-    # 2) 토큰 즉시 폐기 (보안 최우선)
-    # TODO: 세션/토큰 무효화
+    # 2) users 테이블에서 삭제
+    response = (
+        supabase.table("users")
+        .delete()
+        .eq("id", req.user_id)
+        .execute()
+    )
 
-    # 3) 사용자 데이터 삭제
-    # TODO: 일정 삭제
-    # TODO: 학습기록 삭제
-    # TODO: 메모리/캘린더 삭제
-
-    # 4) 계정 삭제
-    # TODO: users 테이블에서 삭제
+    # 3) 삭제된 게 없으면 = 그런 유저 없음
+    if not response.data:
+        raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다")
 
     return {"message": "탈퇴가 완료되었습니다"}
