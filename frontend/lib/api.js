@@ -21,10 +21,16 @@ async function request(path, options = {}) {
     } catch {
       /* 응답이 JSON이 아니면 기본 문구를 쓴다 */
     }
-    throw new Error(detail);
+    const err = new Error(detail);
+    err.status = res.status;
+    throw err;
   }
 
   return res.status === 204 ? null : res.json();
+}
+
+function post(path, body) {
+  return request(path, { method: 'POST', body: JSON.stringify(body) });
 }
 
 export const api = {
@@ -37,6 +43,57 @@ export const api = {
   },
   batch: {
     ping: () => request('/batch/ping'),
+  },
+
+  // 목표 탐색 (FR-GOAL-01~13, 담당 B) — 파이프라인 0
+  goal: {
+    tags: () => request('/goal/tags'),
+    popular: (k = 3) => request(`/goal/popular?k=${k}`),
+
+    // FR-GOAL-11 — 유사 분야 추천 (입력이 없을 때)
+    suggest: ({ sessionId, recentGoalTags = [], recentViewedFields = [], isMember = false }) =>
+      post('/goal/suggest', {
+        session_id: sessionId,
+        recent_goal_tags: recentGoalTags,
+        recent_viewed_fields: recentViewedFields,
+        is_member: isMember,
+      }),
+
+    // FR-GOAL-03 — 목표 후보 매칭
+    match: ({ tags, sessionId, isMember = false, k = 20 }) =>
+      post('/goal/match', { tags, session_id: sessionId, is_member: isMember, k }),
+
+    // FR-GOAL-05 — 목표 추천 카드 (매칭 + 기간 계산 + 추천 이유를 한 번에)
+    recommend: ({ tags, weeklyHours, sessionId, isMember = false }) =>
+      post('/goal/recommend', {
+        tags,
+        weekly_hours: weeklyHours,
+        session_id: sessionId,
+        is_member: isMember,
+      }),
+
+    // FR-GOAL-04 · FR-GOAL-09 — 기간 계산 모듈 (LLM 미사용)
+    feasibility: ({ candidates, weeklyHours }) =>
+      post('/goal/feasibility', { candidates, weekly_hours: weeklyHours }),
+
+    // FR-GOAL-08 — 추천 피드백
+    feedback: ({ goalId, interested, reason = null, sessionId }) =>
+      post('/goal/feedback', { goal_id: goalId, interested, reason, session_id: sessionId }),
+
+    // FR-GOAL-10 — 직접 입력한 목표의 기한 실현 가능성 확인
+    manualCheck: ({ title, dueDate, weeklyHours }) =>
+      post('/goal/manual/check', { title, due_date: dueDate, weekly_hours: weeklyHours }),
+
+    // FR-GOAL-07 — 목표 확정
+    confirm: ({ goalTitle, isMember = false, activeGoalCount = 0 }) =>
+      post('/goal/confirm', {
+        goal_title: goalTitle,
+        is_member: isMember,
+        active_goal_count: activeGoalCount,
+      }),
+
+    usage: ({ sessionId, isMember = false }) =>
+      request(`/goal/usage?session_id=${encodeURIComponent(sessionId)}&is_member=${isMember}`),
   },
 };
 

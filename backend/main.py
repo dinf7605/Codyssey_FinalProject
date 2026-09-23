@@ -3,7 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
-from routers import admin, auth, batch, notifications, plan, settings, study
+from routers import admin, auth, batch, goal, notifications, plan, settings, study
 
 # ── .env 파일 읽기 ──
 load_dotenv()
@@ -17,6 +17,7 @@ app.include_router(admin.router)
 app.include_router(batch.router)
 app.include_router(plan.router)    # FR-PLAN-* (담당 C)
 app.include_router(study.router)   # FR-STUDY-* (담당 C)
+app.include_router(goal.router)    # FR-GOAL-* (담당 B)
 
 # ── CORS 설정 (프론트-백엔드 도메인 통신 허가) ──
 # .env의 FRONTEND_ORIGIN 값을 읽고, 없으면 로컬 기본값 사용

@@ -242,6 +242,8 @@ button { font: inherit; color: inherit; cursor: pointer; background: none; borde
 .rows { display: flex; flex-direction: column; }
 .row { display: flex; justify-content: space-between; align-items: center; gap: var(--gap-3); padding: var(--gap-3) 0; border-bottom: 1px solid var(--rule); }
 .row:last-child { border-bottom: 0; }
+/* 목록 항목을 눌러서 고를 수 있을 때 (예: 온보딩 인기 목표 선택) */
+.row-clickable { cursor: pointer; }
 .row-main { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .row-main b { font-size: 14px; font-weight: 600; }
 .row-main span { font-size: 12px; color: var(--ink-2); }
@@ -409,6 +411,16 @@ button { font: inherit; color: inherit; cursor: pointer; background: none; borde
   .focus .page { padding-top: 56px; }
 }
 
+/* btn-quiet는 배경·테두리가 모두 투명해서 그냥 텍스트처럼 보인다. hover 이벤트가 없는
+   터치 환경에서는 "hover하면 버튼처럼 보인다"가 아무 도움이 안 되므로, 밑줄은 항상(호버
+   여부와 무관하게) 붙여 정적 상태에서도 "눌리는 텍스트"임을 알 수 있게 한다.
+   (사용자 피드백: 클릭 시 이동되는 글자는 모두 버튼임을 알 수 있게) */
+.btn-quiet-hover {
+  text-decoration: underline;
+  text-decoration-color: var(--rule-2);
+  text-underline-offset: 3px;
+}
+
 /* 마우스가 있는 환경에서만 hover — 터치에서 눌린 상태가 남는 것을 막는다 */
 @media (hover: hover) {
   .sidenav-item:hover { background: var(--surface); color: var(--ink); }
@@ -419,6 +431,15 @@ button { font: inherit; color: inherit; cursor: pointer; background: none; borde
   .btn:hover:not(:disabled) { border-color: var(--ink-3); }
   .btn-primary:hover:not(:disabled) { opacity: 0.88; }
   .grass-cell:hover { outline: 1.5px solid var(--ink-3); outline-offset: 1px; }
+  .row-clickable:hover { background: var(--surface); }
+  /* btn-quiet는 배경이 투명해서 hover만으로는 버튼처럼 보이지 않는다(border-color만
+     바뀜) — "추천 대신 직접 입력" 같은 조용한 버튼도 클릭 가능해 보이게 배경을 살짝
+     밝힌다. */
+  .btn-quiet-hover:hover:not(:disabled) {
+    background: var(--surface);
+    border-radius: var(--radius-sm);
+    text-decoration-color: var(--ink-3);
+  }
 }
 
 /* 아주 넓은 화면에서 사이드바만 늘어나지 않게 */
