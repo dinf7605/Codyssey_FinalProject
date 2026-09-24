@@ -1,16 +1,21 @@
 """일정 생성 API (FR-PLAN-*) — 담당 C
 
-  POST /plan/decompose   목표 -> 학습 단위 (AI Agent)
-  POST /plan/schedule    학습 단위 -> 블록 배치 (결정론적)
-  POST /plan/reschedule  야간 재조정
-  POST /plan/validate    규칙 위반 검사
+  POST /plan/decompose         목표 -> 학습 단위 (AI Agent)
+  POST /plan/decompose/stream  위와 같지만 진행 단계를 한 줄씩 흘려보낸다
+  POST /plan/schedule          학습 단위 -> 블록 배치 (결정론적)
+  POST /plan/reschedule        야간 재조정
+  POST /plan/validate          규칙 위반 검사
 """
 
 from __future__ import annotations
 
+import json
+import queue
+import threading
 from datetime import date
 
 from fastapi import APIRouter
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from schemas.plan import Availability, Block, DecomposeResult, SchedulePlan, StudyUnit, Violation
@@ -25,6 +30,7 @@ class DecomposeRequest(BaseModel):
     goal_title: str
     goal_id: str = "custom"
     availability: Availability | None = None
+    today: date | None = None  # 비우면 서버 날짜. 사용자 시간대가 다를 때 넘긴다
 
 
 class ScheduleRequest(BaseModel):
@@ -66,7 +72,49 @@ def decompose(req: DecomposeRequest) -> DecomposeResult:
     AI가 실패해도 표준 커리큘럼 템플릿으로 항상 결과를 돌려준다.
     어디서 온 결과인지는 응답의 source 로 알 수 있다 (agent / partial / template).
     """
-    return decompose_goal(req.goal_title, req.goal_id, req.availability)
+    return decompose_goal(req.goal_title, req.goal_id, req.availability, today=req.today)
+
+
+@router.post("/decompose/stream")
+def decompose_stream(req: DecomposeRequest) -> StreamingResponse:
+    """FR-PLAN-02 + 진행 표시 — 에이전트가 실제로 한 일을 한 줄(JSON)씩 보낸다.
+
+    최대 60초가 걸리는 작업이라, 화면이 멈춘 것처럼 보이지 않게 하려는 것이다.
+
+      {"type": "start", "budget_seconds": 60}
+      {"type": "thinking", "step": 1}
+      {"type": "tool", "name": "search_curriculum"}
+      ...
+      {"type": "result", "result": {...DecomposeResult...}}   <- 항상 마지막 줄
+
+    에이전트는 별도 스레드에서 돌고, 이벤트는 큐를 거쳐 응답으로 나간다.
+    """
+    events: queue.Queue[dict | None] = queue.Queue()
+
+    def work() -> None:
+        try:
+            result = decompose_goal(
+                req.goal_title, req.goal_id, req.availability,
+                today=req.today, on_event=events.put,
+            )
+            events.put({"type": "result", "result": result.model_dump(mode="json")})
+        except Exception as exc:  # noqa: BLE001 - 스트림을 열어둔 채로 끝나면 화면이 계속 기다린다
+            events.put({"type": "error", "message": f"계획을 만들지 못했습니다. ({type(exc).__name__})"})
+        finally:
+            events.put(None)
+
+    threading.Thread(target=work, daemon=True).start()
+
+    def lines():
+        while (event := events.get()) is not None:
+            yield json.dumps(event, ensure_ascii=False) + "\n"
+
+    # 프록시가 응답을 모았다가 한 번에 보내지 않도록 버퍼링을 끈다
+    return StreamingResponse(
+        lines(),
+        media_type="application/x-ndjson",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @router.post("/schedule", response_model=SchedulePlan)

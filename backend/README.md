@@ -19,6 +19,16 @@ pytest -q                     # 테스트
 `ANTHROPIC_API_KEY` 가 비어 있으면 **AI를 호출하지 않고 표준 커리큘럼 템플릿으로 동작**한다.
 키 없이도 로컬 개발이 가능하도록 일부러 그렇게 만들었다.
 
+**Codyssey 게이트웨이 키(`sk-cody…`)를 쓸 때 — 둘 다 빠지면 401 이 난다**
+
+| 변수 | 값 | 빠뜨리면 |
+|---|---|---|
+| `ANTHROPIC_BASE_URL` | `https://copa.codyssey.kr` | 요청이 `api.anthropic.com` 으로 가서 거절 |
+| `ANTHROPIC_MODEL` | `claude-sonnet-4` (날짜 **없이**) | `claude-sonnet-4-20250514` 처럼 날짜를 붙이면 게이트웨이가 모델 오류가 아니라 **"API key is invalid"** 로 답한다 — 키를 의심하게 만드는 함정 |
+
+쓸 수 있는 모델: `claude-sonnet-4` · `claude-haiku-4` · `claude-opus-4-8`.
+게이트웨이의 `/v1/chat/completions`(OpenAI 방식)는 이 키로 막혀 있다 — Anthropic 방식(`/v1/messages`)만 된다.
+
 ---
 
 ## 담당 C — 일정 · 학습 (`FR-PLAN-*` / `FR-STUDY-*`)
@@ -52,12 +62,42 @@ pytest -q                     # 테스트
 |---|---|---|
 | 도구 | 6종 (`services/agent_tools.py`) | AI기능명세 1 |
 | 최대 반복 | **5회** | 3회로는 검색→추정→배치 연계가 끊기고, 8회 이상은 결과 차이 없이 비용만 증가 |
-| 타임아웃 | 20초 | AI기능명세 6 |
+| 모델 | `claude-sonnet-4` | 아래 실측 — haiku 보다 8초 느리지만 단위를 더 잘게 나누고 추정 표시가 정확 |
+| 시간 제한 | **전체 60초** (호출당 아님) | NFR-PERF-01. 각 호출에는 남은 시간만 준다 |
+| SDK 자동 재시도 | **끔** (`max_retries=0`) | 켜 두면 타임아웃마다 2번 더 기다려 2분을 넘긴다 |
 | 스키마 강제 | 도구에 `strict: true` | 인자가 스키마를 반드시 통과 → 검증 실패 폴백 자체가 줄어든다 |
 | 실패 시 | 1회 재시도 → 템플릿 대체 | AI기능명세 6 |
 | 사용자 확인 필요 | `save_plan` | 되돌리기 어려운 동작은 에이전트가 직접 실행하지 않는다 |
+| 오늘 날짜 | 프롬프트에 넣는다 | 안 넣었더니 모델이 2024~2025년 날짜로 빈 시간을 조회했다 |
 
 응답의 `source` 로 결과가 어디서 왔는지 알 수 있다 — `agent` / `partial` / `template`.
+
+#### 실측 (2026-09-24, Codyssey 게이트웨이, 정보처리기사 필기)
+
+| 모델 | 결과 | 걸린 시간 | 학습 단위 | 도구 호출 |
+|---|---|---|---|---|
+| claude-sonnet-4 | `agent` | 41~46초 | 10~24개 | 8회 |
+| claude-haiku-4 | `agent` | 33초 | 12개 | 14회 |
+
+최종 JSON 을 쓰는 마지막 호출 하나가 **약 24초**라서, 처음 명세의 "호출당 20초"로는 거의 항상 템플릿으로 떨어졌다.
+그래서 시간 제한을 에이전트 전체 60초로 바꾸고 화면에 진행 단계를 보여준다.
+
+#### 진행 표시 — `POST /plan/decompose/stream`
+
+60초를 멈춘 화면으로 기다리게 할 수 없어서, 에이전트가 **실제로 한 일**을 한 줄(JSON)씩 보낸다.
+타이머로 단계를 지어내지 않는다.
+
+```
+0.3s  {"type": "start", "budget_seconds": 60}
+1.1s  {"type": "thinking", "step": 1}
+6.6s  {"type": "tool", "name": "search_curriculum"}
+ ...
+45.6s {"type": "done", "source": "agent"}
+45.6s {"type": "result", "result": {...}}      ← 항상 마지막 줄
+```
+
+화면: `frontend/components/PlanBuilder.js` (일정 탭 → 학습 계획 만들기).
+`TestClient` 는 응답을 다 모아서 돌려주므로 시간 간격은 실제 서버(uvicorn)로 확인해야 한다.
 
 ### 스케줄 배치 엔진 (`FR-PLAN-03`)
 
@@ -82,6 +122,7 @@ pytest -q                     # 테스트
 | 메서드 | 경로 | 기능 |
 |---|---|---|
 | POST | `/plan/decompose` | 목표 → 학습 단위 (`FR-PLAN-02`) |
+| POST | `/plan/decompose/stream` | 위와 같고 진행 단계를 줄 단위로 흘려보냄 (NDJSON) |
 | POST | `/plan/schedule` | 학습 단위 → 블록 배치 (`FR-PLAN-03`) |
 | POST | `/plan/reschedule` | 야간 재조정 (`FR-PLAN-06`) |
 | POST | `/plan/validate` | 규칙 위반 검사 |
@@ -97,11 +138,12 @@ pytest -q                     # 테스트
 ### 테스트
 
 ```bash
-pytest -q       # 24개
+pytest -q       # C 담당 35개
 ```
 
 | 파일 | 확인하는 것 |
 |---|---|
+| `tests/test_decomposer.py` | 도구 루프, 결과 한 메시지로 반환, `save_plan` 미실행, 오늘 날짜, 남은 시간만 주기, 타임아웃·예산 소진·스키마 실패 폴백, 반복 상한, 스트림 마지막 줄 |
 | `tests/test_scheduler.py` | 결정론성, 규칙 준수, 휴식일, 선행 관계, 미배치 처리, 재조정 |
 | `tests/test_validator.py` | 위반 5종을 실제로 잡아내는지 |
 | `tests/test_aggregator.py` | 5분 미만 제외, 스트릭, 레벨 구간, 주 경계 |
@@ -116,4 +158,6 @@ pytest -q       # 24개
 - [ ] `services/agent_tools.py` 의 목업 데이터를 Supabase 조회로 교체 (에이전트 코드는 그대로)
 - [ ] 구글 캘린더 연동 (`FR-PLAN-01`) — `get_available_slots` 도구 안쪽
 - [ ] AI 호출 로그 저장 (`FR-ADMIN-02` 대시보드 근거)
-- [ ] 프론트 `/schedule` · `/study` 를 목업에서 이 API 호출로 전환
+- [x] 프론트 `/schedule` 에서 계획 만들기(분해 → 배치 → 검증)를 실제 API로 호출
+- [ ] 프론트 `/schedule` 의 주간·오늘 블록, `/study` 를 목업에서 API 로 전환 (저장소가 붙은 뒤)
+- [ ] 계획 확정(`save_plan`) — 사용자 확인 버튼 + 저장 API

@@ -261,6 +261,15 @@ button { font: inherit; color: inherit; cursor: pointer; background: none; borde
 /* ── AI 고지 ─────────────────────────────────────────── */
 .ai-notice { font-size: 11.5px; line-height: 1.55; color: var(--ink-3); display: flex; gap: 5px; align-items: flex-start; }
 
+/* ── AI 계획 진행 표시 (FR-PLAN-02) ──────────────────── */
+.progress { display: flex; flex-direction: column; gap: var(--gap-3); padding: var(--gap-4); border: 1px solid var(--rule); border-radius: var(--radius); background: var(--surface); }
+.progress-head { display: flex; justify-content: space-between; align-items: baseline; gap: var(--gap-3); }
+.progress-head b { font-size: 14px; font-weight: 600; }
+.progress-log { display: flex; flex-direction: column; gap: 6px; }
+.progress-log li { display: flex; justify-content: space-between; font-size: 13px; color: var(--ink-2); }
+.progress-log li::before { content: "✓"; color: var(--ok); margin-right: 8px; }
+.progress-log li span:first-child { flex: 1; }
+
 /* ── 빈 상태 ─────────────────────────────────────────── */
 .empty { padding: var(--gap-6) var(--gap-4); text-align: center; display: flex; flex-direction: column; gap: 7px; align-items: center; border: 1px dashed var(--rule-2); border-radius: var(--radius); }
 

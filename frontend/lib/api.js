@@ -95,6 +95,59 @@ export const api = {
     usage: ({ sessionId, isMember = false }) =>
       request(`/goal/usage?session_id=${encodeURIComponent(sessionId)}&is_member=${isMember}`),
   },
+
+  // 일정 생성 (FR-PLAN-*, 담당 C)
+  plan: {
+    // FR-PLAN-02 — 학습 분해 에이전트. 최대 60초가 걸려서 진행 단계를 받아 가며 기다린다.
+    // onEvent 는 {type: 'thinking' | 'tool' | 'fallback' | ...} 를 받는다.
+    // 마지막 줄의 result 를 돌려준다.
+    // signal 을 넘기면 화면을 떠날 때 기다리던 요청을 끊을 수 있다.
+    decomposeStream: async ({ goalTitle, goalId, availability, today, signal }, onEvent = () => {}) => {
+      const res = await fetch(`${BASE}/plan/decompose/stream`, {
+        method: 'POST',
+        signal,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          goal_title: goalTitle,
+          goal_id: goalId,
+          availability,
+          today,
+        }),
+      });
+      if (!res.ok || !res.body) {
+        throw new Error(`계획을 만들지 못했습니다 (${res.status})`);
+      }
+
+      // 한 줄에 JSON 하나씩 온다 (NDJSON). 줄이 쪼개져 도착할 수 있어 남은 조각을 들고 있는다.
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let rest = '';
+      let result = null;
+      for (;;) {
+        const { value, done } = await reader.read();
+        rest += decoder.decode(value || new Uint8Array(), { stream: !done });
+        const lines = rest.split('\n');
+        rest = done ? '' : lines.pop();
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          const event = JSON.parse(line);
+          if (event.type === 'result') result = event.result;
+          else if (event.type === 'error') throw new Error(event.message);
+          else onEvent(event);
+        }
+        if (done) break;
+      }
+      if (!result) throw new Error('응답이 중간에 끊겼습니다. 다시 시도해 주세요.');
+      return result;
+    },
+
+    // FR-PLAN-03 — 학습 단위를 빈 시간에 배치 (LLM 미사용)
+    schedule: ({ units, availability, startDay, deadline }) =>
+      post('/plan/schedule', { units, availability, start_day: startDay, deadline }),
+
+    // 규칙 검증기 — 겹침·선행 순서·하루 상한·마감 위반 확인
+    validate: ({ blocks, units, deadline }) => post('/plan/validate', { blocks, units, deadline }),
+  },
 };
 
 export default api;

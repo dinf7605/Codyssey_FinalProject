@@ -1,9 +1,11 @@
 import DayTimeline from '@/components/DayTimeline';
+import PlanBuilder from '@/components/PlanBuilder';
 import SectionTitle from '@/components/SectionTitle';
 import { todayBlocks, goal } from '@/lib/mock';
 import { dday } from '@/lib/ui';
 
-// FR-PLAN-04 일정 조회(주간) / FR-PLAN-05 블록 수동 편집 / FR-PLAN-07 재조정 내역
+// FR-PLAN-02·03 계획 만들기 (실제 API) / FR-PLAN-04 일정 조회(주간)
+// FR-PLAN-05 블록 수동 편집 / FR-PLAN-07 재조정 내역 — 아래 세 구역은 아직 목업
 
 const DAYS = ['월', '화', '수', '목', '금', '토', '일'];
 const WEEK = [
@@ -28,6 +30,11 @@ export default function SchedulePage() {
         <p className="tiny dim">{goal.title} · {dday(goal.dDay)}</p>
         <h1 className="title">일정</h1>
       </header>
+
+      <section className="sec">
+        <SectionTitle>학습 계획 만들기</SectionTitle>
+        <PlanBuilder />
+      </section>
 
       <section className="sec">
         <SectionTitle>이번 주</SectionTitle>
