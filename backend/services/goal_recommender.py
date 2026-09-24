@@ -14,7 +14,8 @@ from services.goal_catalog import popular_goals, search_catalog
 from services.goal_feasibility import evaluate_all
 
 REASON_TIMEOUT_SECONDS = 20  # AI기능명세와 동일한 타임아웃
-REASON_MAX_TOKENS = 120
+# 120 토큰이면 2문장이 중간에 잘리는 경우가 있어 250으로 올림 (담당 B, 2026-09-25)
+REASON_MAX_TOKENS = 250
 
 
 def _template_reason(candidate: FeasibleCandidate, tags: list[str]) -> str:
@@ -36,7 +37,7 @@ def _ai_reason(candidate: FeasibleCandidate, tags: list[str], client, model: str
         f"추천 목표: {candidate.title} ({candidate.field})\n"
         f"예상 기간: 최소 {candidate.min_weeks}주 · 권장 {candidate.recommended_weeks}주 · "
         f"주당 {candidate.weekly_hours}시간\n"
-        "위 정보로 이 목표를 추천하는 이유를 2문장 이내, 한국어 존댓말로 짧게 써 주세요. "
+        "위 정보로 이 목표를 추천하는 이유를 2문장 이내, 80자 이내, 한국어 존댓말로 짧게 써 주세요. "
         "설명 문장 없이 추천 이유 본문만 출력하세요."
     )
     try:
@@ -69,7 +70,6 @@ def recommend_goals(tags: list[str], weekly_hours: float):
 
     query_used = "tags"
     if not candidates:
-        # FR-GOAL-03 세부사항: 최고 유사도가 낮으면 인기 목록으로 대체한다
         query_used = "fallback_popular"
         candidates = popular_goals(k=RECOMMEND_MAX)
 
