@@ -3,7 +3,6 @@ from pydantic import BaseModel, EmailStr
 
 # ── 탈퇴 요청 시 받을 데이터 형식 ──
 class WithdrawRequest(BaseModel):
-    user_id: str
     confirm: bool
     reason: str | None = None
 

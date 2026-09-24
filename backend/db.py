@@ -1,22 +1,21 @@
 import os
-from supabase import create_client, Client
+from supabase import create_client
 from dotenv import load_dotenv
 
-# 1) .env 파일에서 환경변수 불러오기
 load_dotenv()
 
-# 2) 환경변수에서 URL과 키 읽기
 SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_KEY = os.getenv("SUPABASE_SECRET_KEY")
+SUPABASE_KEY = os.getenv("SUPABASE_SECRET_KEY")    
+SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 
-# 3) 값이 없으면 에러로 알려주기 (실수 방지!)
-if not SUPABASE_URL or not SUPABASE_KEY:
-    raise ValueError("환경변수 SUPABASE_URL 또는 SUPABASE_SECRET_KEY가 없어요!")
+# 일반 클라이언트
+supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-# 4) Supabase 클라이언트 생성
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+# 관리자 클라이언트 (Auth 삭제용)
+supabase_admin = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
-# 연결 테스트
+
+# 연결 테스트용 (python db.py 로 직접 실행할 때만 작동)
 if __name__ == "__main__":
     response = supabase.table("users").select("*").execute()
     print("연결 성공! 📊 데이터:", response.data)
