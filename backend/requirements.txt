@@ -1,7 +1,7 @@
 fastapi
 uvicorn[standard]
 python-dotenv
-pydantic>=2
+pydantic[email]>=2      # EmailStr (가입 이메일 형식 검사)
 anthropic
 supabase
 openai

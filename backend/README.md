@@ -15,18 +15,28 @@ pytest -q                     # 테스트
 
 ### 환경변수
 
-루트의 `.env.example` 을 복사해 `.env` 로 만들고 값을 채운다.
-`ANTHROPIC_API_KEY` 가 비어 있으면 **AI를 호출하지 않고 표준 커리큘럼 템플릿으로 동작**한다.
-키 없이도 로컬 개발이 가능하도록 일부러 그렇게 만들었다.
+루트의 `.env.example` 을 복사해 `.env` 로 만들고 값을 채운다. `.env` 는 `config.py` 한 곳에서만 읽는다.
+**`.env` 가 셸 환경변수보다 우선한다** — Claude Code 같은 도구가 셸에 `ANTHROPIC_BASE_URL` 을 미리 넣어 두는 경우가 있어서다.
 
-**Codyssey 게이트웨이 키(`sk-cody…`)를 쓸 때 — 둘 다 빠지면 401 이 난다**
+키가 비어 있어도 서버는 뜬다.
+- `ANTHROPIC_API_KEY` 가 없으면 AI 대신 규칙·템플릿으로 동작한다 (학습 분해 → 표준 커리큘럼, 추천 이유 → 규칙 문구)
+- Supabase 키가 없으면 DB 를 쓰는 요청만 **503** 과 함께 빠진 변수 이름을 돌려준다
 
-| 변수 | 값 | 빠뜨리면 |
+### Claude 호출 기준 — Codyssey 게이트웨이
+
+**Claude 는 `services/llm.py` 의 `get_client()` · `model()` 로만 부른다.** `anthropic.Anthropic(...)` 을 직접 만들지 않는다.
+
+| 항목 | 기준 | 어기면 |
 |---|---|---|
-| `ANTHROPIC_BASE_URL` | `https://copa.codyssey.kr` | 요청이 `api.anthropic.com` 으로 가서 거절 |
-| `ANTHROPIC_MODEL` | `claude-sonnet-4` (날짜 **없이**) | `claude-sonnet-4-20250514` 처럼 날짜를 붙이면 게이트웨이가 모델 오류가 아니라 **"API key is invalid"** 로 답한다 — 키를 의심하게 만드는 함정 |
+| 주소 | `https://copa.codyssey.kr` (Anthropic `/v1/messages` 형식) | `api.anthropic.com` 으로 가서 401 |
+| 모델 이름 | 날짜 **없이** — `llm.model("main")` = `claude-sonnet-4`, `llm.model("fast")` = `claude-haiku-4` | `claude-sonnet-4-20250514` 처럼 날짜를 붙이면 모델 오류가 아니라 **"API key is invalid"** 401 — 키를 의심하게 만드는 함정. `llm.model()` 이 날짜를 떼어 준다 |
+| 자동 재시도 | 끔 (`max_retries=0`) | SDK 가 타임아웃마다 2번 더 기다려 사용자 대기가 3배 |
+| 시간 제한 | 기능마다 `get_client(timeout=…)` 로 준다 — 학습 분해 전체 60초, 짧은 문장 20초 | |
+| 키 없음·실패 | `get_client()` 가 `None` → 규칙·템플릿으로 대체. 결과에 AI 여부를 남긴다 (`source`, `ai_generated`) | AI 가 조용히 실패해도 모른다 — B 의 추천 이유가 실제로 그랬다 |
+| OpenAI 형식 | 이 키로는 `/v1/chat/completions` 가 **403**. 임베딩 API 도 없다 | 임베딩은 별도 수단이 필요 (D·B 과제) |
 
-쓸 수 있는 모델: `claude-sonnet-4` · `claude-haiku-4` · `claude-opus-4-8`.
+쓸 수 있는 모델: `claude-sonnet-4` · `claude-haiku-4` · `claude-opus-4-8`. 바꿀 때는 `.env` 의 `ANTHROPIC_MODEL` / `ANTHROPIC_HAIKU_MODEL`.
+테스트는 `conftest.py` 가 키를 지워서 실제 Claude 를 부르지 않는다 (느리고 비용이 든다).
 
 ### DB (Supabase)
 
@@ -40,13 +50,33 @@ pytest -q                     # 테스트
 | `001_contest_personalization.sql` | D | `contests`, `contest_embeddings`, `preparation_time_standards`, `contest_recommendations`, `contest_feedback`, `user_memories`, `batch_runs` |
 | `002_plan_study.sql` | C | `study_plans`, `study_units`, `plan_blocks`, `study_sessions`, `ai_call_logs` |
 | `003_advisor_fixes.sql` | — | Supabase 점검 도구 경고 정리 (정책 성능, 함수 search_path, vector 스키마, 외래키 인덱스) |
-
-전부 RLS 가 켜져 있다. 브라우저(공개 키)는 **본인 행만 읽을 수 있고**, 쓰기는 백엔드(비밀 키)만 한다.
-`ai_call_logs` · `batch_runs` · `contest_embeddings` 는 정책이 아예 없어 백엔드만 접근한다.
+| `004_db_standard.sql` | — | 아래 DB 기준으로 통일 (`auth_id` → `user_id`, `password_hash` 삭제) |
 
 키 받는 곳: Supabase 대시보드 → Project Settings → API Keys.
-`SUPABASE_URL` · `SUPABASE_ANON_KEY` 는 공개돼도 되는 값, **비밀 키(`sb_secret_…`)는 `SUPABASE_SERVICE_ROLE_KEY` 와 `SUPABASE_SECRET_KEY` 두 곳에** 넣는다 (코드가 두 이름을 다 읽는다 — 정리 전까지).
-게이트웨이의 `/v1/chat/completions`(OpenAI 방식)는 이 키로 막혀 있다 — Anthropic 방식(`/v1/messages`)만 된다.
+`SUPABASE_URL` · `SUPABASE_ANON_KEY` 는 공개돼도 되는 값, 비밀 키(`sb_secret_…`)는 **`SUPABASE_SERVICE_ROLE_KEY` 한 곳**에만 넣는다.
+
+#### DB 기준 — 새 테이블·새 코드는 이대로
+
+**연결 (`db.py`)** — 클라이언트는 두 가지, 용도를 섞지 않는다.
+
+| 함수 | 키 | 쓰는 곳 | 규칙 |
+|---|---|---|---|
+| `get_supabase_client()` | 서비스 키 | 테이블 읽기·쓰기, 토큰 확인(`auth.get_user`), 계정 삭제 | 한 번 만들어 재사용. **RLS 를 통과하므로 `.eq("user_id", user.id)` 를 코드에서 반드시 건다** |
+| `new_auth_client()` | 공개 키 | 가입(`sign_up`)·로그인(`sign_in_with_password`)만 | **요청마다 새로 만든다.** 로그인하면 클라이언트가 그 사용자 세션을 품어서, 공유하면 이후 다른 사람 요청이 마지막 로그인 사용자 권한으로 조회된다 |
+
+**스키마**
+
+| 항목 | 기준 |
+|---|---|
+| 변경 방법 | `migrations/NNN_설명.sql` 만. 대시보드에서 손으로 만들지 않는다. 이미 적용한 파일은 고치지 않고 다음 번호로 덮어쓴다 |
+| 테이블·컬럼 이름 | `snake_case`, 테이블은 복수형 (`study_plans`) |
+| 사용자 참조 | **`user_id uuid not null references auth.users(id) on delete cascade`** — 탈퇴하면 딸린 데이터가 자동으로 지워진다 (FR-MY-04) |
+| 기본키 | 외부에 노출되는 행은 `uuid default gen_random_uuid()`, 로그·기록은 `bigint generated always as identity` |
+| 시간 | `timestamptz` (날짜만이면 `date`), 생성 시각은 `created_at default now()` |
+| 값 제한 | 상태값·범위는 `check` 로 DB 에서 막는다 (`source in ('agent','partial','template')`) |
+| RLS | **모든 테이블에 켠다.** 브라우저에 보여줄 것은 `select` 정책 `(select auth.uid()) = user_id`. 쓰기는 백엔드만 — 쓰기 정책은 만들지 않는다. 백엔드 전용 테이블은 정책 없이 둔다 |
+| 비밀번호·토큰 | DB 에 저장하지 않는다. 비밀번호는 Supabase Auth 가 가진다 |
+| 적용 후 | Supabase 점검 도구(Advisors)의 WARN 을 0 으로 만든다 |
 
 ---
 

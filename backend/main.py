@@ -1,16 +1,23 @@
 import os
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from dotenv import load_dotenv
 
+import config  # noqa: F401 - .env 를 가장 먼저 읽는다 (config.py 설명 참고)
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+
+from db import DatabaseNotConfigured
 from routers import admin, auth, batch, contests, goal, notifications, plan, settings, study
 from routers import contest_demo
 
-# ── .env 파일 읽기 ──
-load_dotenv()
-
 # ── FastAPI 앱 생성 ──
 app = FastAPI(title="StudyPace API")
+
+
+# ── DB 키가 비어 있으면 서버는 뜨고, DB 를 쓰는 요청만 503 ──
+@app.exception_handler(DatabaseNotConfigured)
+def database_not_configured(_: Request, exc: DatabaseNotConfigured):
+    return JSONResponse(status_code=503, content={"detail": str(exc)})
+
 app.include_router(auth.router)
 app.include_router(notifications.router)
 app.include_router(settings.router)

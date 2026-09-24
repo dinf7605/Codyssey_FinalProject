@@ -29,7 +29,6 @@
 from __future__ import annotations
 
 import json
-import os
 import time
 from datetime import date
 from typing import Callable
@@ -41,6 +40,7 @@ from schemas.plan import (
     DecomposeResult,
     StudyUnit,
 )
+from services import llm
 from services.agent_tools import CONFIRM_REQUIRED, TOOL_SCHEMAS, run_tool
 from services.template import template_units
 
@@ -48,7 +48,6 @@ MAX_TOOL_ITERATIONS = 5     # AI기능명세 2
 LLM_BUDGET_SECONDS = 60     # NFR-PERF-01 — 에이전트 전체에 주는 시간
 MIN_CALL_SECONDS = 5        # 남은 시간이 이보다 적으면 호출해도 답이 안 온다
 MAX_TOKENS = 4096
-DEFAULT_MODEL = "claude-sonnet-4"  # Codyssey 게이트웨이의 모델 이름 (날짜 없는 형태)
 
 TIMEOUT_MESSAGE = "시간이 걸려 기본 계획으로 시작합니다."
 
@@ -110,10 +109,7 @@ def _is_timeout(exc: Exception) -> bool:
     return "Timeout" in type(exc).__name__
 
 
-def _text_of(response) -> str:
-    return "".join(
-        getattr(b, "text", "") for b in response.content if getattr(b, "type", "") == "text"
-    )
+_text_of = llm.text_of
 
 
 def decompose_goal(
@@ -131,7 +127,7 @@ def decompose_goal(
     client 를 넘기지 않으면 환경변수로 Anthropic 클라이언트를 만든다.
     키가 없으면 API 를 부르지 않고 바로 템플릿으로 간다 — 로컬 개발에서 편하다.
     """
-    model = model or os.getenv("ANTHROPIC_MODEL") or DEFAULT_MODEL
+    model = model or llm.model("main")
     today = today or date.today()
     emit = on_event or (lambda _event: None)
     deadline = time.monotonic() + budget_seconds
@@ -148,16 +144,10 @@ def decompose_goal(
     emit({"type": "start", "budget_seconds": budget_seconds})
 
     if client is None:
-        api_key = os.getenv("ANTHROPIC_API_KEY")
-        if not api_key:
+        # 게이트웨이 주소·재시도 끄기는 llm.get_client 가 맡는다. 시간은 호출마다 따로 준다.
+        client = llm.get_client(timeout=budget_seconds)
+        if client is None:
             return fallback("API 키가 없어 표준 커리큘럼으로 시작합니다.")
-        try:
-            import anthropic
-
-            # 재시도는 SDK 가 아니라 우리가 정한다 (AI기능명세 6: 1회만)
-            client = anthropic.Anthropic(api_key=api_key, max_retries=0)
-        except Exception as exc:  # noqa: BLE001
-            return fallback(f"AI 호출을 준비하지 못했습니다: {exc}")
 
     slot_text = "정보 없음"
     if availability and availability.slots:

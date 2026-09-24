@@ -8,16 +8,13 @@ decomposer.py 와 같은 원칙을 따른다 — ANTHROPIC_API_KEY 가 있으면
 
 from __future__ import annotations
 
-import os
-
 from schemas.goal import RECOMMEND_MAX, SIMILARITY_THRESHOLD, FeasibleCandidate
+from services import llm
 from services.goal_catalog import popular_goals, search_catalog
 from services.goal_feasibility import evaluate_all
 
 REASON_TIMEOUT_SECONDS = 20  # AI기능명세와 동일한 타임아웃
 REASON_MAX_TOKENS = 120
-REASON_MODEL_ENV = "ANTHROPIC_HAIKU_MODEL"
-DEFAULT_HAIKU_MODEL = "claude-haiku-4-5-20251001"
 
 
 def _template_reason(candidate: FeasibleCandidate, tags: list[str]) -> str:
@@ -48,26 +45,17 @@ def _ai_reason(candidate: FeasibleCandidate, tags: list[str], client, model: str
             max_tokens=REASON_MAX_TOKENS,
             messages=[{"role": "user", "content": prompt}],
         )
-        text = "".join(
-            getattr(b, "text", "") for b in response.content if getattr(b, "type", "") == "text"
-        ).strip()
-        return text or None
+        return llm.text_of(response) or None
     except Exception:  # noqa: BLE001 - 이유 생성 실패는 추천 자체를 막지 않는다
         return None
 
 
 def _make_client():
-    api_key = os.getenv("ANTHROPIC_API_KEY")
-    if not api_key:
+    """Codyssey 게이트웨이 클라이언트와 빠른 모델(claude-haiku-4). 키가 없으면 (None, None)."""
+    client = llm.get_client(timeout=REASON_TIMEOUT_SECONDS)
+    if client is None:
         return None, None
-    try:
-        import anthropic
-
-        client = anthropic.Anthropic(api_key=api_key, timeout=REASON_TIMEOUT_SECONDS)
-        model = os.getenv(REASON_MODEL_ENV, DEFAULT_HAIKU_MODEL)
-        return client, model
-    except Exception:  # noqa: BLE001
-        return None, None
+    return client, llm.model("fast")
 
 
 def recommend_goals(tags: list[str], weekly_hours: float):
