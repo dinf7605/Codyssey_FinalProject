@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException
 from schemas.user import WithdrawRequest
-from db import supabase              # ← 추가!
+from db import get_supabase_client
 
 router = APIRouter(prefix="/settings", tags=["settings"])
 
@@ -18,6 +18,11 @@ def withdraw_user(req: WithdrawRequest):
         raise HTTPException(status_code=400, detail="탈퇴 확인이 필요합니다")
 
     # 2) users 테이블에서 삭제
+    try:
+        supabase = get_supabase_client()
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
     response = (
         supabase.table("users")
         .delete()

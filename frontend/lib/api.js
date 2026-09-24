@@ -30,6 +30,11 @@ async function request(path, options = {}) {
 export const api = {
   health: () => request('/health'),
 
+  contests: {
+    demoList: (keywords = '', options = {}) =>
+      request('/demo/contests?' + new URLSearchParams({ keywords }), options),
+  },
+
   // 아래는 백엔드 라우터가 채워지는 대로 연결한다.
   // 지금은 화면이 목업 데이터로 동작하므로 호출하지 않는다.
   auth: {

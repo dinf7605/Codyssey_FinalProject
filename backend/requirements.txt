@@ -3,4 +3,8 @@ uvicorn[standard]
 python-dotenv
 pydantic>=2
 anthropic
+openai
+supabase
+httpx
+beautifulsoup4
 pytest
