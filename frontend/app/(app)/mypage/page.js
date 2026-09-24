@@ -1,3 +1,4 @@
+import ContestInterestMemory from '@/components/ContestInterestMemory';
 import SectionTitle from '@/components/SectionTitle';
 import StudyGrass from '@/components/StudyGrass';
 import { levelOf, nextUnlock, LEVELS, UNLOCK_LABEL } from '@/lib/growth';
@@ -100,6 +101,8 @@ export default function MyPage() {
           </div>
         </div>
       </section>
+
+      <ContestInterestMemory />
 
       <section className="sec">
         <SectionTitle>저장된 학습 정보</SectionTitle>

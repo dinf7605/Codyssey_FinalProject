@@ -1,0 +1,22 @@
+.eyebrow { color: var(--ink-3); font-size: 12px; letter-spacing: .04em; }
+.notice { padding: 16px 18px; border: 1px dashed var(--rule-2); border-radius: var(--radius); background: var(--surface); }
+.notice strong { font-size: 13px; }
+.notice p { margin-top: 5px; color: var(--ink-2); font-size: 13px; line-height: 1.7; }
+.searchPanel { display: flex; flex-direction: column; gap: 18px; }
+.sectionTitle { font-size: 16px; font-weight: 600; }
+.searchRow { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; }
+.searchRow > button { min-width: 110px; }
+.suggestions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.suggestions > button { min-height: 44px; }
+.suggestions > button:disabled { opacity: .5; cursor: not-allowed; }
+.results { display: flex; flex-direction: column; gap: 18px; }
+.loading { padding: 40px 0; color: var(--ink-2); text-align: center; }
+.grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; list-style: none; }
+.card { display: flex; flex-direction: column; gap: 12px; padding: 22px; border: 1px solid var(--rule); border-radius: var(--radius); background: var(--surface); min-width: 0; }
+.cardTop { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; }
+.cardTitle { font-size: 17px; line-height: 1.6; overflow-wrap: anywhere; }
+.reason { border-left: 2px solid var(--rule-2); padding-left: 12px; color: var(--ink-2); font-size: 13px; line-height: 1.7; }
+.cardAction { margin-top: auto; padding-top: 10px; }
+.cardAction > a, .cardAction > button { min-height: 44px; }
+@media (min-width: 760px) { .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 420px) { .searchRow { grid-template-columns: minmax(0, 1fr); } .card { padding: 18px; } }

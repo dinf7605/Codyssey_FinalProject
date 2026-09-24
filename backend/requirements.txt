@@ -4,4 +4,7 @@ python-dotenv
 pydantic>=2
 anthropic
 supabase
+openai
+httpx
+beautifulsoup4
 pytest
