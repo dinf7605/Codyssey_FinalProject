@@ -45,3 +45,6 @@ coverage/
 htmlcov/
 tmp/
 _scratch/
+
+# ── Office 임시 잠금 파일 (엑셀·워드를 열어두면 생김) ──
+~$*
