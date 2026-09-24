@@ -27,6 +27,25 @@ pytest -q                     # 테스트
 | `ANTHROPIC_MODEL` | `claude-sonnet-4` (날짜 **없이**) | `claude-sonnet-4-20250514` 처럼 날짜를 붙이면 게이트웨이가 모델 오류가 아니라 **"API key is invalid"** 로 답한다 — 키를 의심하게 만드는 함정 |
 
 쓸 수 있는 모델: `claude-sonnet-4` · `claude-haiku-4` · `claude-opus-4-8`.
+
+### DB (Supabase)
+
+프로젝트 `studypace` (서울 `ap-northeast-2`, 무료 플랜) — `https://spgrerxkdavykunujipn.supabase.co`
+
+스키마는 `migrations/` 의 SQL 이 전부다. 대시보드에서 손으로 테이블을 만들지 않는다 — 새 프로젝트에서 똑같이 재현할 수 없게 된다.
+
+| 파일 | 담당 | 테이블 |
+|---|---|---|
+| `000_core_users_notifications.sql` | E | `users`, `notification_logs` |
+| `001_contest_personalization.sql` | D | `contests`, `contest_embeddings`, `preparation_time_standards`, `contest_recommendations`, `contest_feedback`, `user_memories`, `batch_runs` |
+| `002_plan_study.sql` | C | `study_plans`, `study_units`, `plan_blocks`, `study_sessions`, `ai_call_logs` |
+| `003_advisor_fixes.sql` | — | Supabase 점검 도구 경고 정리 (정책 성능, 함수 search_path, vector 스키마, 외래키 인덱스) |
+
+전부 RLS 가 켜져 있다. 브라우저(공개 키)는 **본인 행만 읽을 수 있고**, 쓰기는 백엔드(비밀 키)만 한다.
+`ai_call_logs` · `batch_runs` · `contest_embeddings` 는 정책이 아예 없어 백엔드만 접근한다.
+
+키 받는 곳: Supabase 대시보드 → Project Settings → API Keys.
+`SUPABASE_URL` · `SUPABASE_ANON_KEY` 는 공개돼도 되는 값, **비밀 키(`sb_secret_…`)는 `SUPABASE_SERVICE_ROLE_KEY` 와 `SUPABASE_SECRET_KEY` 두 곳에** 넣는다 (코드가 두 이름을 다 읽는다 — 정리 전까지).
 게이트웨이의 `/v1/chat/completions`(OpenAI 방식)는 이 키로 막혀 있다 — Anthropic 방식(`/v1/messages`)만 된다.
 
 ---
