@@ -8,3 +8,4 @@ openai
 httpx
 beautifulsoup4
 pytest
+APScheduler
