@@ -175,8 +175,17 @@ pytest -q                     # 테스트
 | POST | `/plan/schedule` | 학습 단위 → 블록 배치 (`FR-PLAN-03`) |
 | POST | `/plan/reschedule` | 야간 재조정 (`FR-PLAN-06`) |
 | POST | `/plan/validate` | 규칙 위반 검사 |
-| POST | `/study/sessions` | 학습 세션 기록 (`FR-STUDY-01/02`) |
-| POST | `/study/stats` | 누적·연속·레벨 집계 (`FR-STUDY-03/04`) |
+| POST | `/plan/save` | 계획 확정·저장 — 저장 전 규칙 검증 한 번 더, 어기면 400 (로그인) |
+| GET | `/plan/current` | 진행 중 계획 (단위·블록), 없으면 `null` (로그인) |
+| POST | `/study/sessions` | 학습 세션 저장 + 본인 블록 완료 (`FR-STUDY-01/02`, 로그인) |
+| GET | `/study/stats` | 내 누적·주간·연속·레벨 — 저장된 기록 기준 (`FR-STUDY-03/04`, 로그인) |
+| POST | `/study/stats` | 받은 기록으로 계산만 (DB 없이 시험용) |
+
+계획 만들기(`decompose`·`schedule`·`validate`)는 로그인 없이 된다 — 비회원도 써 보고 가입하게. 저장부터 로그인.
+학습 분해를 부르면 `ai_call_logs` 에 한 줄 남는다 (기능·모델·결과 출처·도구 횟수·걸린 시간). DB 가 없거나 기록이 실패해도 계획 만들기는 막지 않는다.
+
+**시간대** — 배치 엔진·API 는 시간대 없는 한국 시각(`2026-10-05T19:00:00`)을 쓰고, DB 에는 `+09:00` 을 붙여 저장한다 (`services/plan_store.py`).
+**프론트 토큰** — `frontend/lib/api.js` 가 `localStorage['sp_access_token']` 을 모든 요청의 `Authorization` 헤더로 붙인다. 로그인 화면은 로그인 성공 시 여기에 `access_token` 을 넣으면 된다.
 
 ### 야간 재조정이 실패해도 일정은 안 깨진다
 
@@ -187,11 +196,13 @@ pytest -q                     # 테스트
 ### 테스트
 
 ```bash
-pytest -q       # C 담당 35개
+pytest -q       # 전체 96개 (C 담당 50개)
 ```
 
 | 파일 | 확인하는 것 |
 |---|---|
+| `tests/test_plan_store.py` | 계획 저장·재조회, 이전 계획 보관, 규칙 위반 저장 거부, 블록 저장 실패 시 계획 롤백, 본인 블록만 완료, 5분 미만 미저장, DB 기준 통계, AI 호출 기록, DB 없이도 분해, 한국 시각 왕복 |
+| `tests/fake_supabase.py` | (도구) 테스트용 가짜 Supabase — 다른 파트도 `get_db` 에 끼워 쓰면 된다 |
 | `tests/test_decomposer.py` | 도구 루프, 결과 한 메시지로 반환, `save_plan` 미실행, 오늘 날짜, 남은 시간만 주기, 타임아웃·예산 소진·스키마 실패 폴백, 반복 상한, 스트림 마지막 줄 |
 | `tests/test_scheduler.py` | 결정론성, 규칙 준수, 휴식일, 선행 관계, 미배치 처리, 재조정 |
 | `tests/test_validator.py` | 위반 5종을 실제로 잡아내는지 |
@@ -206,7 +217,10 @@ pytest -q       # C 담당 35개
 
 - [ ] `services/agent_tools.py` 의 목업 데이터를 Supabase 조회로 교체 (에이전트 코드는 그대로)
 - [ ] 구글 캘린더 연동 (`FR-PLAN-01`) — `get_available_slots` 도구 안쪽
-- [ ] AI 호출 로그 저장 (`FR-ADMIN-02` 대시보드 근거)
+- [x] AI 호출 로그 저장 (`FR-ADMIN-02` 대시보드 근거) — `ai_call_logs`
 - [x] 프론트 `/schedule` 에서 계획 만들기(분해 → 배치 → 검증)를 실제 API로 호출
 - [ ] 프론트 `/schedule` 의 주간·오늘 블록, `/study` 를 목업에서 API 로 전환 (저장소가 붙은 뒤)
-- [ ] 계획 확정(`save_plan`) — 사용자 확인 버튼 + 저장 API
+- [x] 계획 확정(`save_plan`) — 사용자 확인 버튼 + 저장 API (`/plan/save`, `/plan/current`)
+- [x] 학습 기록·집계를 DB 로 (`/study/sessions`, `GET /study/stats`)
+- [ ] 로그인 연결 후 실제 계정으로 저장→조회→학습 기록 확인 (담당 E 의 로그인 화면이 선행)
+- [ ] 야간 재조정을 저장된 계획에 적용 + 03:00 배치 (담당 E 와)

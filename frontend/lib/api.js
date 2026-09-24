@@ -6,10 +6,28 @@
 
 const BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8000';
 
+// 로그인 토큰 보관 위치 — 로그인 화면(담당 E)이 로그인 성공 시 여기에 access_token 을 넣는다.
+// 모든 요청이 이 값을 Authorization 헤더로 붙인다. 없으면 비로그인 요청.
+export const TOKEN_KEY = 'sp_access_token';
+
+export function getToken() {
+  if (typeof window === 'undefined') return null;
+  try {
+    return window.localStorage.getItem(TOKEN_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function authHeaders() {
+  const token = getToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 async function request(path, options = {}) {
   const res = await fetch(`${BASE}${path}`, {
-    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
     ...options,
+    headers: { 'Content-Type': 'application/json', ...authHeaders(), ...(options.headers || {}) },
   });
 
   if (!res.ok) {
@@ -111,7 +129,7 @@ export const api = {
       const res = await fetch(`${BASE}/plan/decompose/stream`, {
         method: 'POST',
         signal,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify({
           goal_title: goalTitle,
           goal_id: goalId,
@@ -152,6 +170,29 @@ export const api = {
 
     // 규칙 검증기 — 겹침·선행 순서·하루 상한·마감 위반 확인
     validate: ({ blocks, units, deadline }) => post('/plan/validate', { blocks, units, deadline }),
+
+    // 계획 확정 (로그인 필요). 서버가 규칙을 한 번 더 검사하고 어기면 400.
+    save: ({ goalTitle, goalId, deadline, source, units, blocks }) =>
+      post('/plan/save', { goal_title: goalTitle, goal_id: goalId, deadline, source, units, blocks }),
+
+    // 진행 중 계획 (로그인 필요). 없으면 null.
+    current: () => request('/plan/current'),
+  },
+
+  // 학습 실행 (FR-STUDY-*, 담당 C) — 로그인 필요
+  study: {
+    // 타이머 종료 시. 5분 미만은 기록하지 않는다. 본인 블록이면 완료 처리.
+    record: ({ blockId = null, startedAt, endedAt, expectedMinutes = null, note = null }) =>
+      post('/study/sessions', {
+        block_id: blockId,
+        started_at: startedAt,
+        ended_at: endedAt,
+        expected_minutes: expectedMinutes,
+        note,
+      }),
+
+    // 누적·주간·연속·레벨
+    stats: () => request('/study/stats'),
   },
 };
 

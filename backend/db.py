@@ -44,6 +44,14 @@ def get_supabase_client() -> Any:
     return create_client(url, key)
 
 
+def get_db() -> Any:
+    """라우터용 의존성 — `db = Depends(get_db)`.
+
+    테스트에서 app.dependency_overrides[get_db] 로 가짜 DB 를 끼울 수 있다 (tests/fake_supabase.py).
+    """
+    return get_supabase_client()
+
+
 def new_auth_client() -> Any:
     """공개 키 클라이언트 — 가입·로그인 한 번에 하나씩 새로 만든다."""
     url, key = _require("SUPABASE_URL", "SUPABASE_ANON_KEY")

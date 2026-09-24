@@ -5,6 +5,11 @@
   POST /plan/schedule          학습 단위 -> 블록 배치 (결정론적)
   POST /plan/reschedule        야간 재조정
   POST /plan/validate          규칙 위반 검사
+  POST /plan/save              계획 확정·저장 (로그인)
+  GET  /plan/current           진행 중 계획 조회 (로그인)
+
+계획 만들기(decompose·schedule·validate)는 로그인 없이도 된다 — 비회원도 써 보고 가입하게.
+저장부터 로그인이 필요하다.
 """
 
 from __future__ import annotations
@@ -12,18 +17,42 @@ from __future__ import annotations
 import json
 import queue
 import threading
+import time
 from datetime import date
+from typing import Literal
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
+from db import get_db, get_supabase_client
 from schemas.plan import Availability, Block, DecomposeResult, SchedulePlan, StudyUnit, Violation
+from services import llm
 from services.decomposer import decompose_goal
+from services.plan_store import load_active_plan, log_ai_call, save_plan
 from services.scheduler import build_schedule, reschedule_incomplete
 from services.validator import validate_schedule
+from utils.auth import get_current_user, get_optional_user
 
 router = APIRouter(prefix="/plan", tags=["plan"])
+
+
+def _log_decompose(user, result: DecomposeResult, started: float) -> None:
+    """학습 분해 한 번을 ai_call_logs 에 남긴다. DB 가 없거나 실패해도 계획 만들기는 계속된다."""
+    try:
+        db = get_supabase_client()
+    except Exception:  # noqa: BLE001 - DB 설정 전(로컬 개발)에도 계획 만들기는 된다
+        return
+    log_ai_call(
+        db,
+        user_id=getattr(user, "id", None),
+        feature="plan.decompose",
+        model=llm.model("main"),
+        source=result.source,
+        tool_calls=result.tool_calls,
+        latency_ms=int((time.monotonic() - started) * 1000),
+        message=result.message,
+    )
 
 
 class DecomposeRequest(BaseModel):
@@ -60,23 +89,51 @@ class ValidateResponse(BaseModel):
     violations: list[Violation]
 
 
+class SavePlanRequest(BaseModel):
+    goal_title: str = Field(min_length=1, max_length=80)
+    goal_id: str = "custom"
+    deadline: date
+    source: Literal["agent", "partial", "template"]
+    units: list[StudyUnit] = Field(min_length=1)
+    blocks: list[Block]
+
+
+class SavePlanResponse(BaseModel):
+    plan_id: str
+    blocks: int
+    message: str
+
+
+class CurrentPlanResponse(BaseModel):
+    plan_id: str
+    goal_title: str
+    goal_id: str
+    deadline: date
+    source: str
+    units: list[StudyUnit]
+    blocks: list[Block]
+
+
 @router.get("/ping")
 def plan_ping():
     return {"message": "plan 라우터 살아있음"}
 
 
 @router.post("/decompose", response_model=DecomposeResult)
-def decompose(req: DecomposeRequest) -> DecomposeResult:
+def decompose(req: DecomposeRequest, user=Depends(get_optional_user)) -> DecomposeResult:
     """FR-PLAN-02 — 목표를 학습 단위로 쪼갠다.
 
     AI가 실패해도 표준 커리큘럼 템플릿으로 항상 결과를 돌려준다.
     어디서 온 결과인지는 응답의 source 로 알 수 있다 (agent / partial / template).
     """
-    return decompose_goal(req.goal_title, req.goal_id, req.availability, today=req.today)
+    started = time.monotonic()
+    result = decompose_goal(req.goal_title, req.goal_id, req.availability, today=req.today)
+    _log_decompose(user, result, started)
+    return result
 
 
 @router.post("/decompose/stream")
-def decompose_stream(req: DecomposeRequest) -> StreamingResponse:
+def decompose_stream(req: DecomposeRequest, user=Depends(get_optional_user)) -> StreamingResponse:
     """FR-PLAN-02 + 진행 표시 — 에이전트가 실제로 한 일을 한 줄(JSON)씩 보낸다.
 
     최대 60초가 걸리는 작업이라, 화면이 멈춘 것처럼 보이지 않게 하려는 것이다.
@@ -92,12 +149,14 @@ def decompose_stream(req: DecomposeRequest) -> StreamingResponse:
     events: queue.Queue[dict | None] = queue.Queue()
 
     def work() -> None:
+        started = time.monotonic()
         try:
             result = decompose_goal(
                 req.goal_title, req.goal_id, req.availability,
                 today=req.today, on_event=events.put,
             )
             events.put({"type": "result", "result": result.model_dump(mode="json")})
+            _log_decompose(user, result, started)
         except Exception as exc:  # noqa: BLE001 - 스트림을 열어둔 채로 끝나면 화면이 계속 기다린다
             events.put({"type": "error", "message": f"계획을 만들지 못했습니다. ({type(exc).__name__})"})
         finally:
@@ -148,3 +207,31 @@ def validate(req: ValidateRequest) -> ValidateResponse:
     """규칙 검증기 — AI 품질 평가의 '일정 실현 가능성 100%'를 재는 엔드포인트."""
     problems = validate_schedule(req.blocks, req.units, req.deadline)
     return ValidateResponse(ok=not problems, violations=problems)
+
+
+@router.post("/save", response_model=SavePlanResponse)
+def save(req: SavePlanRequest, user=Depends(get_current_user), db=Depends(get_db)) -> SavePlanResponse:
+    """계획 확정 — 에이전트의 save_plan 도구가 "사용자 확인 필요"로 넘긴 동작을 사람이 누른다 (AI기능명세 2).
+
+    저장 전에 규칙 검증기를 한 번 더 돌린다. 화면에서 온 블록을 그대로 믿지 않는다 —
+    규칙을 어긴 일정은 저장하지 않는다 ("일정 실현 가능성 100%").
+    """
+    problems = validate_schedule(req.blocks, req.units, req.deadline)
+    if problems:
+        raise HTTPException(
+            status_code=400,
+            detail=f"규칙에 맞지 않는 블록이 {len(problems)}개 있어 저장하지 않았습니다. 다시 만들어 주세요.",
+        )
+
+    plan_id = save_plan(
+        db, user.id,
+        goal_title=req.goal_title, goal_id=req.goal_id, deadline=req.deadline,
+        source=req.source, units=req.units, blocks=req.blocks,
+    )
+    return SavePlanResponse(plan_id=plan_id, blocks=len(req.blocks), message="계획을 저장했습니다.")
+
+
+@router.get("/current", response_model=CurrentPlanResponse | None)
+def current(user=Depends(get_current_user), db=Depends(get_db)):
+    """FR-PLAN-04 — 진행 중인 계획. 아직 없으면 null (화면이 "계획 만들기"를 보여준다)."""
+    return load_active_plan(db, user.id)

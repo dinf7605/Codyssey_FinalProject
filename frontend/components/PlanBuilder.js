@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { api } from '@/lib/api';
+import { api, getToken } from '@/lib/api';
 import { loadExploration } from '@/lib/goalSession';
 import { planInput } from '@/lib/planInput';
 import { AiBadge, AiNotice } from './AiNotice';
@@ -63,6 +63,8 @@ export default function PlanBuilder() {
   const [violations, setViolations] = useState(null);
   const [error, setError] = useState('');
   const [showAll, setShowAll] = useState(false);
+  // 확정 — idle | saving | saved | login | error
+  const [saveState, setSaveState] = useState({ state: 'idle', message: '' });
   const abortRef = useRef(null);
 
   useEffect(() => () => abortRef.current?.abort(), []);
@@ -98,6 +100,7 @@ export default function PlanBuilder() {
     setPlan(null);
     setViolations(null);
     setError('');
+    setSaveState({ state: 'idle', message: '' });
     setShowAll(false);
 
     try {
@@ -136,6 +139,32 @@ export default function PlanBuilder() {
     const [eh, em] = s.end.split(':').map(Number);
     return sum + (eh * 60 + em - sh * 60 - sm) / 60;
   }, 0);
+  // 에이전트의 save_plan 은 "사용자 확인 필요" 로 멈춘다 — 여기서 사람이 누른다 (AI기능명세 2)
+  async function confirmPlan() {
+    if (!getToken()) {
+      setSaveState({ state: 'login', message: '' });
+      return;
+    }
+    setSaveState({ state: 'saving', message: '' });
+    try {
+      await api.plan.save({
+        goalTitle: input.goalTitle,
+        goalId: input.goalId,
+        deadline: input.deadline,
+        source: result.source,
+        units: result.units,
+        blocks: plan.blocks,
+      });
+      setSaveState({ state: 'saved', message: '' });
+    } catch (err) {
+      if (err.status === 401 || err.status === 403) {
+        setSaveState({ state: 'login', message: '' });
+      } else {
+        setSaveState({ state: 'error', message: err.message || '저장하지 못했습니다.' });
+      }
+    }
+  }
+
   const isAi = result && result.source !== 'template';
   const units = result ? (showAll ? result.units : result.units.slice(0, PREVIEW_UNITS)) : [];
   const estimatedCount = result ? result.units.filter((u) => u.estimated).length : 0;
@@ -275,8 +304,33 @@ export default function PlanBuilder() {
               ))}
               <p className="hint">
                 배치는 AI가 아니라 규칙으로 합니다 — 선행 순서, 하루 3블록, 연속 2시간, 쉬는 날을
-                지킵니다. 확정·캘린더 저장은 연동 후 열립니다.
+                지킵니다. 캘린더 저장은 연동 후 열립니다.
               </p>
+
+              {/* 규칙 위반이 0건이고 놓인 블록이 있을 때만 확정할 수 있다 — 서버도 한 번 더 검사한다 */}
+              {violations && violations.length === 0 && plan.blocks.length > 0 && (
+                <div className="stack" style={{ gap: 'var(--gap-2)' }}>
+                  {saveState.state === 'saved' ? (
+                    <p className="hint" style={{ color: 'var(--ok)' }}>
+                      계획을 저장했습니다. 다시 만들면 이전 계획은 보관됩니다.
+                    </p>
+                  ) : saveState.state === 'login' ? (
+                    <p className="hint">
+                      로그인하면 이 계획을 저장할 수 있어요. <a href="/login">로그인하기</a>
+                    </p>
+                  ) : (
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      onClick={confirmPlan}
+                      disabled={saveState.state === 'saving'}
+                    >
+                      {saveState.state === 'saving' ? '저장하는 중' : '이 계획으로 확정'}
+                    </button>
+                  )}
+                  {saveState.state === 'error' && <p className="hint hint-error">{saveState.message}</p>}
+                </div>
+              )}
             </div>
           )}
         </>

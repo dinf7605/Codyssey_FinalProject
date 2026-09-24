@@ -1,10 +1,11 @@
 from fastapi import Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from db import get_supabase_client
+from db import DatabaseNotConfigured, get_supabase_client
 
 # 🔒 Bearer 토큰 보안 스킴
 security = HTTPBearer()
+optional_security = HTTPBearer(auto_error=False)
 
 
 def get_current_user(
@@ -32,3 +33,18 @@ def get_current_user(
         raise HTTPException(status_code=401, detail="인증 실패")
 
     return user_response.user
+
+
+def get_optional_user(
+    credentials: HTTPAuthorizationCredentials | None = Depends(optional_security),
+):
+    """로그인 없이도 쓸 수 있는 API 용 — 토큰이 있으면 사용자, 없거나 틀리면 None.
+
+    예: 계획 만들기는 비회원도 써 볼 수 있지만, 로그인했다면 AI 호출 기록에 누가 썼는지 남긴다.
+    """
+    if credentials is None:
+        return None
+    try:
+        return get_current_user(credentials)
+    except (HTTPException, DatabaseNotConfigured):
+        return None

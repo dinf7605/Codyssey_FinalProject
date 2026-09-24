@@ -19,3 +19,18 @@ def _no_real_claude(monkeypatch):
     실제 호출 확인은 backend/README.md 의 실측 절차로 따로 한다.
     """
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+
+
+@pytest.fixture(autouse=True)
+def _no_real_db(monkeypatch):
+    """테스트는 실제 Supabase 에 쓰지 않는다 — 팀 DB 에 테스트 흔적이 남는다.
+
+    DB 가 필요한 테스트는 tests/fake_supabase.py 를 get_db 에 끼워 쓴다.
+    """
+    from db import get_supabase_client
+
+    for name in ("SUPABASE_URL", "SUPABASE_ANON_KEY", "SUPABASE_SERVICE_ROLE_KEY"):
+        monkeypatch.delenv(name, raising=False)
+    get_supabase_client.cache_clear()
+    yield
+    get_supabase_client.cache_clear()
