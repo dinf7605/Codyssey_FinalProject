@@ -1,5 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from datetime import datetime, timezone
+from fastapi import Depends          # 👈 Depends 추가! (기존 fastapi import에 붙이기)
+from utils.auth import get_current_user   # 👈 방금 만든 함수 가져오기!
 import bcrypt
 
 from schemas.user import WithdrawRequest, SignupRequest, LoginRequest
@@ -83,4 +85,11 @@ def login(req: LoginRequest):
         "access_token": session.access_token,
         "refresh_token": session.refresh_token,
         "user_id": auth_res.user.id,
+    }
+
+@router.get("/me")
+def get_me(user = Depends(get_current_user)):
+    return {
+        "id": user.id,
+        "email": user.email
     }
