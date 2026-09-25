@@ -219,7 +219,10 @@ pytest -q       # 전체 98개 (C 담당 50개)
 - [ ] 구글 캘린더 연동 (`FR-PLAN-01`) — `get_available_slots` 도구 안쪽
 - [x] AI 호출 로그 저장 (`FR-ADMIN-02` 대시보드 근거) — `ai_call_logs`
 - [x] 프론트 `/schedule` 에서 계획 만들기(분해 → 배치 → 검증)를 실제 API로 호출
-- [ ] 프론트 `/schedule` 의 주간·오늘 블록, `/study` 를 목업에서 API 로 전환 (저장소가 붙은 뒤)
+- [x] 프론트 `/schedule` 주·월 달력과 날짜별 블록, `/study` 타이머·메모·집계를 목업에서 API 로 전환
+  (`components/PlanCalendar.js`, `components/StudyTimer.js` — 닫아도 이어하기, 30분 무조작 자동 멈춤, 오프라인 저장 후 재전송)
+- [ ] 블록 완료 취소 (24시간 이내, `FR-STUDY-02`) · 주간 달성률 (`FR-STUDY-03`) · 1.5배 초과 시 범위 축소안 (`FR-PLAN-02`)
+- [ ] 블록 드래그 편집 (`FR-PLAN-05`) · 변경 내역 (`FR-PLAN-07`)
 - [x] 계획 확정(`save_plan`) — 사용자 확인 버튼 + 저장 API (`/plan/save`, `/plan/current`)
 - [x] 학습 기록·집계를 DB 로 (`/study/sessions`, `GET /study/stats`)
 - [ ] 로그인 연결 후 실제 계정으로 저장→조회→학습 기록 확인 (담당 E 의 로그인 화면이 선행)

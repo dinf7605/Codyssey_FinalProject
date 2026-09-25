@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'reac
 import { api, getToken } from '@/lib/api';
 import { loadExploration } from '@/lib/goalSession';
 import { planInput } from '@/lib/planInput';
+import { notifyPlanChanged } from '@/lib/usePlan';
 import { AiBadge, AiNotice } from './AiNotice';
 
 // FR-PLAN-02 학습 분해(AI Agent) → FR-PLAN-03 배치 → 규칙 검증
@@ -156,6 +157,7 @@ export default function PlanBuilder() {
         blocks: plan.blocks,
       });
       setSaveState({ state: 'saved', message: '' });
+      notifyPlanChanged(); // 같은 화면의 일정 달력이 새 계획을 다시 읽는다
     } catch (err) {
       if (err.status === 401 || err.status === 403) {
         setSaveState({ state: 'login', message: '' });
@@ -312,11 +314,11 @@ export default function PlanBuilder() {
                 <div className="stack" style={{ gap: 'var(--gap-2)' }}>
                   {saveState.state === 'saved' ? (
                     <p className="hint" style={{ color: 'var(--ok)' }}>
-                      계획을 저장했습니다. 다시 만들면 이전 계획은 보관됩니다.
+                      계획을 저장했습니다. 위 &apos;내 학습 일정&apos;에서 확인할 수 있어요. 다시 만들면 이전 계획은 보관됩니다.
                     </p>
                   ) : saveState.state === 'login' ? (
                     <p className="hint">
-                      로그인하면 이 계획을 저장할 수 있어요. <a href="/login">로그인하기</a>
+                      로그인하면 이 계획을 저장할 수 있어요. <a href="/login?next=/schedule">로그인하기</a>
                     </p>
                   ) : (
                     <button

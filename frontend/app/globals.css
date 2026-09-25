@@ -315,6 +315,25 @@ button { font: inherit; color: inherit; cursor: pointer; background: none; borde
 .dot-done { background: var(--accent); }
 .dot-miss { background: var(--late); }
 
+/* ── 일정 달력 (FR-PLAN-04) ──────────────────────────── */
+.cal-seg { display: flex; gap: 4px; flex: none; }
+.cal-seg .chip { padding: 5px 12px; }
+.cal-nav { display: flex; align-items: center; justify-content: space-between; gap: var(--gap-2); }
+.cal-nav b { font-size: 14px; font-weight: 600; }
+.cal-nav .btn { font-size: 18px; min-width: 40px; }
+.cal-month { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.cal-head { text-align: center; padding-bottom: 2px; }
+.cal-day { border: 1px solid var(--rule); border-radius: var(--radius-sm); background: var(--surface); padding: 8px 2px; min-height: 58px; display: flex; flex-direction: column; gap: 4px; align-items: center; font: inherit; color: inherit; cursor: pointer; }
+.week .cal-day { min-height: 68px; }
+.cal-today { border-color: var(--ink); }
+.cal-picked { background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--ink); }
+.cal-out { opacity: 0.35; cursor: default; }
+.cal-month .cal-out[aria-hidden] { border-color: transparent; background: transparent; }
+.cal-dots { display: flex; gap: 3px; flex-wrap: wrap; justify-content: center; }
+.cal-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; }
+.cal-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.cal-legend .dot { display: inline-block; }
+
 /* ── 타이머 ──────────────────────────────────────────── */
 .timer { font-family: var(--f-mono); font-size: clamp(46px, 17vw, 66px); font-weight: 500; letter-spacing: -0.03em; text-align: center; font-variant-numeric: tabular-nums; }
 
