@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { AiBadge, AiNotice } from '@/components/AiNotice';
 import EmptyState from '@/components/EmptyState';
 import { interestTags as fallbackTags } from '@/lib/mock';
-import { api } from '@/lib/api';
+import { api, getToken } from '@/lib/api';
 import { getAnonSessionId, saveExploration } from '@/lib/goalSession';
 
 // 파이프라인 0 — 목표 탐색 (담당 B, FR-GOAL-01~13)
@@ -19,8 +19,11 @@ import { getAnonSessionId, saveExploration } from '@/lib/goalSession';
 //                     recommend ──"직접 입력"──→ manual → manual-warn ────┘
 //
 // 한도 초과(FR-GOAL-12)에 걸리면 어느 단계에서든 limited 로 빠진다.
-// 목표 확정(FR-GOAL-07) 뒤 가입 쪽은 아직 제출 동작이 없어(README 참고),
-// 여기서는 탐색 결과를 로컬에 저장해 두고(FR-GOAL-13) /signup 으로 넘긴다.
+// 목표 확정(FR-GOAL-07) 뒤: 이미 로그인된 회원이면 C의 일정 생성 화면(/schedule)으로
+// 바로 보낸다 — 그 화면(PlanBuilder)이 이미 로컬에 저장된 탐색 결과를 읽어 쓴다.
+// 비회원이면 가입 쪽 제출 동작이 아직 없어(README 참고), 탐색 결과를 로컬에
+// 저장해 두고(FR-GOAL-13) /signup 으로 넘긴다. 가입이 실제로 붙으면 그 화면에서
+// 로그인 처리 후 /schedule 로 보내면 된다.
 
 const DAYS = ['월', '화', '수', '목', '금', '토', '일'];
 const HOURS = ['오전', '오후', '저녁', '밤'];
@@ -375,15 +378,17 @@ export default function OnboardingPage() {
     setBusy(true);
     setError('');
     try {
-      // TODO: 로그인 상태를 실제로 읽어오는 인증 붙으면 isMember 를 그 값으로 바꾼다.
-      const res = await api.goal.confirm({ goalTitle: picked.title, isMember: false, activeGoalCount: 0 });
+      const isMember = Boolean(getToken());
+      const res = await api.goal.confirm({ goalTitle: picked.title, isMember, activeGoalCount: 0 });
       if (res.requires_closing_goal) {
         setError(res.message);
         return;
       }
-      // FR-GOAL-13 — 가입 후 이어받을 수 있도록 세션에 저장해 둔다 (30분 유효)
+      // FR-GOAL-13 — 가입(또는 재방문) 후 이어받을 수 있도록 세션에 저장해 둔다 (30분 유효)
       saveExploration({ tags, weeklyHours, slots, picked });
-      router.push('/signup');
+      // 이미 로그인된 회원이면 가입을 또 거칠 필요 없이 바로 일정 생성 화면으로 —
+      // 그 화면(PlanBuilder)이 방금 저장한 탐색 결과를 그대로 읽는다.
+      router.push(isMember ? '/schedule' : '/signup');
     } catch (err) {
       setError(err.message || '요청이 실패했습니다.');
     } finally {
