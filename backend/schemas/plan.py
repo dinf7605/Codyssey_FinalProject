@@ -66,6 +66,7 @@ class Block(BaseModel):
     minutes: int
     locked: bool = False  # 수동으로 옮긴 블록은 야간 재조정에서 건드리지 않는다 (FR-PLAN-05)
     done: bool = False
+    done_at: datetime | None = None  # 완료 취소는 24시간 안에만 (FR-STUDY-02)
 
 
 class Violation(BaseModel):

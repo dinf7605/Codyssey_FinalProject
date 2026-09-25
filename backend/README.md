@@ -51,6 +51,7 @@ pytest -q                     # 테스트
 | `002_plan_study.sql` | C | `study_plans`, `study_units`, `plan_blocks`, `study_sessions`, `ai_call_logs` |
 | `003_advisor_fixes.sql` | — | Supabase 점검 도구 경고 정리 (정책 성능, 함수 search_path, vector 스키마, 외래키 인덱스) |
 | `004_db_standard.sql` | — | 아래 DB 기준으로 통일 (`auth_id` → `user_id`, `password_hash` 삭제) |
+| `008_replan_changes.sql` | C | `plan_reschedule_runs`, `plan_changes` + `study_plans.availability`, `plan_blocks.done_at` (재조정·변경 내역·완료 취소) |
 
 키 받는 곳: Supabase 대시보드 → Project Settings → API Keys.
 `SUPABASE_URL` · `SUPABASE_ANON_KEY` 는 공개돼도 되는 값, 비밀 키(`sb_secret_…`)는 **`SUPABASE_SERVICE_ROLE_KEY` 한 곳**에만 넣는다.
@@ -178,8 +179,16 @@ pytest -q                     # 테스트
 | POST | `/plan/save` | 계획 확정·저장 — 저장 전 규칙 검증 한 번 더, 어기면 400 (로그인) |
 | GET | `/plan/current` | 진행 중 계획 (단위·블록), 없으면 `null` (로그인) |
 | POST | `/study/sessions` | 학습 세션 저장 + 본인 블록 완료 (`FR-STUDY-01/02`, 로그인) |
-| GET | `/study/stats` | 내 누적·주간·연속·레벨 — 저장된 기록 기준 (`FR-STUDY-03/04`, 로그인) |
+| GET | `/study/stats` | 내 누적·주간·연속·레벨 + 이번 주 달성률 — 저장된 기록 기준 (`FR-STUDY-03/04`, 로그인) |
 | POST | `/study/stats` | 받은 기록으로 계산만 (DB 없이 시험용) |
+| DELETE | `/study/blocks/{id}/done` | 완료 취소 — 24시간 안에만. 공부한 시간 기록은 남긴다 (`FR-STUDY-02`, 로그인) |
+| POST | `/plan/scope` | 공부량이 기한까지 가용시간의 1.5배를 넘으면 범위 축소안(뺄 단위·늘릴 기한) (`FR-PLAN-02`) |
+| GET | `/plan/changes` | 최근 7일 재조정 내역 + 3일 연속 밀림 여부 (`FR-PLAN-07`, 로그인) |
+| POST | `/plan/changes/{id}/undo` | 가장 최근 재조정 되돌리기 — 한 번만 (`FR-PLAN-06`, 로그인) |
+| POST | `/plan/replan-now` | 내 계획만 지금 재조정 — 03:00 을 기다리지 않고 확인할 때 (로그인) |
+| POST | `/plan/nightly` | 전체 야간 재조정. 로그인 대신 `X-Batch-Key` 헤더 = `.env` 의 `BATCH_SECRET` (매일 03:00) |
+| PATCH | `/plan/blocks/{id}` | 블록 옮기기 — 규칙에 걸리면 `applied:false` + 위반 목록, `force:true` 로 강행 (`FR-PLAN-05`, 로그인) |
+| DELETE | `/plan/blocks/{id}` | 블록 지우기 — 완료한 블록은 못 지운다 (로그인) |
 
 계획 만들기(`decompose`·`schedule`·`validate`)는 로그인 없이 된다 — 비회원도 써 보고 가입하게. 저장부터 로그인.
 학습 분해를 부르면 `ai_call_logs` 에 한 줄 남는다 (기능·모델·결과 출처·도구 횟수·걸린 시간). DB 가 없거나 기록이 실패해도 계획 만들기는 막지 않는다.
@@ -187,21 +196,40 @@ pytest -q                     # 테스트
 **시간대** — 배치 엔진·API 는 시간대 없는 한국 시각(`2026-10-05T19:00:00`)을 쓰고, DB 에는 `+09:00` 을 붙여 저장한다 (`services/plan_store.py`).
 **프론트 토큰** — `frontend/lib/api.js` 가 `localStorage['sp_access_token']` 을 모든 요청의 `Authorization` 헤더로 붙인다. 로그인 화면은 로그인 성공 시 여기에 `access_token` 을 넣으면 된다.
 
-### 야간 재조정이 실패해도 일정은 안 깨진다
+### 야간 재조정 · 변경 내역 · 블록 편집 (`services/replan.py`)
 
-`FR-PLAN-06` 은 무인 실행이라 사용자가 중단시킬 수 없다.
-`routers/plan.py` 의 `/plan/reschedule` 은 예외가 나면 **받은 블록을 그대로 돌려준다.**
-아침에 빈 일정표를 보는 상황이 가장 나쁘기 때문이다.
+`FR-PLAN-06` 은 무인 실행이라 사용자가 중단시킬 수 없다. 그래서 **실패하면 기존 일정을 그대로 둔다** — 아침에 빈 일정표를 보는 상황이 가장 나쁘다.
+
+| 규칙 | 구현 |
+|---|---|
+| 무엇을 다시 놓나 | 지난 미완료 블록 **+ 그 단원에 (간접적으로라도) 기대는 뒤 블록** (`scheduler.blocks_to_redo`). 지난 블록만 앞으로 옮기면 선행 순서가 뒤집힌다 |
+| 건드리지 않는 것 | 완료 블록, 직접 옮긴 블록(`locked`) |
+| 어디에 놓나 | `build_schedule` 그대로 (LLM 미사용). 오늘 빈 시간이 이미 시작됐으면 내일부터 |
+| 블록 id | 그대로 두고 시각만 바꾼다 — 학습 기록·변경 내역이 같은 블록을 계속 가리키게 |
+| 검증 | 이번 재조정으로 **새로 생긴** 위반이 하나라도 있으면 아무것도 바꾸지 않는다 |
+| 중간 실패 | 이미 바꾼 블록을 원래대로 돌린다 (Supabase REST 에 트랜잭션이 없어서) |
+| 자리가 없으면 | 원래 자리에 두고 `unplaced` 로 기록 — 조용히 버리지 않는다 |
+| 사유 | 블록마다 규칙 문구. 요약 한 줄은 `claude-haiku-4` (15초), 실패하거나 책망하는 말이 섞이면 규칙 문구 |
+| 되돌리기 | 가장 최근 재조정만, 한 번만. 그사이 끝냈거나 직접 옮긴 블록은 두고 나머지만 |
+| 기한 조정 제안 | 블록이 밀린 날이 3일 연속이면 `suggest_extension` |
+| 배치 전체 | 사용자별 순차 실행, 한 사람 실패해도 다음 사람 계속. 결과는 `batch_runs` (관리자 로그) |
+
+**블록 직접 편집 (`FR-PLAN-05`)** — 옮긴 블록은 `locked` 가 되어 재조정에서 빠진다. 이번 이동으로 새로 생긴 위반만 본다.
+겹침·기한 초과는 강행할 수 없고, 선행 순서·하루 상한은 경고 후 사용자가 강행을 고를 수 있다.
+
+**03:00 실행** — `POST /plan/nightly` 를 Make(또는 cron)가 부른다. 헤더 `X-Batch-Key: <BATCH_SECRET>`. 스케줄 연결은 담당 E.
+상태 없는 `/plan/reschedule` 도 남아 있다 — 예외가 나면 받은 블록을 그대로 돌려준다.
 
 ### 테스트
 
 ```bash
-pytest -q       # 전체 98개 (C 담당 50개)
+pytest -q       # 전체 131개 (C 담당 87개)
 ```
 
 | 파일 | 확인하는 것 |
 |---|---|
 | `tests/test_plan_store.py` | 계획 저장·재조회, 이전 계획 보관, 규칙 위반 저장 거부, 블록 저장 실패 시 계획 롤백, 본인 블록만 완료, 5분 미만 미저장, DB 기준 통계, AI 호출 기록, DB 없이도 분해, 한국 시각 왕복 |
+| `tests/test_replan.py` | 야간 재조정(뒤 블록 함께 밀기, 완료·고정 블록 유지, 자리 없음, 검증 실패·중간 실패 시 원상 유지), 배치 키·관리자 로그, 책망하는 AI 요약 거르기, 변경 내역 7일·되돌리기 1회, 3일 연속 제안, 블록 옮기기(경고·강행·겹침 거부)·지우기, 완료 취소 24시간, 주간 달성률, 범위 축소안이 실제로 다 들어가는지 |
 | `tests/fake_supabase.py` | (도구) 테스트용 가짜 Supabase — 다른 파트도 `get_db` 에 끼워 쓰면 된다 |
 | `tests/test_decomposer.py` | 도구 루프, 결과 한 메시지로 반환, `save_plan` 미실행, 오늘 날짜, 남은 시간만 주기, 타임아웃·예산 소진·스키마 실패 폴백, 반복 상한, 스트림 마지막 줄 |
 | `tests/test_scheduler.py` | 결정론성, 규칙 준수, 휴식일, 선행 관계, 미배치 처리, 재조정 |
@@ -221,9 +249,10 @@ pytest -q       # 전체 98개 (C 담당 50개)
 - [x] 프론트 `/schedule` 에서 계획 만들기(분해 → 배치 → 검증)를 실제 API로 호출
 - [x] 프론트 `/schedule` 주·월 달력과 날짜별 블록, `/study` 타이머·메모·집계를 목업에서 API 로 전환
   (`components/PlanCalendar.js`, `components/StudyTimer.js` — 닫아도 이어하기, 30분 무조작 자동 멈춤, 오프라인 저장 후 재전송)
-- [ ] 블록 완료 취소 (24시간 이내, `FR-STUDY-02`) · 주간 달성률 (`FR-STUDY-03`) · 1.5배 초과 시 범위 축소안 (`FR-PLAN-02`)
-- [ ] 블록 드래그 편집 (`FR-PLAN-05`) · 변경 내역 (`FR-PLAN-07`)
+- [x] 블록 완료 취소 (24시간 이내, `FR-STUDY-02`) · 주간 달성률 (`FR-STUDY-03`) · 1.5배 초과 시 범위 축소안 (`FR-PLAN-02`)
+- [x] 블록 옮기기·지우기·끌어다 놓기 (`FR-PLAN-05`) · 변경 내역·되돌리기 (`FR-PLAN-07`)
 - [x] 계획 확정(`save_plan`) — 사용자 확인 버튼 + 저장 API (`/plan/save`, `/plan/current`)
 - [x] 학습 기록·집계를 DB 로 (`/study/sessions`, `GET /study/stats`)
 - [ ] 로그인 연결 후 실제 계정으로 저장→조회→학습 기록 확인 (담당 E 의 로그인 화면이 선행)
-- [ ] 야간 재조정을 저장된 계획에 적용 + 03:00 배치 (담당 E 와)
+- [x] 야간 재조정을 저장된 계획에 적용 (`/plan/nightly`, `/plan/replan-now`)
+- [ ] 03:00 에 `/plan/nightly` 부르기 — Make 시나리오 또는 cron + `BATCH_SECRET` 설정 (담당 E)

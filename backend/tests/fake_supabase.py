@@ -8,7 +8,7 @@
     ...
     db.rows("study_plans")   # 저장된 행 확인
 
-지원: table().select/insert/update/delete · eq · order · limit · execute
+지원: table().select/insert/update/delete · eq · in_ · order · limit · execute
 기본값: id 자동 생성(uuid), study_plans.status='active', created_at 은 넣은 순서대로 증가
 """
 
@@ -22,6 +22,7 @@ _DEFAULTS = {
     "study_plans": {"status": "active"},
     "plan_blocks": {"locked": False, "done": False},
     "study_units": {"estimated": False, "prerequisites": []},
+    "plan_reschedule_runs": {"moved": 0, "unplaced": 0, "undone_at": None},
 }
 
 
@@ -73,6 +74,10 @@ class _Query:
         self.filters.append((column, value))
         return self
 
+    def in_(self, column, values):
+        self.filters.append((column, _In(values)))
+        return self
+
     def order(self, column, desc=False):
         self._order = (column, desc)
         return self
@@ -82,7 +87,7 @@ class _Query:
         return self
 
     def _matches(self, row):
-        return all(row.get(c) == v for c, v in self.filters)
+        return all(v.has(row.get(c)) if isinstance(v, _In) else row.get(c) == v for c, v in self.filters)
 
     def execute(self):
         table = self.db.tables.setdefault(self.name, [])
@@ -99,12 +104,18 @@ class _Query:
         if self.op == "delete":
             self.db.tables[self.name] = [r for r in table if not self._matches(r)]
             # 외래키 cascade 흉내 — 계획을 지우면 딸린 단위·블록도 지운다
+            gone = {r["id"] for r in hits}
             if self.name == "study_plans":
-                gone = {r["id"] for r in hits}
-                for child in ("study_units", "plan_blocks"):
+                for child in ("study_units", "plan_blocks", "plan_reschedule_runs", "plan_changes"):
                     self.db.tables[child] = [
                         r for r in self.db.tables.get(child, []) if r.get("plan_id") not in gone
                     ]
+            # 블록을 지우면 기록·변경 내역은 남기고 연결만 끊는다 (on delete set null)
+            if self.name == "plan_blocks":
+                for child in ("study_sessions", "plan_changes"):
+                    for r in self.db.tables.get(child, []):
+                        if r.get("block_id") in gone:
+                            r["block_id"] = None
             return SimpleNamespace(data=[dict(r) for r in hits])
         if self._order:
             column, desc = self._order
@@ -113,3 +124,11 @@ class _Query:
         if self._limit is not None:
             hits = hits[: self._limit]
         return SimpleNamespace(data=[dict(r) for r in hits])
+
+
+class _In:
+    def __init__(self, values):
+        self.values = list(values)
+
+    def has(self, value):
+        return value in self.values

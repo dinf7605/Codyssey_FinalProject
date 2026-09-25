@@ -1,20 +1,22 @@
 """학습 실행 API (FR-STUDY-*) — 담당 C
 
   POST /study/sessions  학습 세션 기록 + 블록 완료 (로그인)
-  GET  /study/stats     내 누적·주간·연속·레벨 (로그인, DB 기준)
+  GET  /study/stats     내 누적·주간·연속·레벨 + 이번 주 달성률 (로그인, DB 기준)
   POST /study/stats     받은 기록으로 계산만 (DB 없이 화면 시험용)
+  DELETE /study/blocks/{id}/done  완료 취소 — 24시간 안에만 (로그인)
 """
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from db import get_db
 from services.aggregator import MIN_RECORDED_MINUTES, summarize
-from services.plan_store import KST, record_session, session_events
+from services import replan
+from services.plan_store import KST, active_plan_row, plan_blocks, record_session, session_events
 from utils.auth import get_current_user
 
 router = APIRouter(prefix="/study", tags=["study"])
@@ -96,7 +98,27 @@ def record(req: SessionRequest, user=Depends(get_current_user), db=Depends(get_d
 def my_stats(user=Depends(get_current_user), db=Depends(get_db)) -> dict:
     """FR-STUDY-03 / FR-STUDY-04 — 저장된 기록으로 누적·주간·연속·레벨을 계산한다 (한국 날짜 기준)."""
     today = datetime.now(KST).date()
-    return summarize(session_events(db, user.id), today)
+    return {**summarize(session_events(db, user.id), today), **week_progress(db, user.id, today)}
+
+
+def week_progress(db, user_id: str, today: date) -> dict:
+    """이번 주(월~일) 계획 대비 완료 — "주간 달성률" (FR-STUDY-03).
+
+    분모는 이번 주에 놓인 블록 전체(오늘 이후 포함), 분자는 그중 완료한 블록. 분 단위로 잰다.
+    계획이 없거나 이번 주 블록이 없으면 달성률은 None (0% 로 보이면 안 하고 있는 것처럼 읽힌다).
+    """
+    monday = today - timedelta(days=today.weekday())
+    sunday = monday + timedelta(days=6)
+    plan = active_plan_row(db, user_id)
+    blocks = plan_blocks(db, plan["id"]) if plan else []
+    week = [b for b in blocks if monday <= b.start.date() <= sunday]
+    planned = sum(b.minutes for b in week)
+    done = sum(b.minutes for b in week if b.done)
+    return {
+        "week_planned_minutes": planned,
+        "week_done_minutes": done,
+        "week_rate": round(done / planned * 100) if planned else None,
+    }
 
 
 @router.post("/stats")
@@ -104,3 +126,14 @@ def stats(req: StatsRequest) -> dict:
     """계산만 한다 — DB 없이 화면·테스트에서 레벨 구간을 확인할 때."""
     events = [(e.date, e.minutes) for e in req.events]
     return summarize(events, req.today)
+
+
+@router.delete("/blocks/{block_id}/done", status_code=204)
+def cancel_done(block_id: str, user=Depends(get_current_user), db=Depends(get_db)):
+    """FR-STUDY-02 — 완료 취소. 완료한 지 24시간 안에만 된다. 공부한 시간 기록은 남긴다."""
+    try:
+        replan.cancel_done(db, user.id, block_id, replan.now_kst())
+    except replan.BlockNotFound:
+        raise HTTPException(status_code=404, detail="내 계획에서 그 블록을 찾지 못했어요.")
+    except replan.ReplanError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))

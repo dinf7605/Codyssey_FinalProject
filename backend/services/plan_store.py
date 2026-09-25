@@ -15,7 +15,7 @@ from __future__ import annotations
 import uuid
 from datetime import date, datetime, timedelta, timezone
 
-from schemas.plan import Block, StudyUnit
+from schemas.plan import Availability, Block, StudyUnit
 
 KST = timezone(timedelta(hours=9))  # 한국은 서머타임이 없어 고정 오프셋으로 충분하다
 
@@ -47,8 +47,11 @@ def save_plan(
     source: str,
     units: list[StudyUnit],
     blocks: list[Block],
+    availability: Availability | None = None,
 ) -> str:
     """계획 하나를 저장하고 plan_id 를 돌려준다.
+
+    빈 시간표(availability)도 같이 남긴다 — 야간 재조정이 남은 기간에 다시 놓을 때 쓴다.
 
     같은 목표의 이전 계획은 보관(archived)으로 돌린다 — 지우지 않는다.
     Supabase REST 에는 트랜잭션이 없어서, 단위·블록 저장이 실패하면 방금 만든 계획을 지운다
@@ -64,6 +67,7 @@ def save_plan(
         "goal_id": goal_id,
         "deadline": deadline.isoformat(),
         "source": source,
+        "availability": availability.model_dump(mode="json") if availability else None,
     }).execute().data[0]
     plan_id = plan["id"]
 
@@ -102,53 +106,62 @@ def save_plan(
     return plan_id
 
 
-def load_active_plan(db, user_id: str) -> dict | None:
-    """가장 최근의 진행 중 계획. 없으면 None."""
+def active_plan_row(db, user_id: str) -> dict | None:
+    """가장 최근의 진행 중 계획 행. 없으면 None."""
     plans = (
         db.table("study_plans").select("*")
         .eq("user_id", user_id).eq("status", "active")
         .order("created_at", desc=True).limit(1)
         .execute().data
     )
-    if not plans:
-        return None
-    plan = plans[0]
+    return plans[0] if plans else None
 
-    unit_rows = (
-        db.table("study_units").select("*").eq("plan_id", plan["id"]).order("position").execute().data
-    )
-    block_rows = (
-        db.table("plan_blocks").select("*").eq("plan_id", plan["id"]).order("start_at").execute().data
-    )
+
+def plan_blocks(db, plan_id: str) -> list[Block]:
+    rows = db.table("plan_blocks").select("*").eq("plan_id", plan_id).order("start_at").execute().data
+    return [
+        Block(
+            id=str(r["id"]),
+            unit_id=r["unit_key"],
+            title=r["title"],
+            start=from_db_time(r["start_at"]),
+            end=from_db_time(r["end_at"]),
+            minutes=r["minutes"],
+            locked=r.get("locked", False),
+            done=r.get("done", False),
+            done_at=from_db_time(r["done_at"]) if r.get("done_at") else None,
+        )
+        for r in rows
+    ]
+
+
+def plan_units(db, plan_id: str) -> list[StudyUnit]:
+    rows = db.table("study_units").select("*").eq("plan_id", plan_id).order("position").execute().data
+    return [
+        StudyUnit(
+            id=r["unit_key"],
+            title=r["title"],
+            estimated_minutes=r["estimated_minutes"],
+            prerequisites=r.get("prerequisites") or [],
+            estimated=r.get("estimated", False),
+        )
+        for r in rows
+    ]
+
+
+def load_active_plan(db, user_id: str) -> dict | None:
+    """가장 최근의 진행 중 계획 (단위·블록 포함). 없으면 None."""
+    plan = active_plan_row(db, user_id)
+    if not plan:
+        return None
     return {
         "plan_id": plan["id"],
         "goal_title": plan["goal_title"],
         "goal_id": plan["goal_id"],
         "deadline": plan["deadline"],
         "source": plan["source"],
-        "units": [
-            StudyUnit(
-                id=r["unit_key"],
-                title=r["title"],
-                estimated_minutes=r["estimated_minutes"],
-                prerequisites=r.get("prerequisites") or [],
-                estimated=r.get("estimated", False),
-            )
-            for r in unit_rows
-        ],
-        "blocks": [
-            Block(
-                id=str(r["id"]),
-                unit_id=r["unit_key"],
-                title=r["title"],
-                start=from_db_time(r["start_at"]),
-                end=from_db_time(r["end_at"]),
-                minutes=r["minutes"],
-                locked=r.get("locked", False),
-                done=r.get("done", False),
-            )
-            for r in block_rows
-        ],
+        "units": plan_units(db, plan["id"]),
+        "blocks": plan_blocks(db, plan["id"]),
     }
 
 
@@ -185,8 +198,12 @@ def record_session(
     minutes: int,
     expected_minutes: int | None,
     note: str | None,
+    now: datetime | None = None,
 ) -> bool:
-    """학습 세션을 저장한다. 본인 블록이면 완료 처리하고 True 를 돌려준다."""
+    """학습 세션을 저장한다. 본인 블록이면 완료 처리하고 True 를 돌려준다.
+
+    완료 시각(done_at)을 같이 남긴다 — 완료 취소는 24시간 안에만 된다 (FR-STUDY-02).
+    """
     mine = bool(block_id) and owns_block(db, user_id, block_id)
 
     db.table("study_sessions").insert({
@@ -200,7 +217,8 @@ def record_session(
     }).execute()
 
     if mine:
-        db.table("plan_blocks").update({"done": True}).eq("id", block_id).execute()
+        done_at = now or datetime.now(KST).replace(tzinfo=None)
+        db.table("plan_blocks").update({"done": True, "done_at": to_db_time(done_at)}).eq("id", block_id).execute()
     return mine
 
 

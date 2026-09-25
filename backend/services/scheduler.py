@@ -194,6 +194,26 @@ def _place_one(
     return None
 
 
+def blocks_to_redo(blocks: list[Block], units: list[StudyUnit], today: date) -> list[Block]:
+    """재조정할 블록 — 지난 날짜의 미완료 블록 + 그 단위에 (간접적으로라도) 기대는 뒤 블록.
+
+    지난 블록만 앞으로 옮기면, 그 단위를 선행으로 둔 뒤 블록보다 늦게 놓여 순서가 뒤집힌다.
+    그래서 기대는 블록도 함께 다시 놓는다. 완료·수동 고정(locked) 블록은 건드리지 않는다.
+    """
+    movable = [b for b in blocks if not b.done and not b.locked]
+    pushed = {b.unit_id for b in movable if b.start.date() < today}
+    if not pushed:
+        return []
+    grew = True
+    while grew:
+        grew = False
+        for u in units:
+            if u.id not in pushed and pushed.intersection(u.prerequisites):
+                pushed.add(u.id)
+                grew = True
+    return [b for b in movable if b.unit_id in pushed]
+
+
 def reschedule_incomplete(
     blocks: list[Block],
     units: list[StudyUnit],
@@ -203,21 +223,17 @@ def reschedule_incomplete(
 ) -> SchedulePlan:
     """야간 재조정 (FR-PLAN-06).
 
-    지난 날짜의 미완료 블록만 다시 놓는다.
-      - 완료한 블록, 수동으로 옮긴 블록(locked), 오늘 이후 블록은 건드리지 않는다
+    지난 날짜의 미완료 블록과, 그 블록에 기대는 뒤 블록을 다시 놓는다 (blocks_to_redo).
+      - 완료한 블록, 수동으로 옮긴 블록(locked)은 건드리지 않는다
       - 실패해도 기존 일정이 깨지지 않아야 하므로, 호출부에서 예외 시 원본을 유지한다
+    저장된 계획에 적용·기록하는 일은 services/replan.py 가 한다.
     """
-    keep: list[Block] = []
-    redo_unit_ids: list[str] = []
-
-    for b in blocks:
-        if b.done or b.locked or b.start.date() >= today:
-            keep.append(b)
-        else:
-            redo_unit_ids.append(b.unit_id)
+    redo_blocks = blocks_to_redo(blocks, units, today)
+    redo_ids = {b.id for b in redo_blocks}
+    keep = [b for b in blocks if b.id not in redo_ids]
 
     by_id = {u.id: u for u in units}
-    redo = [by_id[uid] for uid in redo_unit_ids if uid in by_id]
+    redo = [by_id[b.unit_id] for b in redo_blocks if b.unit_id in by_id]
 
     if not redo:
         return SchedulePlan(
@@ -225,5 +241,5 @@ def reschedule_incomplete(
         )
 
     plan = build_schedule(redo, availability, today, deadline, fixed_blocks=keep)
-    plan.notes.insert(0, f"미완료 {len(redo)}개 블록을 남은 기간에 다시 배치했습니다.")
+    plan.notes.insert(0, f"미완료 블록과 그 뒤 순서 {len(redo)}개를 남은 기간에 다시 배치했습니다.")
     return plan

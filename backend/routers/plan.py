@@ -7,6 +7,13 @@
   POST /plan/validate          규칙 위반 검사
   POST /plan/save              계획 확정·저장 (로그인)
   GET  /plan/current           진행 중 계획 조회 (로그인)
+  POST /plan/scope             공부량이 가용시간의 1.5배를 넘는지 + 범위 축소안
+  GET  /plan/changes           최근 7일 재조정 내역 (로그인)
+  POST /plan/changes/{id}/undo 가장 최근 재조정 되돌리기 1회 (로그인)
+  POST /plan/replan-now        내 계획을 지금 재조정 (로그인 — 시연·사용자 테스트용)
+  POST /plan/nightly           전체 야간 재조정 (매일 03:00, X-Batch-Key)
+  PATCH  /plan/blocks/{id}     블록 옮기기 (로그인)
+  DELETE /plan/blocks/{id}     블록 지우기 (로그인)
 
 계획 만들기(decompose·schedule·validate)는 로그인 없이도 된다 — 비회원도 써 보고 가입하게.
 저장부터 로그인이 필요하다.
@@ -15,13 +22,14 @@
 from __future__ import annotations
 
 import json
+import os
 import queue
 import threading
 import time
-from datetime import date
+from datetime import date, datetime
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
@@ -29,7 +37,9 @@ from db import get_db, get_supabase_client
 from schemas.plan import Availability, Block, DecomposeResult, SchedulePlan, StudyUnit, Violation
 from services import llm
 from services.decomposer import decompose_goal
-from services.plan_store import load_active_plan, log_ai_call, save_plan
+from services import replan
+from services.plan_store import active_plan_row, load_active_plan, log_ai_call, save_plan
+from services.scope import check_scope
 from services.scheduler import build_schedule, reschedule_incomplete
 from services.validator import validate_schedule
 from utils.auth import get_current_user, get_optional_user
@@ -96,6 +106,7 @@ class SavePlanRequest(BaseModel):
     source: Literal["agent", "partial", "template"]
     units: list[StudyUnit] = Field(min_length=1)
     blocks: list[Block]
+    availability: Availability | None = None  # 야간 재조정이 다시 놓을 때 쓴다
 
 
 class SavePlanResponse(BaseModel):
@@ -226,7 +237,7 @@ def save(req: SavePlanRequest, user=Depends(get_current_user), db=Depends(get_db
     plan_id = save_plan(
         db, user.id,
         goal_title=req.goal_title, goal_id=req.goal_id, deadline=req.deadline,
-        source=req.source, units=req.units, blocks=req.blocks,
+        source=req.source, units=req.units, blocks=req.blocks, availability=req.availability,
     )
     return SavePlanResponse(plan_id=plan_id, blocks=len(req.blocks), message="계획을 저장했습니다.")
 
@@ -235,3 +246,105 @@ def save(req: SavePlanRequest, user=Depends(get_current_user), db=Depends(get_db
 def current(user=Depends(get_current_user), db=Depends(get_db)):
     """FR-PLAN-04 — 진행 중인 계획. 아직 없으면 null (화면이 "계획 만들기"를 보여준다)."""
     return load_active_plan(db, user.id)
+
+
+# ── 공부량 점검 (FR-PLAN-02) ───────────────────────────
+
+class ScopeRequest(BaseModel):
+    units: list[StudyUnit] = Field(min_length=1)
+    availability: Availability
+    start_day: date
+    deadline: date
+
+
+@router.post("/scope")
+def scope(req: ScopeRequest) -> dict:
+    """총 공부량이 기한까지 가용시간의 1.5배를 넘으면 범위 축소안(뺄 단위·늘릴 기한)을 준다. LLM 미사용."""
+    return check_scope(req.units, req.availability, req.start_day, req.deadline)
+
+
+# ── 야간 재조정 · 변경 내역 (FR-PLAN-06 / FR-PLAN-07) ──
+
+def _refuse(exc: Exception):
+    if isinstance(exc, replan.BlockNotFound):
+        raise HTTPException(status_code=404, detail="내 계획에서 그 블록을 찾지 못했어요.")
+    raise HTTPException(status_code=409, detail=str(exc))
+
+
+@router.get("/changes")
+def changes(user=Depends(get_current_user), db=Depends(get_db)) -> dict:
+    """최근 7일 동안 재조정이 무엇을 왜 바꿨는지. 없으면 runs 가 빈 목록 (화면은 영역을 숨긴다)."""
+    return replan.recent_changes(db, user.id, replan.now_kst())
+
+
+@router.post("/changes/{run_id}/undo")
+def undo_changes(run_id: str, user=Depends(get_current_user), db=Depends(get_db)) -> dict:
+    """가장 최근 재조정을 한 번 되돌린다. 그 뒤에 끝냈거나 직접 옮긴 블록은 그대로 둔다."""
+    try:
+        return replan.undo_run(db, user.id, run_id, replan.now_kst())
+    except replan.ReplanError as exc:
+        _refuse(exc)
+
+
+@router.post("/replan-now")
+def replan_now(user=Depends(get_current_user), db=Depends(get_db)) -> dict:
+    """내 계획만 지금 재조정한다 — 03:00 을 기다리지 않고 확인할 때 (시연·사용자 테스트)."""
+    plan = active_plan_row(db, user.id)
+    if not plan:
+        raise HTTPException(status_code=404, detail="진행 중인 계획이 없어요.")
+    try:
+        result = replan.run_for_plan(db, plan, replan.now_kst())
+    except replan.ReplanError as exc:
+        _refuse(exc)
+    return result or {"run_id": None, "moved": 0, "unplaced": 0, "summary": "다시 놓을 지난 블록이 없어요."}
+
+
+@router.post("/nightly")
+def nightly(x_batch_key: str | None = Header(default=None), db=Depends(get_db)) -> dict:
+    """전체 야간 재조정 — 매일 03:00 스케줄러(Make·cron)가 부른다.
+
+    사람이 부르는 API 가 아니라서 로그인 대신 X-Batch-Key 헤더를 확인한다 (.env 의 BATCH_SECRET).
+    """
+    expected = os.getenv("BATCH_SECRET")
+    if not expected:
+        raise HTTPException(status_code=503, detail="BATCH_SECRET 환경변수가 없어 배치를 실행하지 않습니다.")
+    if not replan.batch_key_ok(x_batch_key, expected):
+        raise HTTPException(status_code=401, detail="배치 키가 맞지 않습니다.")
+    return replan.run_nightly(db, replan.now_kst())
+
+
+# ── 블록 직접 편집 (FR-PLAN-05) ────────────────────────
+
+class MoveBlockRequest(BaseModel):
+    start: datetime          # 한국 시각, 시간대 없이 (2026-10-05T19:00:00). 길이는 그대로
+    force: bool = False      # 경고(선행 순서 등)를 보고도 옮길 때
+
+
+class MoveBlockResponse(BaseModel):
+    applied: bool
+    forceable: bool          # False 면 겹침·기한 초과 — 강행할 수 없다
+    violations: list[Violation]
+    block: Block | None = None
+
+
+@router.patch("/blocks/{block_id}", response_model=MoveBlockResponse)
+def move_block(block_id: str, req: MoveBlockRequest, user=Depends(get_current_user), db=Depends(get_db)):
+    """블록을 옮긴다. 옮긴 블록은 야간 재조정에서 고정된다.
+
+    규칙에 걸리면 옮기지 않고 위반 목록을 돌려준다 (applied=false). 화면이 경고를 보여주고,
+    사용자가 강행을 고르면 force=true 로 다시 부른다. 겹침·기한 초과는 강행할 수 없다.
+    """
+    start = req.start.astimezone(replan.KST).replace(tzinfo=None) if req.start.tzinfo else req.start
+    try:
+        return replan.move_block(db, user.id, block_id, start, replan.now_kst(), force=req.force)
+    except (replan.ReplanError, replan.BlockNotFound) as exc:
+        _refuse(exc)
+
+
+@router.delete("/blocks/{block_id}", status_code=204)
+def delete_block(block_id: str, user=Depends(get_current_user), db=Depends(get_db)):
+    """블록을 지운다. 완료한 블록은 학습 기록이라 지우지 않는다."""
+    try:
+        replan.delete_block(db, user.id, block_id, replan.now_kst())
+    except (replan.ReplanError, replan.BlockNotFound) as exc:
+        _refuse(exc)
