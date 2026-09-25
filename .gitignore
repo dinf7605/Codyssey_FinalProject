@@ -51,3 +51,6 @@ _scratch/
 
 # ── graphify 코드 그래프 (각자 로컬에서 생성, 절대경로 포함) ──
 graphify-out/
+
+# ── 비회원 AI 호출 한도 임시 저장 (FR-GOAL-12, 재시작 대비용 — 각자 로컬 상태) ──
+backend/services/_goal_limiter_state.json
