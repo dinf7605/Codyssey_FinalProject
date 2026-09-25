@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -15,6 +16,7 @@ LOGIN_FAILED = "이메일 또는 비밀번호가 틀렸습니다."
 
 # ── 라우터 설정 ────────────────────────────────────
 router = APIRouter(prefix="/auth", tags=["auth"])
+logger = logging.getLogger(__name__)
 
 
 @router.get("/ping")
@@ -31,6 +33,7 @@ def signup(req: SignupRequest):
 
     # ② Supabase Auth로 계정 생성 — 요청마다 새 클라이언트 (db.py 설명 참고)
     #    설정이 비었을 때 나는 503 이 가입 실패 문구에 묻히지 않게 try 밖에서 만든다
+    db = get_supabase_client()  # 프로필 저장 불가라면 Auth 계정을 만들기 전에 중단
     auth_client = new_auth_client()
     try:
         auth_res = auth_client.auth.sign_up({
@@ -40,21 +43,34 @@ def signup(req: SignupRequest):
     except Exception:
         raise HTTPException(status_code=400, detail=SIGNUP_FAILED)
 
-    if not auth_res.user:
+    if not auth_res.user or getattr(auth_res.user, "identities", None) == []:
         raise HTTPException(status_code=400, detail=SIGNUP_FAILED)
 
     # ③ users 테이블에 프로필 + 동의정보 저장 (서비스 키)
-    get_supabase_client().table("users").insert({
-        "user_id": auth_res.user.id,
-        "email": req.email,
-        "nickname": req.nickname,
-        "agree_privacy": req.agree_privacy,
-        "agree_ai_notice": req.agree_ai_notice,
-        "agree_marketing": req.agree_marketing,
-        "agreed_at": datetime.now(timezone.utc).isoformat(),
-    }).execute()
+    try:
+        db.table("users").insert({
+            "auth_id": auth_res.user.id,
+            "email": req.email,
+            "nickname": req.nickname,
+            "agree_privacy": req.agree_privacy,
+            "agree_ai_notice": req.agree_ai_notice,
+            "agree_marketing": req.agree_marketing,
+            "agreed_at": datetime.now(timezone.utc).isoformat(),
+        }).execute()
+    except Exception:
+        # 프로필 저장 실패만으로 Auth 계정의 소유권/신규 생성 여부를 단정하지 않는다.
+        # 기존 계정 손상을 방지하기 위해 여기서 자동 삭제하지 않는다.
+        logger.exception("가입 중 프로필 저장 실패")
+        raise HTTPException(status_code=503, detail=SIGNUP_FAILED)
 
-    return {"message": "회원가입 성공!"}
+    session = auth_res.session
+    return {
+        "message": "회원가입 성공!" if session else "이메일 인증 후 로그인해 주세요.",
+        "access_token": session.access_token if session else None,
+        "refresh_token": session.refresh_token if session else None,
+        "user_id": auth_res.user.id,
+        "requires_email_confirmation": session is None,
+    }
 
 
 @router.post("/login")
