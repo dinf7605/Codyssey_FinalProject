@@ -216,7 +216,7 @@ export default function StudyTimer({ blockId = null }) {
       const res = await api.study.record(record);
       setTimer(null);
       setNote('');
-      setResult({ state: 'saved', res });
+      setResult({ state: 'saved', res, blockId: record.blockId });
       notifyPlanChanged();
       loadStats();
     } catch (err) {
@@ -230,6 +230,17 @@ export default function StudyTimer({ blockId = null }) {
       } else {
         setResult({ state: 'error', message: err.message });
       }
+    }
+  }
+
+  // FR-STUDY-02 — 방금 한 완료는 24시간 안에 취소할 수 있다
+  async function cancelDone(id) {
+    try {
+      await api.study.cancelDone(id);
+      setResult({ state: 'cancelled' });
+      notifyPlanChanged();
+    } catch (err) {
+      setResult({ state: 'error', message: err.message });
     }
   }
 
@@ -319,7 +330,18 @@ export default function StudyTimer({ blockId = null }) {
           {result.res.deviation_percent != null &&
             ` · 예상보다 ${result.res.deviation_percent >= 0 ? '+' : ''}${result.res.deviation_percent}%`}
           {result.res.block_done ? ' · 블록을 완료로 표시했어요.' : '.'} <Link href="/schedule">일정 보기</Link>
+          {result.res.block_done && result.blockId && (
+            <>
+              {' · '}
+              <button type="button" className="btn-link" onClick={() => cancelDone(result.blockId)}>
+                완료 취소
+              </button>
+            </>
+          )}
         </p>
+      )}
+      {result?.state === 'cancelled' && (
+        <p className="hint" role="status">완료를 취소했어요. 공부한 시간 기록은 그대로 남아요.</p>
       )}
       {result?.state === 'queued' && (
         <p className="hint" role="status">연결이 끊겨 기기에 저장했어요. 다시 연결되면 자동으로 보냅니다.</p>
@@ -364,6 +386,19 @@ export default function StudyTimer({ blockId = null }) {
             </div>
             <span className="pill">{stats.streak_days}일 연속</span>
           </div>
+          {stats.week_rate != null && (
+            <div className="row">
+              <div className="row-main">
+                <b>이번 주 달성률 {stats.week_rate}%</b>
+                <span>
+                  계획 {hoursText(stats.week_planned_minutes)} 중 완료 {hoursText(stats.week_done_minutes)}
+                </span>
+              </div>
+              <div className="bar" style={{ width: 80 }} aria-hidden="true">
+                <div className="bar-fill" style={{ width: `${Math.min(100, stats.week_rate)}%` }} />
+              </div>
+            </div>
+          )}
         </section>
       )}
     </>

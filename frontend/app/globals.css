@@ -182,7 +182,7 @@ button { font: inherit; color: inherit; cursor: pointer; background: none; borde
 .tl-done .tl-title { color: var(--ink-3); text-decoration: line-through; }
 .tl-sub { font-size: 13px; color: var(--ink-2); margin-top: 2px; display: block; }
 .tl-check { width: 26px; height: 26px; flex: none; border-radius: 999px; border: 1.5px solid var(--rule-2); display: grid; place-items: center; color: transparent; }
-.tl-check[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.tl-check[aria-pressed="true"], .tl-check-on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 
 /* ── 학습 잔디 — 공부할수록 화면에 색이 쌓인다 ───────── */
 .grass { display: flex; gap: 3px; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; }
@@ -333,6 +333,16 @@ button { font: inherit; color: inherit; cursor: pointer; background: none; borde
 .cal-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; }
 .cal-legend span { display: inline-flex; align-items: center; gap: 5px; }
 .cal-legend .dot { display: inline-block; }
+.cal-drop { border-color: var(--accent); background: var(--accent-soft); }
+
+/* ── 블록 편집 (FR-PLAN-05) ──────────────────────────── */
+.tl-item[draggable="true"] { cursor: grab; }
+.tl-edit { display: flex; flex-direction: column; gap: var(--gap-2); margin-top: var(--gap-2); padding: var(--gap-3); border: 1px solid var(--rule); border-radius: var(--radius-sm); background: var(--surface); }
+.tl-edit-row { flex-direction: row; flex-wrap: wrap; }
+.tl-edit label { display: flex; flex-direction: column; gap: 4px; }
+.tl-edit .input { min-height: 42px; }
+.warn-log li::before { content: "!"; color: var(--late); }
+.btn-link { background: none; border: 0; padding: 0; font: inherit; color: inherit; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 
 /* ── 타이머 ──────────────────────────────────────────── */
 .timer { font-family: var(--f-mono); font-size: clamp(46px, 17vw, 66px); font-weight: 500; letter-spacing: -0.03em; text-align: center; font-variant-numeric: tabular-nums; }

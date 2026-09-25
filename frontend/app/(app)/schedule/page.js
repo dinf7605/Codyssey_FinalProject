@@ -1,10 +1,12 @@
 import PlanBuilder from '@/components/PlanBuilder';
 import PlanCalendar from '@/components/PlanCalendar';
+import PlanChanges from '@/components/PlanChanges';
 import SectionTitle from '@/components/SectionTitle';
 
-// FR-PLAN-02·03 계획 만들기 → 확정 / FR-PLAN-04 일정 조회(주·월) — 전부 실제 API (담당 C)
-// FR-PLAN-05 블록 수동 편집 · FR-PLAN-07 재조정 내역은 API 가 생기면 붙인다.
-// 변경 내역은 "변경이 없으면 영역을 숨김"(FR-PLAN-07)이라 지금은 그리지 않는다.
+// 일정 화면 — 전부 실제 API (담당 C)
+//   FR-PLAN-04 일정 조회(주·월) · FR-PLAN-05 블록 옮기기·지우기 · FR-PLAN-06 지금 다시 놓기
+//   FR-PLAN-07 최근 바뀐 일정 (변경이 없으면 영역을 숨긴다) · 되돌리기 1회
+//   FR-PLAN-02·03 계획 만들기 → 공부량 점검 → 확정
 
 export default function SchedulePage() {
   return (
@@ -18,7 +20,9 @@ export default function SchedulePage() {
         <PlanCalendar />
       </section>
 
-      <section className="sec">
+      <PlanChanges />
+
+      <section className="sec" id="plan-builder">
         <SectionTitle>학습 계획 만들기</SectionTitle>
         <PlanBuilder />
       </section>

@@ -88,15 +88,27 @@ export function blocksByDay(blocks) {
   return map;
 }
 
-// DayTimeline 이 받는 모양으로
-export function toTimeline(block) {
-  return {
-    id: block.id,
-    start: hhmm(block.start),
-    end: hhmm(block.end),
-    subject: block.title,
-    scope: '',
-    minutes: block.minutes,
-    done: block.done,
-  };
+// '10/8(목) 19:00'
+export function whenLabel(iso) {
+  const key = dayKey(iso);
+  return `${Number(key.slice(5, 7))}/${dayNum(key)}(${WEEKDAY_MON[weekdayMon(key)]}) ${hhmm(iso)}`;
 }
+
+// 한국 시각 문자열끼리의 시간 차 — 둘 다 같은 기준이라 UTC 로 읽어도 차이는 같다
+export function hoursSince(isoKst) {
+  return (Date.parse(`${kstIso()}Z`) - Date.parse(`${isoKst.slice(0, 19)}Z`)) / 3600000;
+}
+
+// 완료 취소는 24시간 안에만 (FR-STUDY-02)
+export const CANCEL_DONE_HOURS = 24;
+export const canCancelDone = (block) =>
+  block.done && Boolean(block.done_at) && hoursSince(block.done_at) <= CANCEL_DONE_HOURS;
+
+// 서버 validator 의 위반 종류 → 사용자에게 보일 말 (FR-PLAN-05)
+export const VIOLATION_LABEL = {
+  overlap: '다른 블록과 시간이 겹쳐요',
+  deadline_exceeded: '목표 기한을 넘겨요',
+  prerequisite_violation: '앞 단원보다 먼저 하게 돼요',
+  daily_limit_exceeded: '하루 3블록을 넘겨요',
+  continuous_limit_exceeded: '쉬는 시간 없이 2시간을 넘겨요',
+};

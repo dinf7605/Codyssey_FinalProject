@@ -51,6 +51,14 @@ function post(path, body) {
   return request(path, { method: 'POST', body: JSON.stringify(body) });
 }
 
+function patch(path, body) {
+  return request(path, { method: 'PATCH', body: JSON.stringify(body) });
+}
+
+function del(path) {
+  return request(path, { method: 'DELETE' });
+}
+
 export const api = {
   health: () => request('/health'),
 
@@ -171,12 +179,28 @@ export const api = {
     // 규칙 검증기 — 겹침·선행 순서·하루 상한·마감 위반 확인
     validate: ({ blocks, units, deadline }) => post('/plan/validate', { blocks, units, deadline }),
 
+    // 공부량이 기한까지 가용시간의 1.5배를 넘는지 + 범위 축소안 (FR-PLAN-02, LLM 미사용)
+    scope: ({ units, availability, startDay, deadline }) =>
+      post('/plan/scope', { units, availability, start_day: startDay, deadline }),
+
     // 계획 확정 (로그인 필요). 서버가 규칙을 한 번 더 검사하고 어기면 400.
-    save: ({ goalTitle, goalId, deadline, source, units, blocks }) =>
-      post('/plan/save', { goal_title: goalTitle, goal_id: goalId, deadline, source, units, blocks }),
+    // availability 는 야간 재조정이 다시 놓을 때 쓴다.
+    save: ({ goalTitle, goalId, deadline, source, units, blocks, availability }) =>
+      post('/plan/save', { goal_title: goalTitle, goal_id: goalId, deadline, source, units, blocks, availability }),
 
     // 진행 중 계획 (로그인 필요). 없으면 null.
     current: () => request('/plan/current'),
+
+    // FR-PLAN-07 — 최근 7일 재조정 내역 / FR-PLAN-06 — 가장 최근 것 되돌리기 1회
+    changes: () => request('/plan/changes'),
+    undoChanges: (runId) => post(`/plan/changes/${encodeURIComponent(runId)}/undo`, {}),
+    // 03:00 을 기다리지 않고 내 계획만 지금 다시 맞춘다
+    replanNow: () => post('/plan/replan-now', {}),
+
+    // FR-PLAN-05 — 블록 옮기기. 규칙에 걸리면 applied=false + violations (force 로 강행)
+    moveBlock: (blockId, { start, force = false }) =>
+      patch(`/plan/blocks/${encodeURIComponent(blockId)}`, { start, force }),
+    deleteBlock: (blockId) => del(`/plan/blocks/${encodeURIComponent(blockId)}`),
   },
 
   // 학습 실행 (FR-STUDY-*, 담당 C) — 로그인 필요
@@ -191,8 +215,11 @@ export const api = {
         note,
       }),
 
-    // 누적·주간·연속·레벨
+    // 누적·주간·연속·레벨 + 이번 주 달성률
     stats: () => request('/study/stats'),
+
+    // FR-STUDY-02 — 완료 취소 (24시간 안에만)
+    cancelDone: (blockId) => del(`/study/blocks/${encodeURIComponent(blockId)}/done`),
   },
 };
 

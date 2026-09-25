@@ -66,6 +66,10 @@ export default function PlanBuilder() {
   const [showAll, setShowAll] = useState(false);
   // 확정 — idle | saving | saved | login | error
   const [saveState, setSaveState] = useState({ state: 'idle', message: '' });
+  // FR-PLAN-02 — 공부량이 가용시간의 1.5배를 넘으면 범위 축소안. used 는 지금 배치에 쓴 단위·기한
+  const [scope, setScope] = useState(null);
+  const [used, setUsed] = useState(null); // { mode: 'as-is' | 'trim' | 'extend', units, deadline }
+  const [placing, setPlacing] = useState(false);
   const abortRef = useRef(null);
 
   useEffect(() => () => abortRef.current?.abort(), []);
@@ -103,6 +107,8 @@ export default function PlanBuilder() {
     setError('');
     setSaveState({ state: 'idle', message: '' });
     setShowAll(false);
+    setScope(null);
+    setUsed(null);
 
     try {
       const decomposed = await api.plan.decomposeStream(
@@ -111,25 +117,56 @@ export default function PlanBuilder() {
       );
       setResult(decomposed);
 
-      // 배치와 검증은 LLM을 쓰지 않는다 — 규칙대로 놓고, 규칙을 어겼는지 다시 잰다
-      const placed = await api.plan.schedule({
-        units: decomposed.units,
-        availability: current.availability,
-        startDay: current.today,
-        deadline: current.deadline,
-      });
-      setPlan(placed);
-      const check = await api.plan.validate({
-        blocks: placed.blocks,
-        units: decomposed.units,
-        deadline: current.deadline,
-      });
-      setViolations(check.violations);
+      // 공부량 점검은 참고용이다 — 실패해도 계획 만들기는 계속한다
+      api.plan
+        .scope({
+          units: decomposed.units,
+          availability: current.availability,
+          startDay: current.today,
+          deadline: current.deadline,
+        })
+        .then(setScope, () => setScope(null));
+
+      await place('as-is', decomposed.units, current.deadline, current);
       setPhase('done');
     } catch (err) {
       if (err.name === 'AbortError') return;
       setError(err.message || '계획을 만들지 못했습니다.');
       setPhase('error');
+    }
+  }
+
+  // 배치와 검증은 LLM을 쓰지 않는다 — 규칙대로 놓고, 규칙을 어겼는지 다시 잰다
+  async function place(mode, units, deadline, current = input) {
+    const placed = await api.plan.schedule({
+      units,
+      availability: current.availability,
+      startDay: current.today,
+      deadline,
+    });
+    const check = await api.plan.validate({ blocks: placed.blocks, units, deadline });
+    setPlan(placed);
+    setViolations(check.violations);
+    setUsed({ mode, units, deadline });
+    setSaveState({ state: 'idle', message: '' });
+  }
+
+  async function adjust(mode) {
+    setPlacing(true);
+    try {
+      if (mode === 'trim') {
+        const keep = new Set(scope.keep_unit_ids);
+        await place('trim', result.units.filter((u) => keep.has(u.id)), input.deadline);
+      } else if (mode === 'extend') {
+        await place('extend', result.units, scope.suggested_deadline);
+      } else {
+        await place('as-is', result.units, input.deadline);
+      }
+    } catch (err) {
+      setError(err.message || '다시 배치하지 못했습니다.');
+      setPhase('error');
+    } finally {
+      setPlacing(false);
     }
   }
 
@@ -151,10 +188,11 @@ export default function PlanBuilder() {
       await api.plan.save({
         goalTitle: input.goalTitle,
         goalId: input.goalId,
-        deadline: input.deadline,
         source: result.source,
-        units: result.units,
+        units: used.units,
         blocks: plan.blocks,
+        deadline: used.deadline,
+        availability: input.availability,
       });
       setSaveState({ state: 'saved', message: '' });
       notifyPlanChanged(); // 같은 화면의 일정 달력이 새 계획을 다시 읽는다
@@ -277,6 +315,10 @@ export default function PlanBuilder() {
             </AiNotice>
           )}
 
+          {scope?.over && (
+            <ScopeNotice scope={scope} units={result.units} used={used} busy={placing} onPick={adjust} />
+          )}
+
           {plan && (
             <div className="stack" style={{ gap: 'var(--gap-2)' }}>
               <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -336,6 +378,51 @@ export default function PlanBuilder() {
             </div>
           )}
         </>
+      )}
+    </div>
+  );
+}
+
+const hours = (minutes) => Math.round((minutes / 60) * 10) / 10;
+
+// FR-PLAN-02 — "총 소요시간이 가용시간의 1.5배를 넘으면 범위 축소안을 함께 제시"
+// 고르지 않으면 그대로 배치하고, 못 넣은 단위는 '미배치'로 남는다.
+function ScopeNotice({ scope, units, used, busy, onPick }) {
+  const dropped = units.filter((u) => scope.drop_unit_ids.includes(u.id));
+  const mode = used?.mode || 'as-is';
+  const deadlineText = scope.suggested_deadline
+    ? `${Number(scope.suggested_deadline.slice(5, 7))}/${Number(scope.suggested_deadline.slice(8, 10))}`
+    : null;
+  return (
+    <div className="progress" role="note" aria-label="공부량 점검">
+      <b>
+        {scope.ratio
+          ? `공부량이 기한까지 쓸 수 있는 시간의 ${scope.ratio}배예요`
+          : '기한까지 공부할 수 있는 시간이 없어요'}
+      </b>
+      <p className="muted tiny">
+        필요 {hours(scope.total_minutes)}시간 · 기한까지 빈 시간 {hours(scope.available_minutes)}시간. 둘 중 하나를
+        고르거나 그대로 두면 못 넣은 단위는 미배치로 남습니다.
+      </p>
+      <div style={{ display: 'flex', gap: 'var(--gap-2)', flexWrap: 'wrap' }}>
+        {dropped.length > 0 && (
+          <button type="button" className="chip" aria-pressed={mode === 'trim'} disabled={busy} onClick={() => onPick('trim')}>
+            범위 줄이기 · 뒤쪽 {dropped.length}개 빼기
+          </button>
+        )}
+        {deadlineText && (
+          <button type="button" className="chip" aria-pressed={mode === 'extend'} disabled={busy} onClick={() => onPick('extend')}>
+            기한을 {deadlineText}로 늘리기
+          </button>
+        )}
+        {mode !== 'as-is' && (
+          <button type="button" className="chip" disabled={busy} onClick={() => onPick('as-is')}>
+            원래대로
+          </button>
+        )}
+      </div>
+      {mode === 'trim' && (
+        <p className="hint">뺀 단위: {dropped.map((u) => u.title).join(', ')}</p>
       )}
     </div>
   );

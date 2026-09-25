@@ -8,7 +8,7 @@
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
 import { api, getToken } from './api';
 
-const PLAN_CHANGED = 'sp:plan-changed';
+export const PLAN_CHANGED = 'sp:plan-changed';
 
 export function notifyPlanChanged() {
   window.dispatchEvent(new Event(PLAN_CHANGED));

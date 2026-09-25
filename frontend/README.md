@@ -166,7 +166,7 @@ PC에서는 사이드바 하단에도 목표와 D-Day가 함께 보인다.
 ## 지금 상태
 
 - `/contests`는 백엔드 `/demo/contests`의 가상 공모전 20개와 제목 키워드 추천에 연결되어 있다.
-- `/schedule`·`/study`는 실제 API 를 쓴다 (담당 C) — 계획 만들기·확정, 주·월 달력(`/plan/current`), 학습 타이머·메모(`/study/sessions`), 집계(`/study/stats`).
+- `/schedule`·`/study`는 실제 API 를 쓴다 (담당 C) — 계획 만들기·공부량 점검·확정, 주·월 달력(`/plan/current`), 블록 옮기기·지우기·끌어다 놓기, 최근 바뀐 일정·되돌리기(`/plan/changes`), 학습 타이머·메모(`/study/sessions`), 완료 취소, 집계·주간 달성률(`/study/stats`).
   로그인 전에는 "로그인" 안내가 나온다. 로그인 화면은 성공 시 `localStorage['sp_access_token']` 에 토큰을 넣고 `?next=` 주소로 돌려보내면 된다.
 - 나머지 화면은 아직 `lib/mock.js`의 예시값을 사용한다.
 - 백엔드가 붙는 순서대로 `lib/api.js` 호출로 바꾸면 된다.
