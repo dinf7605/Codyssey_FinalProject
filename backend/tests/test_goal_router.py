@@ -71,3 +71,36 @@ def test_카탈로그에_없는_직접입력은_경고_생략():
     )
     assert res.status_code == 200
     assert res.json()["severity"] == "unknown"
+
+
+def test_피드백은_DB_없어도_성공():
+    # conftest._no_real_db 가 Supabase 환경변수를 지워 두므로, 이 테스트는 DB 미설정
+    # 상황에서도 온보딩 흐름이 끊기지 않는지를 확인한다 (FR-GOAL-08).
+    res = client.post(
+        "/goal/feedback",
+        json={"goal_id": "g1", "interested": False, "reason": "too_long", "session_id": "t4"},
+    )
+    assert res.status_code == 200
+    assert res.json()["ok"] is True
+
+
+def test_피드백을_저장한다(monkeypatch):
+    import routers.goal as goal_router
+    from tests.fake_supabase import FakeSupabase
+
+    db = FakeSupabase()
+    monkeypatch.setattr(goal_router, "get_supabase_client", lambda: db)
+
+    res = client.post(
+        "/goal/feedback",
+        json={"goal_id": "g1", "interested": False, "reason": "too_long", "session_id": "t5"},
+    )
+    assert res.status_code == 200
+
+    rows = db.rows("goal_feedback")
+    assert len(rows) == 1
+    assert rows[0]["session_id"] == "t5"
+    assert rows[0]["goal_id"] == "g1"
+    assert rows[0]["interested"] is False
+    assert rows[0]["reason"] == "too_long"
+    assert rows[0]["user_id"] is None

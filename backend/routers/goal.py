@@ -16,8 +16,9 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
+from db import get_supabase_client
 from schemas.goal import (
     MAX_ACTIVE_GOALS,
     SIMILARITY_THRESHOLD,
@@ -40,6 +41,7 @@ from services.goal_catalog import all_tags, popular_goals, search_catalog, sugge
 from services.goal_feasibility import evaluate_all, evaluate_candidates, manual_goal_warning
 from services.goal_limiter import RateLimitExceeded, consume, usage_for
 from services.goal_recommender import recommend_goals
+from utils.auth import get_optional_user
 
 router = APIRouter(prefix="/goal", tags=["goal"])
 
@@ -138,12 +140,25 @@ def check_manual_goal(req: ManualGoalRequest) -> ManualGoalWarning:
 
 
 @router.post("/feedback", response_model=FeedbackResponse)
-def feedback(req: FeedbackRequest) -> FeedbackResponse:
-    """FR-GOAL-08 — 추천 피드백.
+def feedback(req: FeedbackRequest, user=Depends(get_optional_user)) -> FeedbackResponse:
+    """FR-GOAL-08 — 추천 피드백. goal_feedback 테이블에 저장한다 (마이그레이션 007).
 
-    TODO: Supabase 의 goal_feedback 테이블이 생기면 여기서 저장하도록 바꾼다.
-    지금은 저장소가 없어 받았다는 확인만 돌려준다 — 프론트는 저장 실패로 취급하지 않는다.
+    비회원도 쓰는 화면이라 로그인을 요구하지 않는다 — 로그인돼 있으면 user_id 도 같이
+    남기고, 아니면 session_id 만 남긴다. DB가 아직 설정되지 않았거나 쓰기가 실패해도
+    온보딩 흐름 자체는 막지 않는다 — 프론트는 이 응답을 저장 실패로 취급하지 않는다.
     """
+    try:
+        get_supabase_client().table("goal_feedback").insert(
+            {
+                "session_id": req.session_id,
+                "user_id": user.id if user else None,
+                "goal_id": req.goal_id,
+                "interested": req.interested,
+                "reason": req.reason,
+            }
+        ).execute()
+    except Exception:  # noqa: BLE001 - DB 미설정·일시 장애여도 추천 흐름을 막지 않는다
+        pass
     return FeedbackResponse(ok=True, message="피드백을 받았습니다. 다음 추천에 반영할게요.")
 
 
