@@ -52,6 +52,7 @@ pytest -q                     # 테스트
 | `003_advisor_fixes.sql` | — | Supabase 점검 도구 경고 정리 (정책 성능, 함수 search_path, vector 스키마, 외래키 인덱스) |
 | `004_db_standard.sql` | — | 아래 DB 기준으로 통일 (`auth_id` → `user_id`, `password_hash` 삭제) |
 | `008_replan_changes.sql` | C | `plan_reschedule_runs`, `plan_changes` + `study_plans.availability`, `plan_blocks.done_at` (재조정·변경 내역·완료 취소) |
+| `009_curriculum.sql` | C | `curriculum_units` — 정보처리기사 필기·SQLD·ADsP 출제 범위 70항목 (학습 분해 에이전트의 근거) |
 
 키 받는 곳: Supabase 대시보드 → Project Settings → API Keys.
 `SUPABASE_URL` · `SUPABASE_ANON_KEY` 는 공개돼도 되는 값, 비밀 키(`sb_secret_…`)는 **`SUPABASE_SERVICE_ROLE_KEY` 한 곳**에만 넣는다.
@@ -110,7 +111,7 @@ pytest -q                     # 테스트
 
 | 항목 | 값 | 근거 |
 |---|---|---|
-| 도구 | 6종 (`services/agent_tools.py`) | AI기능명세 1 |
+| 도구 | 6종 (`services/agent_tools.py`) — 목업 없음, 아래 표 | AI기능명세 1 |
 | 최대 반복 | **5회** | 3회로는 검색→추정→배치 연계가 끊기고, 8회 이상은 결과 차이 없이 비용만 증가 |
 | 모델 | `claude-sonnet-4` | 아래 실측 — haiku 보다 8초 느리지만 단위를 더 잘게 나누고 추정 표시가 정확 |
 | 시간 제한 | **전체 60초** (호출당 아님) | NFR-PERF-01. 각 호출에는 남은 시간만 준다 |
@@ -119,6 +120,20 @@ pytest -q                     # 테스트
 | 실패 시 | 1회 재시도 → 템플릿 대체 | AI기능명세 6 |
 | 사용자 확인 필요 | `save_plan` | 되돌리기 어려운 동작은 에이전트가 직접 실행하지 않는다 |
 | 오늘 날짜 | 프롬프트에 넣는다 | 안 넣었더니 모델이 2024~2025년 날짜로 빈 시간을 조회했다 |
+| 단위 수 | 최대 25개, 짧은 항목은 같은 과목끼리 합 120분 이하로 묶는다 | 항목마다 하나씩 쓰면 마지막 JSON 이 2,200토큰·27초가 되어 60초를 넘기기도 했다 |
+
+**도구가 읽는 곳**
+
+| 도구 | 읽는 곳 | 없을 때 |
+|---|---|---|
+| `search_curriculum` | `curriculum_units` 테이블 (마이그레이션 009). `goal_id` 가 `custom` 이면 목표 이름으로 찾는다 | 빈 목록 + "단위를 estimated=true 로" 안내 |
+| `estimate_effort` | 이번 목표의 커리큘럼 권장 시간 × 수준 배율(초보 1.2 · 보통 1.0 · 숙련 0.8) | 이름 길이로 어림 (`basis: heuristic`) |
+| `get_available_slots` | 이번 요청에서 사용자가 준 가용시간 | 빈 목록 — 평일 저녁을 지어내지 않는다 |
+| `get_goal_catalog` | 목표 카탈로그 `services/goal_catalog.py` (담당 B) | 인기 목표 |
+| `search_contests` | `contests` 테이블 (담당 D 의 `contest_repository`) | 빈 목록 |
+
+커리큘럼의 `standard_minutes` 는 팀 추정치이고 `verified=false` 다 — 공식 출제기준 원문과 대조한 뒤 다음 번호 마이그레이션으로 `verified=true` 로 바꾼다.
+세 시험 밖의 목표(토익·컴활 등)는 아직 커리큘럼이 없어 에이전트가 단위를 '추정'으로 표시한다.
 
 응답의 `source` 로 결과가 어디서 왔는지 알 수 있다 — `agent` / `partial` / `template`.
 
@@ -128,6 +143,16 @@ pytest -q                     # 테스트
 |---|---|---|---|---|
 | claude-sonnet-4 | `agent` | 41~46초 | 10~24개 | 8회 |
 | claude-haiku-4 | `agent` | 33초 | 12개 | 14회 |
+
+커리큘럼 DB 연결 후 (2026-09-26, claude-sonnet-4)
+
+| 목표 | 결과 | 걸린 시간 | 학습 단위 | 추정 단위 | 모델 호출 |
+|---|---|---|---|---|---|
+| SQLD (단위 수 제한 전) | `template` / `agent` | 60초 초과 / 39초 | — / 33개 | — / 0 | 3회 |
+| SQLD | `agent` | 31~35초 | 18~25개 | 0 | 2회 |
+| 정보처리기사 필기 | `agent` | 28초 | 23개 | 0 | 2회 |
+
+묶기 규칙(합 120분 이하)은 프롬프트로만 지킨다 — 실측에서 150분어치를 90분 단위 하나로 묶은 경우가 있었다.
 
 최종 JSON 을 쓰는 마지막 호출 하나가 **약 24초**라서, 처음 명세의 "호출당 20초"로는 거의 항상 템플릿으로 떨어졌다.
 그래서 시간 제한을 에이전트 전체 60초로 바꾸고 화면에 진행 단계를 보여준다.
@@ -223,12 +248,13 @@ pytest -q                     # 테스트
 ### 테스트
 
 ```bash
-pytest -q       # 전체 131개 (C 담당 87개)
+pytest -q       # 전체 142개 (C 담당 98개)
 ```
 
 | 파일 | 확인하는 것 |
 |---|---|
 | `tests/test_plan_store.py` | 계획 저장·재조회, 이전 계획 보관, 규칙 위반 저장 거부, 블록 저장 실패 시 계획 롤백, 본인 블록만 완료, 5분 미만 미저장, DB 기준 통계, AI 호출 기록, DB 없이도 분해, 한국 시각 왕복 |
+| `tests/test_agent_tools.py` | 커리큘럼 시드(009 SQL 을 그대로 읽어 검사), 목표 id·이름으로 찾기, 없는 목표 안내, DB 없어도 안 멈춤, 목표 안에서만 시간 추정·수준 배율, 사용자 가용시간 전달, B 카탈로그·D 공모전 사용 |
 | `tests/test_replan.py` | 야간 재조정(뒤 블록 함께 밀기, 완료·고정 블록 유지, 자리 없음, 검증 실패·중간 실패 시 원상 유지), 배치 키·관리자 로그, 책망하는 AI 요약 거르기, 변경 내역 7일·되돌리기 1회, 3일 연속 제안, 블록 옮기기(경고·강행·겹침 거부)·지우기, 완료 취소 24시간, 주간 달성률, 범위 축소안이 실제로 다 들어가는지 |
 | `tests/fake_supabase.py` | (도구) 테스트용 가짜 Supabase — 다른 파트도 `get_db` 에 끼워 쓰면 된다 |
 | `tests/test_decomposer.py` | 도구 루프, 결과 한 메시지로 반환, `save_plan` 미실행, 오늘 날짜, 남은 시간만 주기, 타임아웃·예산 소진·스키마 실패 폴백, 반복 상한, 스트림 마지막 줄 |
@@ -243,7 +269,8 @@ pytest -q       # 전체 131개 (C 담당 87개)
 
 ## 남은 작업
 
-- [ ] `services/agent_tools.py` 의 목업 데이터를 Supabase 조회로 교체 (에이전트 코드는 그대로)
+- [x] `services/agent_tools.py` 의 목업 데이터를 DB·팀 서비스 조회로 교체 (커리큘럼 `curriculum_units`, 카탈로그 B, 공모전 D, 가용시간은 요청 값)
+- [ ] 커리큘럼 공식 원문 대조 후 `verified=true` · 다른 목표(컴활·토익 등) 커리큘럼 추가
 - [ ] 구글 캘린더 연동 (`FR-PLAN-01`) — `get_available_slots` 도구 안쪽
 - [x] AI 호출 로그 저장 (`FR-ADMIN-02` 대시보드 근거) — `ai_call_logs`
 - [x] 프론트 `/schedule` 에서 계획 만들기(분해 → 배치 → 검증)를 실제 API로 호출
