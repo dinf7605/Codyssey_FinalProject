@@ -19,6 +19,18 @@ export function getToken() {
   }
 }
 
+// 토큰(JWT)에 적힌 사용자 id. 기기에 모아 둔 기록이 누구 것인지 가릴 때 쓴다 (서버 검증용 아님).
+// 해석할 수 없는 토큰이면 null.
+export function tokenOwner(token = getToken()) {
+  if (!token) return null;
+  try {
+    const part = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+    return JSON.parse(atob(part)).sub || null;
+  } catch {
+    return null;
+  }
+}
+
 function authHeaders() {
   const token = getToken();
   return token ? { Authorization: `Bearer ${token}` } : {};

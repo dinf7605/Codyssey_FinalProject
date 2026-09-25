@@ -104,10 +104,11 @@ def test_지난_블록이_없으면_아무것도_안_한다(db):
 
 
 def test_기한_안에_자리가_없으면_그대로_두고_알린다(db):
-    db.table("study_plans").update({"deadline": "2026-10-07"}).eq("id", plan_of(db)["id"]).execute()
+    # 기한은 오늘, 오늘 빈 시간은 이미 지났다 → 다시 놓을 자리가 없다
+    db.table("study_plans").update({"deadline": "2026-10-08"}).eq("id", plan_of(db)["id"]).execute()
     before = by_unit(db)
 
-    result = replan.run_for_plan(db, plan_of(db), NIGHT, use_ai=False)
+    result = replan.run_for_plan(db, plan_of(db), datetime(2026, 10, 8, 23, 0), use_ai=False)
 
     assert result["moved"] == 0 and result["unplaced"] >= 1
     assert by_unit(db)["tpl-01"].start == before["tpl-01"].start
@@ -181,13 +182,29 @@ def test_상태없는_재조정도_선행_순서를_지킨다():
 
 # ── 전체 배치 ─────────────────────────────────────────
 
-def test_야간_배치는_키가_없으면_돌지_않는다(client, monkeypatch):
+def test_야간_배치는_키가_없으면_돌지_않는다(client, db, monkeypatch):
     monkeypatch.delenv("BATCH_SECRET", raising=False)
     assert client.post("/plan/nightly").status_code == 503
 
     monkeypatch.setenv("BATCH_SECRET", "s3cret")
     assert client.post("/plan/nightly", headers={"X-Batch-Key": "wrong"}).status_code == 401
-    assert client.post("/plan/nightly", headers={"X-Batch-Key": "s3cret"}).status_code == 200
+    res = client.post("/plan/nightly", headers={"X-Batch-Key": "s3cret"})
+    assert res.status_code == 202, "스케줄러 시간 제한에 걸리지 않게 바로 답하고 뒤에서 돈다"
+    assert db.rows("batch_runs")[0]["status"] == "success", "TestClient 는 뒤 작업까지 마친 뒤 돌려준다"
+
+
+def test_야간_배치가_실행_중이면_겹쳐_돌지_않는다(client, db, monkeypatch):
+    monkeypatch.setenv("BATCH_SECRET", "s3cret")
+    db.table("batch_runs").insert({"job_name": replan.NIGHTLY_JOB, "status": "running",
+                                   "started_at": datetime.now(replan.KST).isoformat()}).execute()
+
+    assert client.post("/plan/nightly", headers={"X-Batch-Key": "s3cret"}).status_code == 409
+
+
+def test_기한이_지난_계획은_재조정하지_않는다(db):
+    db.table("study_plans").update({"deadline": "2026-10-07"}).eq("id", plan_of(db)["id"]).execute()
+    assert replan.run_for_plan(db, plan_of(db), NIGHT, use_ai=False) is None
+    assert db.rows("plan_changes") == []
 
 
 def test_야간_배치는_모든_계획을_돌고_관리자_로그를_남긴다(db):
@@ -355,6 +372,15 @@ def test_완료는_24시간_안에만_취소된다(db):
     replan.cancel_done(db, ME.id, target.id, done_at + timedelta(hours=2))
     assert by_unit(db)["tpl-01"].done is False
     assert len(db.rows("study_sessions")) == 1, "공부한 시간 기록은 남는다"
+
+
+def test_이미_완료한_블록을_다시_기록해도_완료_시각은_그대로다(db):
+    target = by_unit(db)["tpl-01"]
+    first = datetime(2026, 10, 5, 20, 30)
+    _complete(db, target, first)
+    _complete(db, target, first + timedelta(hours=20))
+
+    assert by_unit(db)["tpl-01"].done_at == first, "덮어쓰면 24시간 취소 기한이 계속 늘어난다"
 
 
 def test_완료_취소_API(client, db):

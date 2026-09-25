@@ -32,6 +32,7 @@ from services.plan_store import (
 from services.scheduler import blocks_to_redo, build_schedule
 from services.validator import validate_schedule
 
+NIGHTLY_JOB = "plan.nightly_reschedule"
 KEEP_DAYS = 7            # 변경 내역 보관 (FR-PLAN-07)
 EXTEND_STREAK_DAYS = 3   # 이만큼 연속으로 밀리면 기한 조정 제안 (FR-PLAN-06)
 CANCEL_DONE_HOURS = 24   # 완료 취소 가능 시간 (FR-STUDY-02)
@@ -211,6 +212,9 @@ def run_for_plan(db, plan: dict, now: datetime, *, use_ai: bool = True) -> dict 
     if availability is None:
         return None
     deadline = _plan_deadline(plan)
+    if deadline < now.date():
+        # 기한이 지난 계획은 옮길 자리가 없다 — 날마다 같은 '그대로 둠' 기록을 쌓지 않는다
+        return None
 
     rp = compute_replan(blocks, units, availability, deadline, now)
     if not rp.moves and not rp.unplaced:
@@ -287,7 +291,7 @@ def run_nightly(db, now: datetime, *, use_ai: bool = True) -> dict:
     """
     started = datetime.now(KST)
     log = db.table("batch_runs").insert({
-        "job_name": "plan.nightly_reschedule", "source": "plan", "status": "running",
+        "job_name": NIGHTLY_JOB, "source": "plan", "status": "running", "started_at": started.isoformat(),
     }).execute().data[0]
 
     plans = db.table("study_plans").select("*").eq("status", "active").execute().data
@@ -313,6 +317,19 @@ def run_nightly(db, now: datetime, *, use_ai: bool = True) -> dict:
     }).eq("id", log["id"]).execute()
     return {"status": status, "plans": done, "moved": moved, "failed": failed,
             "seconds": round((datetime.now(KST) - started).total_seconds(), 2)}
+
+
+def nightly_running(db, now: datetime) -> bool:
+    """1시간 안에 시작해 아직 끝나지 않은 야간 배치가 있는가. 스케줄러가 두 번 불러도 겹쳐 돌지 않게.
+
+    도중에 서버가 죽어 'running' 으로 남은 기록은 1시간이 지나면 무시한다.
+    """
+    rows = (
+        db.table("batch_runs").select("started_at")
+        .eq("job_name", NIGHTLY_JOB).eq("status", "running")
+        .order("started_at", desc=True).limit(1).execute().data
+    )
+    return bool(rows) and from_db_time(rows[0]["started_at"]) > now - timedelta(hours=1)
 
 
 def batch_key_ok(given: str | None, expected: str | None) -> bool:

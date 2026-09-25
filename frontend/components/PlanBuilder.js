@@ -122,7 +122,7 @@ export default function PlanBuilder() {
         .scope({
           units: decomposed.units,
           availability: current.availability,
-          startDay: current.today,
+          startDay: current.startDay,
           deadline: current.deadline,
         })
         .then(setScope, () => setScope(null));
@@ -141,7 +141,7 @@ export default function PlanBuilder() {
     const placed = await api.plan.schedule({
       units,
       availability: current.availability,
-      startDay: current.today,
+      startDay: current.startDay,
       deadline,
     });
     const check = await api.plan.validate({ blocks: placed.blocks, units, deadline });

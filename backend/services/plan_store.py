@@ -56,10 +56,13 @@ def save_plan(
     같은 목표의 이전 계획은 보관(archived)으로 돌린다 — 지우지 않는다.
     Supabase REST 에는 트랜잭션이 없어서, 단위·블록 저장이 실패하면 방금 만든 계획을 지운다
     (외래키 cascade 로 딸린 행도 함께 지워진다). 반쯤 저장된 계획이 남지 않게 한다.
+    이전 계획 보관은 새 계획이 다 저장된 뒤에 한다 — 저장이 실패했을 때 진행 중 계획이 사라지지 않게.
     """
-    db.table("study_plans").update({"status": "archived"}).eq("user_id", user_id).eq(
-        "goal_title", goal_title
-    ).eq("status", "active").execute()
+    previous = [
+        r["id"] for r in db.table("study_plans").select("id")
+        .eq("user_id", user_id).eq("goal_title", goal_title).eq("status", "active")
+        .execute().data
+    ]
 
     plan = db.table("study_plans").insert({
         "user_id": user_id,
@@ -103,6 +106,10 @@ def save_plan(
         db.table("study_plans").delete().eq("id", plan_id).eq("user_id", user_id).execute()
         raise
 
+    if previous:
+        db.table("study_plans").update({"status": "archived"}).eq("user_id", user_id).in_(
+            "id", previous
+        ).execute()
     return plan_id
 
 
@@ -217,8 +224,11 @@ def record_session(
     }).execute()
 
     if mine:
+        # 이미 완료한 블록이면 완료 시각을 덮어쓰지 않는다 — 덮으면 24시간 취소 기한이 계속 늘어난다
         done_at = now or datetime.now(KST).replace(tzinfo=None)
-        db.table("plan_blocks").update({"done": True, "done_at": to_db_time(done_at)}).eq("id", block_id).execute()
+        db.table("plan_blocks").update({"done": True, "done_at": to_db_time(done_at)}).eq(
+            "id", block_id
+        ).eq("done", False).execute()
     return mine
 
 

@@ -29,7 +29,7 @@ import time
 from datetime import date, datetime
 from typing import Literal
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
@@ -299,18 +299,26 @@ def replan_now(user=Depends(get_current_user), db=Depends(get_db)) -> dict:
     return result or {"run_id": None, "moved": 0, "unplaced": 0, "summary": "다시 놓을 지난 블록이 없어요."}
 
 
-@router.post("/nightly")
-def nightly(x_batch_key: str | None = Header(default=None), db=Depends(get_db)) -> dict:
+@router.post("/nightly", status_code=202)
+def nightly(
+    background: BackgroundTasks, x_batch_key: str | None = Header(default=None), db=Depends(get_db)
+) -> dict:
     """전체 야간 재조정 — 매일 03:00 스케줄러(Make·cron)가 부른다.
 
     사람이 부르는 API 가 아니라서 로그인 대신 X-Batch-Key 헤더를 확인한다 (.env 의 BATCH_SECRET).
+    사용자마다 AI 요약을 부르느라 오래 걸릴 수 있어서 바로 202 로 답하고 뒤에서 돈다 —
+    스케줄러의 HTTP 시간 제한(Make 기본 40초)에 걸려 실패로 보이지 않게. 결과는 batch_runs 에 남는다.
     """
     expected = os.getenv("BATCH_SECRET")
     if not expected:
         raise HTTPException(status_code=503, detail="BATCH_SECRET 환경변수가 없어 배치를 실행하지 않습니다.")
     if not replan.batch_key_ok(x_batch_key, expected):
         raise HTTPException(status_code=401, detail="배치 키가 맞지 않습니다.")
-    return replan.run_nightly(db, replan.now_kst())
+    now = replan.now_kst()
+    if replan.nightly_running(db, now):
+        raise HTTPException(status_code=409, detail="야간 재조정이 이미 실행 중입니다.")
+    background.add_task(replan.run_nightly, db, now)
+    return {"status": "started", "message": "결과는 batch_runs 에 남습니다."}
 
 
 # ── 블록 직접 편집 (FR-PLAN-05) ────────────────────────

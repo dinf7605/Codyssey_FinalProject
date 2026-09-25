@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import Link from 'next/link';
-import { api, getToken } from '@/lib/api';
+import { api, getToken, tokenOwner } from '@/lib/api';
 import { notifyPlanChanged, usePlan } from '@/lib/usePlan';
 import { dayKey, hhmm, kstIso, kstToday } from '@/lib/planView';
 
@@ -12,6 +12,7 @@ import { dayKey, hhmm, kstIso, kstToday } from '@/lib/planView';
 // - 브라우저를 닫아도 마지막 시각까지 남는다 (기기에 저장 → 다시 열면 멈춘 상태로 이어서)
 // - 30분 동안 조작이 없으면 멈추고 묻는다 — 자리를 비운 시간까지 공부로 세지 않으려고
 // - 오프라인이면 기기에 모아 두었다가 다시 연결되면 보낸다
+// - 기기에 남기는 것에는 누구 것인지(owner)를 붙인다 — 공용 PC 에서 다음 사람 계정으로 보내지 않게
 
 const DRAFT_KEY = 'sp_study_timer';
 const QUEUE_KEY = 'sp_study_pending';
@@ -36,11 +37,12 @@ function writeJson(key, value) {
   }
 }
 
-// 닫기 직전까지 흐른 시간을 더해서, 멈춘 상태로 되살린다
+// 닫기 직전까지 흐른 시간을 더해서, 멈춘 상태로 되살린다.
+// 로그인 전에 잰 타이머(owner 없음)는 로그인한 사람이 이어받는다. 다른 사람이 잰 것은 되살리지 않는다.
 function restoreDraft() {
   if (typeof window === 'undefined') return null;
   const d = readJson(DRAFT_KEY, null);
-  if (!d) return null;
+  if (!d || (d.owner && d.owner !== tokenOwner())) return null;
   const ran = d.runStart ? Math.max(0, (d.savedAt - d.runStart) / 1000) : 0;
   return { blockId: d.blockId ?? null, accum: d.accum + ran, runStart: null };
 }
@@ -57,15 +59,20 @@ const needsLogin = (err) => err.status === 401 || err.status === 403;
 async function flushQueue() {
   const queue = readJson(QUEUE_KEY, []);
   if (!queue.length || !getToken()) return 0;
+  const me = tokenOwner();
   const left = [];
   let sent = 0;
-  for (const record of queue) {
+  for (const entry of queue) {
+    if ((entry.owner ?? null) !== me) {
+      left.push(entry); // 다른 사람 기록 — 그 사람이 다시 로그인하면 보낸다
+      continue;
+    }
     try {
-      await api.study.record(record);
+      await api.study.record(entry.record);
       sent += 1;
     } catch (err) {
       // 서버가 내용을 거절한 것은 다시 보내도 같다 — 연결·로그인 문제만 남겨 둔다
-      if (isOffline(err) || needsLogin(err)) left.push(record);
+      if (isOffline(err) || needsLogin(err)) left.push(entry);
     }
   }
   writeJson(QUEUE_KEY, left);
@@ -156,7 +163,14 @@ export default function StudyTimer({ blockId = null }) {
 
   // 1초마다 기기에 남긴다 — 브라우저를 닫아도 마지막 시각까지 기록된다
   useEffect(() => {
-    if (mounted) writeJson(DRAFT_KEY, timer ? { ...timer, savedAt: now } : null);
+    if (!mounted) return;
+    if (timer) {
+      writeJson(DRAFT_KEY, { ...timer, owner: tokenOwner(), savedAt: now });
+      return;
+    }
+    // 내 타이머가 없다고 남의 타이머까지 지우지 않는다
+    const saved = readJson(DRAFT_KEY, null);
+    if (!saved?.owner || saved.owner === tokenOwner()) writeJson(DRAFT_KEY, null);
   }, [mounted, timer, now]);
 
   function start() {
@@ -221,7 +235,7 @@ export default function StudyTimer({ blockId = null }) {
       loadStats();
     } catch (err) {
       if (isOffline(err)) {
-        writeJson(QUEUE_KEY, [...readJson(QUEUE_KEY, []), record]);
+        writeJson(QUEUE_KEY, [...readJson(QUEUE_KEY, []), { owner: tokenOwner(), record }]);
         setTimer(null);
         setNote('');
         setResult({ state: 'queued' });
