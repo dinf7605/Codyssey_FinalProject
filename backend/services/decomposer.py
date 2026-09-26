@@ -61,6 +61,9 @@ SYSTEM_PROMPT = """너는 학습 계획을 세우는 커리큘럼 설계자다.
   - 앞 단위를 끝내야 할 수 있는 것은 prerequisites 에 적는다
   - search_curriculum 으로 찾은 범위 안에서 만든다
   - 검색 범위 밖의 내용을 넣어야 하면 그 단위의 estimated 를 true 로 표시한다
+  - 단위는 최대 25개. 짧은 항목은 같은 과목끼리만, 묶은 항목의 minutes 합이 120 이하일 때만 한 단위로 묶는다
+  - 커리큘럼에 minutes 가 있으면 그대로 쓴다. estimate_effort 는 커리큘럼에 없는 단위에만 쓴다
+  - 첫 턴에 search_curriculum 과 get_available_slots 를 함께 부른다
   - 모르는 것을 아는 것처럼 쓰지 않는다
   - 날짜가 필요하면 사용자가 알려준 오늘 날짜를 기준으로 한다
 
@@ -219,7 +222,10 @@ def decompose_goal(
                 # 되돌리기 어려운 동작은 에이전트가 실행하지 않는다 (AI기능명세 2)
                 output = {"status": "confirmation_required", "message": "사용자 확인이 필요합니다."}
             else:
-                output = run_tool(block.name, block.input or {})
+                output = run_tool(
+                    block.name, block.input or {},
+                    {"availability": availability, "goal_id": goal_id, "goal_title": goal_title},
+                )
 
             results.append(
                 {

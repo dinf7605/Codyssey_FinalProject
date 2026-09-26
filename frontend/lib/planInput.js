@@ -39,6 +39,18 @@ export function toISODate(d) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
+// 오늘 공부 시간이 이미 시작됐으면 내일부터 놓는다 — 밤 9시에 만든 계획의 첫 블록이
+// 이미 지나간 저녁 7시에 놓이지 않게 (백엔드 replan._place_from 과 같은 규칙)
+export function firstStudyDay(slots, now = new Date()) {
+  const weekday = (now.getDay() + 6) % 7; // 0=월
+  const starts = slots.filter((s) => s.weekday === weekday).map((s) => s.start).sort();
+  const hhmm = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  if (!starts.length || hhmm <= starts[0]) return toISODate(now);
+  const tomorrow = new Date(now);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  return toISODate(tomorrow);
+}
+
 export function planInput(saved = loadExploration(), now = new Date()) {
   const slots = slotsFromExploration(saved?.slots);
   const picked = saved?.picked;
@@ -53,6 +65,7 @@ export function planInput(saved = loadExploration(), now = new Date()) {
     goalId: picked ? 'custom' : DEFAULT_GOAL.goalId,
     availability: { slots: slots.length ? slots : DEFAULT_SLOTS },
     today: toISODate(now),
+    startDay: firstStudyDay(slots.length ? slots : DEFAULT_SLOTS, now),
     deadline: toISODate(deadline),
     weeks,
     fromOnboarding: Boolean(picked || slots.length),

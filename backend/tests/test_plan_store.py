@@ -135,6 +135,33 @@ def test_블록_저장이_실패하면_계획도_남기지_않는다():
     assert db.rows("study_units") == []
 
 
+def test_새_계획_저장이_실패해도_이전_계획은_진행_중으로_남는다():
+    class BrokenBlocks(FakeSupabase):
+        broken = False
+
+        def table(self, name):
+            q = super().table(name)
+            if name == "plan_blocks" and self.broken:
+                def broken_insert(_values):
+                    raise RuntimeError("네트워크 끊김")
+                q.insert = broken_insert
+            return q
+
+    db = BrokenBlocks()
+    units = template_units("SQLD")
+    blocks = build_schedule(units, AVAIL, START, DEADLINE).blocks
+    old = save_plan(db, ME.id, goal_title="SQLD", goal_id="x", deadline=DEADLINE,
+                    source="template", units=units, blocks=blocks)
+
+    db.broken = True
+    with pytest.raises(RuntimeError):
+        save_plan(db, ME.id, goal_title="SQLD", goal_id="x", deadline=DEADLINE,
+                  source="template", units=units, blocks=blocks)
+
+    (plan,) = db.rows("study_plans")
+    assert plan["id"] == old and plan["status"] == "active"
+
+
 # ── 학습 기록 ─────────────────────────────────────────
 
 def _first_block_id(client):
