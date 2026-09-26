@@ -18,8 +18,8 @@ def get_my_profile(user=Depends(get_current_user)):
     # 1) 토큰에서 나온 '본인' 정보를 DB에서 조회
     response = (
         get_supabase_client().table("users")
-        .select("*")
-        .eq("user_id", user.id)         # 본인 것만
+        .select("email,nickname")
+        .eq("auth_id", user.id)         # 본인 것만
         .limit(1)
         .execute()
     )
