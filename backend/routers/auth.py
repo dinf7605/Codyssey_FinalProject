@@ -1,10 +1,13 @@
 import logging
 from datetime import datetime, timezone
-
 from fastapi import APIRouter, Depends, HTTPException
-
 from db import get_supabase_client, new_auth_client
-from schemas.user import LoginRequest, SignupRequest
+from schemas.user import (
+    LoginRequest,
+    SignupRequest,
+    ForgotPasswordRequest,
+    ResetPasswordRequest,
+)
 from utils.auth import get_current_user
 
 # 비밀번호는 Supabase Auth 가 해싱·저장한다. 우리 DB 에는 저장하지 않는다 (기능명세서 K15).
@@ -12,6 +15,7 @@ from utils.auth import get_current_user
 # 실패 이유를 자세히 말하면 "이미 가입된 이메일"인지 드러난다 (NFR-SEC-01).
 SIGNUP_FAILED = "가입하지 못했습니다. 입력한 정보를 확인하고 다시 시도해 주세요."
 LOGIN_FAILED = "이메일 또는 비밀번호가 틀렸습니다."
+RESET_SENT = "비밀번호 재설정 메일을 보냈습니다. 메일함을 확인해 주세요."  # ⭐ 추가
 
 
 # ── 라우터 설정 ────────────────────────────────────
@@ -105,3 +109,33 @@ def get_me(user=Depends(get_current_user)):
         "id": user.id,
         "email": user.email,
     }
+
+
+# ── 비밀번호 재설정 메일 요청 ─────────────────────
+@router.post("/forgot-password")
+def forgot_password(req: ForgotPasswordRequest):
+    auth_client = new_auth_client()
+    try:
+        auth_client.auth.reset_password_for_email(req.email)
+    except Exception:
+        # 실패해도 성공처럼 응답 (가입 여부 노출 방지, NFR-SEC-01)
+        logger.exception("비밀번호 재설정 메일 발송 실패")
+
+    return {"message": RESET_SENT}
+
+
+# ── 새 비밀번호 설정 ──────────────────────────────
+@router.post("/reset-password")
+def reset_password(req: ResetPasswordRequest):
+    auth_client = new_auth_client()
+    try:
+        # 메일 링크의 토큰 2개로 세션 복원 → 비밀번호 변경
+        auth_client.auth.set_session(req.access_token, req.refresh_token)
+        auth_client.auth.update_user({"password": req.new_password})
+    except Exception:
+        raise HTTPException(
+            status_code=400,
+            detail="링크가 만료되었거나 유효하지 않습니다. 다시 요청해 주세요.",
+        )
+
+    return {"message": "비밀번호가 변경되었습니다. 새 비밀번호로 로그인해 주세요."}
