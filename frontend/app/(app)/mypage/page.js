@@ -1,6 +1,7 @@
 import ContestInterestMemory from '@/components/ContestInterestMemory';
 import SectionTitle from '@/components/SectionTitle';
 import StudyGrass from '@/components/StudyGrass';
+import AccountSettings from '@/components/AccountSettings';
 import { levelOf, nextUnlock, LEVELS, UNLOCK_LABEL } from '@/lib/growth';
 import { user, memories, goal, studyHistory } from '@/lib/mock';
 
@@ -121,16 +122,7 @@ export default function MyPage() {
         <p className="hint">삭제한 항목은 이후 일정 생성·추천에 사용하지 않습니다 · 되돌릴 수 없습니다</p>
       </section>
 
-      <section className="sec">
-        <div className="rows">
-          <div className="row">
-            <div className="row-main">
-              <b className="muted">회원 탈퇴</b>
-              <span>일정·학습기록·메모리·캘린더 토큰을 모두 삭제합니다</span>
-            </div>
-          </div>
-        </div>
-      </section>
+      <AccountSettings />
     </>
   );
 }
