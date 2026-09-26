@@ -44,19 +44,18 @@ def withdraw_user(
 
     db = get_supabase_client()
 
-    # 2) 토큰에서 나온 '본인'만 DB에서 삭제
-    response = db.table("users").delete().eq("user_id", user.id).execute()
+    # 2) 프로필이 있는 본인인지 확인한다.
+    response = db.table("users").select("user_id").eq("user_id", user.id).limit(1).execute()
 
     # 3) 삭제된 게 없으면 = 그런 유저 없음
     if not response.data:
         raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다")
 
-    # 4) Supabase Auth 계정 삭제 — 일정·학습기록·메모리 등 user_id 를 가진 행은
-    #    외래키 on delete cascade 로 함께 지워진다 (FR-MY-04)
+    # 4) Auth 계정을 삭제하면 user_id 외래키의 on delete cascade 로
+    #    프로필·일정·학습기록·메모리·알림을 함께 삭제한다.
     try:
         db.auth.admin.delete_user(user.id)
-    except Exception as e:
-        # DB는 이미 지워졌으므로, Auth 삭제 실패는 로그만 남기고 넘어감
-        print(f"[탈퇴] Auth 계정 삭제 실패: {e}")
+    except Exception:
+        raise HTTPException(status_code=503, detail="탈퇴 처리에 실패했습니다. 다시 시도해 주세요.")
 
     return {"message": "탈퇴가 완료되었습니다"}
