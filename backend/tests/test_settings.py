@@ -1,6 +1,6 @@
-"""회원 탈퇴 (FR-MY-04) — 로그인 사용자와 DB 는 가짜로 바꿔 끼워 실제 계정을 지우지 않는다."""
-
+"""설정 API 검증. 인증과 DB를 대체하여 실제 계정을 삭제하지 않는다."""
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
 from fastapi.testclient import TestClient
@@ -12,89 +12,96 @@ from utils.auth import get_current_user
 FAKE_USER = SimpleNamespace(id="00000000-0000-0000-0000-000000000001", email="me@example.com")
 
 
-class FakeQuery:
-    def __init__(self, db, table):
-        self.db, self.table, self.filters = db, table, {}
-
-    def select(self, *_):
-        return self
-
-    def limit(self, _):
-        return self
-
-    def eq(self, column, value):
-        self.filters[column] = value
-        return self
-
-    def execute(self):
-        self.db.calls.append((self.table, "select", dict(self.filters)))
-        deleted = [{"user_id": self.filters.get("user_id")}] if self.db.has_row else []
-        return SimpleNamespace(data=deleted)
-
-
-class FakeDB:
-    def __init__(self, has_row=True):
-        self.has_row = has_row
-        self.calls = []
-        self.deleted_auth_users = []
-        self.auth = SimpleNamespace(admin=SimpleNamespace(delete_user=self.deleted_auth_users.append))
-
-    def table(self, name):
-        return FakeQuery(self, name)
+@pytest.fixture
+def client():
+    previous = dict(app.dependency_overrides)
+    app.dependency_overrides[get_current_user] = lambda: FAKE_USER
+    try:
+        yield TestClient(app)
+    finally:
+        app.dependency_overrides.clear()
+        app.dependency_overrides.update(previous)
 
 
 @pytest.fixture
-def client():
-    app.dependency_overrides[get_current_user] = lambda: FAKE_USER
-    yield TestClient(app)
-    app.dependency_overrides.clear()
-
-
-def test_withdraw_without_confirm(client, monkeypatch):
-    db = FakeDB()
+def db(monkeypatch):
+    db = Mock()
+    db.rpc.return_value.execute.return_value = SimpleNamespace(data=True)
     monkeypatch.setattr(settings, "get_supabase_client", lambda: db)
-
-    res = client.request("DELETE", "/settings/withdraw", json={"confirm": False})
-
-    assert res.status_code == 400
-    assert db.calls == []  # 확인 없이는 아무것도 지우지 않는다
+    return db
 
 
-def test_withdraw_with_confirm(client, monkeypatch):
-    db = FakeDB()
-    monkeypatch.setattr(settings, "get_supabase_client", lambda: db)
+def withdraw(client, payload):
+    return client.request("DELETE", "/settings/withdraw", json=payload)
 
-    res = client.request("DELETE", "/settings/withdraw", json={"confirm": True})
 
+def test_withdraw_without_confirm(client, db):
+    assert withdraw(client, {"confirm": False}).status_code == 400
+    db.rpc.assert_not_called()
+    db.auth.admin.delete_user.assert_not_called()
+
+
+def test_withdraw_missing_confirm(client, db):
+    assert withdraw(client, {}).status_code == 422
+    db.auth.admin.delete_user.assert_not_called()
+
+
+def test_withdraw_with_confirm(client, db):
+    res = withdraw(client, {"confirm": True, "user_id": "another-user"})
     assert res.status_code == 200
-    # 본인 행만 지운다 — 서비스 키는 RLS 를 통과하므로 user_id 조건이 유일한 보호막
-    assert db.calls == [("users", "select", {"user_id": FAKE_USER.id})]
-    assert db.deleted_auth_users == [FAKE_USER.id]
+    assert "1년" in res.json()["message"]
+    db.rpc.assert_called_once_with("withdrawal_retention_ready", {})
+    db.auth.admin.delete_user.assert_called_once_with(FAKE_USER.id)
+    db.table.assert_not_called()  # 프로필 보관 전에 직접 삭제하지 않는다.
 
 
-def test_withdraw_unknown_user_is_404(client, monkeypatch):
-    db = FakeDB(has_row=False)
-    monkeypatch.setattr(settings, "get_supabase_client", lambda: db)
-
-    res = client.request("DELETE", "/settings/withdraw", json={"confirm": True})
-
-    assert res.status_code == 404
-    assert db.deleted_auth_users == []
+@pytest.mark.parametrize("ready", [False, None, [], "true", 1])
+def test_withdraw_unready_database_blocks_deletion(client, db, ready):
+    db.rpc.return_value.execute.return_value = SimpleNamespace(data=ready)
+    assert withdraw(client, {"confirm": True}).status_code == 503
+    db.auth.admin.delete_user.assert_not_called()
+    db.table.assert_not_called()
 
 
-def test_withdraw_requires_token():
-    res = TestClient(app).request("DELETE", "/settings/withdraw", json={"confirm": True})
-    assert res.status_code in (401, 403)
-
-
-def test_withdraw_auth_failure_is_not_reported_as_success(client, monkeypatch):
-    db = FakeDB()
-    def fail(_):
-        raise RuntimeError("Auth unavailable")
-    db.auth.admin.delete_user = fail
-    monkeypatch.setattr(settings, "get_supabase_client", lambda: db)
-
-    res = client.request("DELETE", "/settings/withdraw", json={"confirm": True})
-
+def test_withdraw_missing_migration_blocks_deletion(client, db):
+    db.rpc.return_value.execute.side_effect = RuntimeError("function unavailable")
+    res = withdraw(client, {"confirm": True})
     assert res.status_code == 503
-    assert db.calls == [("users", "select", {"user_id": FAKE_USER.id})]
+    assert "function unavailable" not in res.text
+    db.auth.admin.delete_user.assert_not_called()
+
+
+def test_withdraw_auth_failure_is_not_reported_as_success(client, db):
+    db.auth.admin.delete_user.side_effect = RuntimeError("internal DB error")
+    res = withdraw(client, {"confirm": True})
+    assert res.status_code == 503
+    assert "internal DB error" not in res.text
+    db.table.assert_not_called()
+
+
+def test_withdraw_requires_token(db):
+    res = withdraw(TestClient(app), {"confirm": True})
+    assert res.status_code in (401, 403)
+    db.rpc.assert_not_called()
+    db.auth.admin.delete_user.assert_not_called()
+
+
+def test_profile_uses_auth_id_and_only_public_fields(client, db):
+    query = db.table.return_value
+    query.select.return_value = query
+    query.eq.return_value = query
+    query.limit.return_value = query
+    profile = {"email": FAKE_USER.email, "nickname": "테스트"}
+    query.execute.return_value = SimpleNamespace(data=[profile])
+    res = client.get("/settings/profile")
+    assert res.status_code == 200
+    assert res.json() == profile
+    db.table.assert_called_once_with("users")
+    query.select.assert_called_once_with("email,nickname")
+    query.eq.assert_called_once_with("auth_id", FAKE_USER.id)
+
+
+def test_profile_missing_is_404(client, db):
+    query = db.table.return_value.select.return_value.eq.return_value.limit.return_value
+    query.execute.return_value = SimpleNamespace(data=[])
+    assert client.get("/settings/profile").status_code == 404

@@ -21,7 +21,8 @@ export default function AccountSettings() {
   }
 
   async function withdraw() {
-    if (!window.confirm('계정과 학습 데이터를 삭제합니다. 탈퇴하시겠습니까?')) return;
+    if (pending) return;
+    if (!window.confirm('탈퇴하면 서비스 이용이 종료되고 일정·학습기록·알림이 삭제됩니다. 이메일·닉네임·약관 동의 정보는 별도로 1년간 보관한 뒤 삭제됩니다. 탈퇴하시겠습니까?')) return;
     setPending(true);
     setError('');
     try {
@@ -41,10 +42,10 @@ export default function AccountSettings() {
         {profile && <div className="row"><div className="row-main"><b>내 계정</b><span>{profile.nickname} · {profile.email}</span></div></div>}
         <div className="row">
           <div className="row-main"><b>로그아웃</b><span>이 브라우저의 로그인 정보를 지웁니다</span></div>
-          <button type="button" className="btn btn-sm" onClick={logout}>로그아웃</button>
+          <button type="button" className="btn btn-sm" onClick={logout} disabled={pending}>로그아웃</button>
         </div>
         <div className="row">
-          <div className="row-main"><b className="muted">회원 탈퇴</b><span>계정과 연결된 일정·학습기록·알림을 삭제합니다</span></div>
+          <div className="row-main"><b className="muted">회원 탈퇴</b><span>프로필은 별도로 1년 보관 후 삭제하며, 일정·학습기록·알림은 탈퇴 시 삭제합니다</span></div>
           <button type="button" className="btn btn-sm" onClick={withdraw} disabled={pending}>
             {pending ? '처리 중...' : '회원 탈퇴'}
           </button>

@@ -44,18 +44,19 @@ def withdraw_user(
 
     db = get_supabase_client()
 
-    # 2) 프로필이 있는 본인인지 확인한다.
-    response = db.table("users").select("user_id").eq("user_id", user.id).limit(1).execute()
+    # 설치되지 않은 DB에서는 Auth 계정을 먼저 삭제하지 않는다.
+    try:
+        ready = db.rpc("withdrawal_retention_ready", {}).execute()
+        if ready.data is not True:
+            raise RuntimeError("Retention migration is not ready")
+    except Exception:
+        raise HTTPException(status_code=503, detail="탈퇴 기능을 준비 중입니다. 잠시 후 다시 시도해 주세요.")
 
-    # 3) 삭제된 게 없으면 = 그런 유저 없음
-    if not response.data:
-        raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다")
-
-    # 4) Auth 계정을 삭제하면 user_id 외래키의 on delete cascade 로
-    #    프로필·일정·학습기록·메모리·알림을 함께 삭제한다.
+    # Auth 삭제 트리거가 프로필 보관과 서비스 데이터 삭제를 같은 트랜잭션에서 처리한다.
+    # 여기서 users를 먼저 삭제하면 보관할 프로필을 잃으므로 삭제하지 않는다.
     try:
         db.auth.admin.delete_user(user.id)
     except Exception:
         raise HTTPException(status_code=503, detail="탈퇴 처리에 실패했습니다. 다시 시도해 주세요.")
 
-    return {"message": "탈퇴가 완료되었습니다"}
+    return {"message": "탈퇴가 완료되었습니다. 프로필은 별도로 1년간 보관 후 삭제됩니다."}
