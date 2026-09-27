@@ -102,3 +102,8 @@ def list_ai_logs(
 
     response.headers["Cache-Control"] = "no-store"
     return payload
+
+# 공고 점검 하위 라우터도 관리자 권한 검사를 적용한다.
+from routers.admin_contests import router as contest_inspection_router
+
+router.include_router(contest_inspection_router)
