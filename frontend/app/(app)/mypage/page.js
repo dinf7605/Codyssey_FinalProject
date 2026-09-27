@@ -1,3 +1,4 @@
+import { AccountName } from '@/components/CurrentAccount';
 import ContestInterestMemory from '@/components/ContestInterestMemory';
 import SectionTitle from '@/components/SectionTitle';
 import StudyGrass from '@/components/StudyGrass';
@@ -15,8 +16,9 @@ export default function MyPage() {
   return (
     <>
       <header className="stack" style={{ gap: 6 }}>
-        <p className="tiny dim">레벨 {current.level} · {current.name}</p>
-        <h1 className="title">{user.nickname}님</h1>
+        <p className="tiny dim">예시 레벨 {current.level} · {current.name}</p>
+        <h1 className="title"><AccountName /></h1>
+        <p className="hint">학습 통계·기록·설정·저장된 학습 정보는 예시입니다. 실제 계정 정보는 아래 내 계정에서 확인할 수 있습니다.</p>
       </header>
 
       <section className="sec">
@@ -50,7 +52,7 @@ export default function MyPage() {
       </section>
 
       <section className="sec">
-        <SectionTitle>학습 기록</SectionTitle>
+        <SectionTitle>학습 기록 (예시)</SectionTitle>
         <StudyGrass history={studyHistory} weeks={20} />
       </section>
 
@@ -73,7 +75,7 @@ export default function MyPage() {
       </section>
 
       <section className="sec">
-        <SectionTitle>학습 설정</SectionTitle>
+        <SectionTitle>학습 설정 (예시)</SectionTitle>
         <div className="rows">
           <div className="row">
             <div className="row-main">
@@ -92,7 +94,7 @@ export default function MyPage() {
               <b>구글 캘린더 연동</b>
               <span>빈 시간대만 읽습니다 · 제목·참석자 미저장</span>
             </div>
-            <span className="pill pill-ok">연동됨</span>
+            <span className="pill">예시: 연동됨</span>
           </div>
           <div className="row">
             <div className="row-main">
@@ -106,7 +108,7 @@ export default function MyPage() {
       <ContestInterestMemory />
 
       <section className="sec">
-        <SectionTitle>저장된 학습 정보</SectionTitle>
+        <SectionTitle>저장된 학습 정보 (예시)</SectionTitle>
         <div className="rows">
           {memories.map((m) => (
             <div className="row" key={m.id}>
@@ -115,11 +117,11 @@ export default function MyPage() {
                 <span>{m.value} · {m.updatedAt} 갱신</span>
                 <span className="dim micro">근거: {m.basis}</span>
               </div>
-              <button className="btn btn-sm">삭제</button>
+              <button type="button" className="btn btn-sm" disabled>예시 항목</button>
             </div>
           ))}
         </div>
-        <p className="hint">삭제한 항목은 이후 일정 생성·추천에 사용하지 않습니다 · 되돌릴 수 없습니다</p>
+        <p className="hint">예시 학습 정보입니다. 실제 저장 정보의 조회·삭제는 아직 연결되지 않았습니다.</p>
       </section>
 
       <AccountSettings />
