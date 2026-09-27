@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import SectionTitle from '@/components/SectionTitle';
+import AdminContestInspection from '@/components/AdminContestInspection';
 import { api, getToken } from '@/lib/api';
 
 const SOURCE_LABELS = {
@@ -166,7 +167,7 @@ export default function AdminPage() {
 
           <section className="sec">
             <SectionTitle>수집 공고 점검</SectionTitle>
-            <p className="hint">공고 점검 기능을 준비하고 있습니다.</p>
+            <AdminContestInspection />
           </section>
         </>
       )}

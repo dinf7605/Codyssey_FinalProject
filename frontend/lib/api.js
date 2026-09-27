@@ -136,6 +136,13 @@ function del(path) {
 
 export const api = {
   admin: {
+    contestInspection: ({ page = 1, pageSize = 20 } = {}) => {
+      const params = new URLSearchParams({
+        page: String(page),
+        page_size: String(pageSize),
+      });
+      return request(`/admin/contests?${params}`, { cache: 'no-store' });
+    },
     me: () => request('/admin/me'),
     logs: ({ day = '', page = 1, pageSize = 20 } = {}) => {
       const params = new URLSearchParams({
