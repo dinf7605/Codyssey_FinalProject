@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import AdminNavigationLink from '@/components/AdminNavigationLink';
 import { usePathname } from 'next/navigation';
 import { NAV_TABS } from '@/lib/nav';
 import { ICONS } from './Icon';
@@ -34,6 +35,7 @@ export default function SideNav({ nickname, levelName, streakDays, goal }) {
               </Link>
             );
           })}
+        <AdminNavigationLink position="side" />
         </nav>
 
         {nickname && (

@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import AdminNavigationLink from '@/components/AdminNavigationLink';
 import { dday } from '@/lib/ui';
 
 // FR-MAIN-01 로고 / FR-MAIN-02 로그인 상태별 메뉴
@@ -10,6 +11,7 @@ export default function TopBar({ nickname, streakDays, levelName, goal }) {
       <div className="shell topbar-in">
         <Link href="/dashboard" className="brand">StudyPace</Link>
         <div className="topbar-right">
+          <AdminNavigationLink position="top" />
           {goal && <span className="tag tag-accent mono">{dday(goal.dDay)}</span>}
           {nickname ? (
             <Link href="/mypage" className="tiny muted">
