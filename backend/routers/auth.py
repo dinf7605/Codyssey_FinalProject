@@ -53,7 +53,7 @@ def signup(req: SignupRequest):
     # ③ users 테이블에 프로필 + 동의정보 저장 (서비스 키)
     try:
         db.table("users").insert({
-            "auth_id": auth_res.user.id,
+            "user_id": auth_res.user.id,  # DB 기준: 사용자는 user_id → auth.users (004)
             "email": req.email,
             "nickname": req.nickname,
             "agree_privacy": req.agree_privacy,

@@ -19,7 +19,7 @@ def get_my_profile(user=Depends(get_current_user)):
     response = (
         get_supabase_client().table("users")
         .select("email,nickname")
-        .eq("auth_id", user.id)         # 본인 것만
+        .eq("user_id", user.id)         # 본인 것만 (DB 기준: user_id → auth.users)
         .limit(1)
         .execute()
     )

@@ -86,7 +86,7 @@ def test_withdraw_requires_token(db):
     db.auth.admin.delete_user.assert_not_called()
 
 
-def test_profile_uses_auth_id_and_only_public_fields(client, db):
+def test_profile_uses_user_id_and_only_public_fields(client, db):
     query = db.table.return_value
     query.select.return_value = query
     query.eq.return_value = query
@@ -98,7 +98,7 @@ def test_profile_uses_auth_id_and_only_public_fields(client, db):
     assert res.json() == profile
     db.table.assert_called_once_with("users")
     query.select.assert_called_once_with("email,nickname")
-    query.eq.assert_called_once_with("auth_id", FAKE_USER.id)
+    query.eq.assert_called_once_with("user_id", FAKE_USER.id)
 
 
 def test_profile_missing_is_404(client, db):

@@ -286,6 +286,22 @@ C 연결부(로그인 토큰 `sp_access_token`, `lib/api.js` 의 plan·study 함
 | 5 | D | 저장소 최상위에 `직접 만든 가상 공모전 … API.txt` (기존 `routers/contest_demo.py` 복사본) | 정리 필요 |
 | 6 | B·E | 005~007 여전히 미적용 (4차와 같음) | |
 
+**조치 (09-28, E 담당 대신 처리)**
+
+| # | 조치 |
+|---|---|
+| 1 | 가입·프로필을 `user_id` 로 되돌림 (`routers/auth.py`, `routers/settings.py`, 테스트 2개). 공용 DB 에서 조회 확인 ✅ |
+| 1·2 | 010 을 공용 스키마용으로 다시 씀 — 트리거는 프로필 보관 + `ai_call_logs` 삭제만, 나머지는 외래키 cascade. pg_cron 활성화 포함. 011 은 이미 있는 테이블을 다시 만들지 않고 인덱스·권한만. **둘 다 공용 DB 적용**, `withdrawal_retention_ready() = true`, 점검 경고 0. PGlite 검사(`tools/retention-db-test`)도 새 스키마로 바꿔 통과 ✅ |
+| 3·4 | 첫 화면(`/`)을 로그인 화면과 하나로 합치고 "로그인 없이 내게 맞는 목표 찾기" 링크 추가. 로그인 뒤 `?next=` 로 복귀(사이트 안 경로만, `//`·`/\` 거절), 없으면 `/schedule` ✅ |
+
+**E 담당에게**
+- 로컬 `.env` 의 `SUPABASE_URL` 을 공용 DB(`spgrerxkdavykunujipn`)로 바꾸고 키 3개도 공용 DB 것으로. 지금까지 쓰던 DB 는 스키마가 달라 앞으로 공용 코드와 맞지 않는다
+- pull 후 위 파일들 확인. 010·011 은 공용 DB 에 **이미 적용** — 다시 적용하지 않는다
+- 새 사용자 데이터 테이블은 `user_id uuid not null references auth.users(id) on delete cascade` 로 — 탈퇴 삭제가 저절로 된다
+- 공용 DB 에서 실제 계정으로 가입 → 프로필 → 탈퇴 → 보관본 확인을 한 번 해 주기 (계정 생성은 C 가 대신할 수 없다)
+- 005·006(알림 스케줄러)은 아직 공용 DB 와 맞지 않는다 — 4차 점검 표 참고
+- 로그인 뒤 기본 이동을 `/schedule` 로 맞췄다. 대시보드가 실제 데이터로 바뀌면 `app/login/page.js` 의 `AFTER_LOGIN` 을 `/dashboard` 로
+
 ### 아직 풀지 못한 것
 
 - **로그인 화면 연결 (E)** — 이게 풀려야 계획 저장·학습 기록·피드백을 실제 계정으로 끝까지 확인할 수 있다. 지금은 가짜 DB 테스트와 "로그인 안내"까지만 확인됨

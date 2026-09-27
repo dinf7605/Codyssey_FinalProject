@@ -54,8 +54,8 @@ def test_signup_saves_profile_and_returns_session(signup_env):
     assert response.status_code == 200
     db.table.assert_called_once_with("users")
     saved = db.table.return_value.insert.call_args.args[0]
-    assert saved["auth_id"] == "new-user-id"
-    assert "user_id" not in saved
+    assert saved["user_id"] == "new-user-id"
+    assert "auth_id" not in saved, "공용 DB 에는 auth_id 가 없다 (004 에서 user_id 로 통일)"
     assert saved["email"] == "test@example.com"
     assert saved["nickname"] == "테스트"
     assert saved["agree_privacy"] is True

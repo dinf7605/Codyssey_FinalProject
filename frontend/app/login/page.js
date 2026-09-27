@@ -9,6 +9,17 @@ import { loadExploration } from '@/lib/goalSession';
 // FR-AUTH-01 이메일 로그인 / FR-AUTH-02 구글 로그인 / FR-AUTH-03 비밀번호 재설정
 // 실패 문구는 '아이디 또는 비밀번호가 올바르지 않습니다'로 통일한다 (NFR-SEC-01).
 // 비밀번호 조합 규칙은 이 화면에 노출하지 않는다 — 정책 힌트가 된다.
+// 첫 화면(/)도 이 화면을 쓴다. 비회원은 로그인 없이 목표 탐색(/onboarding)으로 갈 수 있어야 한다 (P1).
+
+// 로그인 뒤 돌아갈 곳. 일정·학습 화면이 /login?next=/study 처럼 보낸다.
+// 우리 사이트 안의 경로만 받는다 — '//evil.com' 같은 주소로 내보내는 데 쓰이지 않게.
+const AFTER_LOGIN = '/schedule';
+
+function nextPath() {
+  const next = new URLSearchParams(window.location.search).get('next');
+  // '/' 로 시작하되 '//' · '/\' 로 시작하지 않는 경로만 (브라우저는 둘 다 다른 사이트 주소로 읽는다)
+  return next && /^\/(?![/\\])/.test(next) ? next : AFTER_LOGIN;
+}
 
 export default function LoginPage() {
   const router = useRouter();
@@ -31,7 +42,7 @@ export default function LoginPage() {
         userId: result.user_id,
       });
       loadExploration(); // 온보딩 입력은 일정 화면에서도 읽을 수 있도록 보존한다.
-      router.push('/schedule');
+      router.push(nextPath());
     } catch (err) {
       setError(err.status === 401 ? '이메일 또는 비밀번호가 틀렸습니다.' : '로그인에 실패했습니다. 서버 연결을 확인해 주세요.');
     } finally {
@@ -67,6 +78,8 @@ export default function LoginPage() {
           캘린더 접근 권한은 로그인 단계에서 요구하지 않습니다
         </p>
       </form>
+
+      <Link href="/onboarding" className="btn btn-quiet">로그인 없이 내게 맞는 목표 찾기</Link>
 
       <div style={{ display: 'flex', justifyContent: 'center', gap: 'var(--gap-4)', fontSize: 13 }}>
         <Link href="/signup" className="accent-text">회원가입</Link>

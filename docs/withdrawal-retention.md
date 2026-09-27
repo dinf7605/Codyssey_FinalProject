@@ -10,14 +10,18 @@
 - 보관의 정책상 목적/사용자 고지는 팀에서 확정해 배포 문서에 반영한다. 이 구현은 법적 적합성 판단을 대신하지 않는다.
 
 ## 변경 원리
-Auth 관리자 삭제 시 BEFORE DELETE 트리거가 프로필 보관과 서비스 데이터 삭제를 수행한다.
-보관/삭제에 오류가 나면 Auth 삭제까지 동일 트랜잭션에서 롤백된다.
+Auth 관리자 삭제 시 BEFORE DELETE 트리거가 프로필을 보관하고, 서비스 데이터는 외래키가 지운다.
+보관에 오류가 나면 Auth 삭제까지 동일 트랜잭션에서 롤백된다.
 따라서 Supabase 대시보드 등에서 관리자가 직접 계정을 삭제할 때도 이 보관 정책이 적용된다.
-users를 먼저 삭제하지 않는다. 프로필이 없는 Auth 계정은 보관본 없이 연결 데이터만 정리한다.
+users를 먼저 삭제하지 않는다. 프로필이 없는 Auth 계정은 보관본 없이 연결 데이터만 정리된다.
 
-현재 운영 DB에서 확인한 auth_id UUID + study_plans.user_id bigint 스키마용이다.
-004의 UUID user_id로 통일된 다른 DB에 그대로 적용하면 사전 검사에서 중단된다.
-처리 대상 테이블 목록은 SQL에 명시한다. 새 사용자 데이터 테이블을 추가하면 삭제 목록/관계도 검토해야 한다.
+**공용 DB(studypace) 스키마 기준 (2026-09-27 다시 씀).** 사용자 테이블은 모두 `user_id uuid → auth.users on delete cascade`
+(backend/README.md "DB 기준")라서 트리거가 테이블을 하나씩 지울 필요가 없다. `ai_call_logs` 만 `on delete set null` 이라 트리거가 따로 지운다.
+**새 사용자 데이터 테이블은 반드시 `user_id … on delete cascade` 로 만든다** — 그러면 탈퇴 삭제 목록을 따로 고칠 일이 없다.
+
+처음 판(auth_id·bigint user_id 스키마)은 공용 DB 가 아닌 다른 Supabase 프로젝트용이었다. 아래 "적용 및 실제 연동 검증" 기록은 그 DB 에서 한 것이다.
+공용 DB 에는 2026-09-27 새 판을 적용했고 `withdrawal_retention_ready() = true` 를 확인했다 (pg_cron 활성화 포함).
+PGlite 검사(`tools/retention-db-test`)도 새 스키마로 바꿔 통과했다. 공용 DB 에서 실제 계정으로 탈퇴해 보는 확인은 아직 하지 않았다.
 익명 세션으로 저장된 데이터는 Auth ID로 연결할 수 없으므로 이 기능의 삭제 범위 밖이다.
 
 ## 검증 실행 (운영 DB 불필요)

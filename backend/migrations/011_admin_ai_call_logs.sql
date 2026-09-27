@@ -1,42 +1,15 @@
--- 기존 002의 AI 로그 정의만 분리 적용한다.
--- 기존 학습 테이블은 변경하지 않는다.
--- 이미 ai_call_logs가 있다면 재실행하지 말고 구조를 확인한다.
+-- 011 — 관리자 AI 처리 기록 조회용 정리 (담당 E, FR-ADMIN-02)
+--
+-- ai_call_logs 테이블은 002 에서 이미 만들었다 (담당 C 가 학습 분해 때 기록). 여기서는 다시 만들지 않고
+-- 관리자 화면(/admin/ai-logs)의 날짜별 조회에 필요한 것만 더한다. 2026-09-27 다시 씀 —
+-- 처음 판은 create table 을 다시 해서 공용 DB 에 적용하면 오류가 났다.
 
-begin;
-
-create table public.ai_call_logs (
-    id bigint generated always as identity primary key,
-    user_id uuid references auth.users(id) on delete set null,
-    feature text not null,
-    model text,
-    source text,
-    tool_calls int not null default 0,
-    latency_ms int,
-    message text,
-    created_at timestamptz not null default now()
-);
-
-create index ai_call_logs_feature_created_idx
-    on public.ai_call_logs (feature, created_at desc);
-
-create index ai_call_logs_created_idx
+-- 날짜 범위로 최신순 조회 (routers/admin.py list_ai_logs)
+create index if not exists ai_call_logs_created_idx
     on public.ai_call_logs (created_at desc);
 
-create index ai_call_logs_user_idx
-    on public.ai_call_logs (user_id);
-
-alter table public.ai_call_logs enable row level security;
-
-revoke all privileges on table public.ai_call_logs
-    from public, anon, authenticated;
-
-revoke all privileges on sequence public.ai_call_logs_id_seq
-    from public, anon, authenticated;
-
-grant select, insert, update, delete
-    on table public.ai_call_logs to service_role;
-
-grant usage, select
-    on sequence public.ai_call_logs_id_seq to service_role;
-
-commit;
+-- 브라우저 키로는 아예 접근하지 못하게 한다 (RLS 정책도 없다). 읽기·쓰기는 백엔드 서비스 키만
+revoke all privileges on table public.ai_call_logs from public, anon, authenticated;
+revoke all privileges on sequence public.ai_call_logs_id_seq from public, anon, authenticated;
+grant select, insert, update, delete on table public.ai_call_logs to service_role;
+grant usage, select on sequence public.ai_call_logs_id_seq to service_role;
