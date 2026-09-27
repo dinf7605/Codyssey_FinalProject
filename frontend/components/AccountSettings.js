@@ -28,7 +28,8 @@ export default function AccountSettings() {
     try {
       await api.settings.withdraw();
       clearAuthTokens();
-      router.push('/');
+      window.alert('탈퇴가 완료되었습니다. 이메일·닉네임·약관 동의 정보는 별도로 1년간 보관한 뒤 삭제됩니다.');
+      router.replace('/');
     } catch {
       setError('탈퇴 처리를 완료하지 못했습니다. 잠시 후 다시 시도해 주세요.');
     } finally {
