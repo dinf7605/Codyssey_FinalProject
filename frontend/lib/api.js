@@ -135,6 +135,17 @@ function del(path) {
 }
 
 export const api = {
+  admin: {
+    me: () => request('/admin/me'),
+    logs: ({ day = '', page = 1, pageSize = 20 } = {}) => {
+      const params = new URLSearchParams({
+        page: String(page),
+        page_size: String(pageSize),
+      });
+      if (day) params.set('day', day);
+      return request(`/admin/ai-logs?${params}`, { cache: 'no-store' });
+    },
+  },
   health: () => request('/health'),
 
   contests: {
