@@ -23,8 +23,9 @@ from schemas.plan import Availability, Block, StudyUnit, TimeSlot, Violation
 from services import llm
 from services.plan_store import (
     KST,
-    active_plan_row,
+    active_plan_rows,
     from_db_time,
+    other_plan_blocks,
     plan_blocks,
     plan_units,
     to_db_time,
@@ -113,12 +114,14 @@ class Replan:
 
 
 def compute_replan(
-    blocks: list[Block], units: list[StudyUnit], availability: Availability, deadline: date, now: datetime
+    blocks: list[Block], units: list[StudyUnit], availability: Availability, deadline: date, now: datetime,
+    others: list[Block] = (),
 ) -> Replan:
     """지난 미완료 블록(과 그 단위에 기대는 뒤 블록)을 남은 기간에 다시 놓는다. 저장은 하지 않는다.
 
     완료한 블록, 직접 옮긴 블록(locked)은 그대로 둔다.
     블록 id 는 그대로 두고 시각만 바꾼다 — 학습 기록·변경 내역이 같은 블록을 계속 가리키게.
+    others 는 다른 목표의 블록 — 그 자리는 비켜 가고, 하루 블록 수 상한도 함께 센다.
     """
     today = now.date()
     redo_blocks = blocks_to_redo(blocks, units, today)
@@ -129,9 +132,10 @@ def compute_replan(
     keep = [b for b in blocks if b.id not in redo_ids]
     by_id = {u.id: u for u in units}
     redo = [by_id[b.unit_id] for b in redo_blocks if b.unit_id in by_id]
-    placed = build_schedule(redo, availability, _place_from(availability, now), deadline, fixed_blocks=keep)
+    placed = build_schedule(redo, availability, _place_from(availability, now), deadline,
+                            fixed_blocks=keep + list(others))
 
-    keep_ids = {b.id for b in keep}
+    keep_ids = {b.id for b in keep} | {b.id for b in others}
     new_by_unit = {b.unit_id: b for b in placed.blocks if b.id not in keep_ids}
 
     result = Replan(blocks=list(keep), today=today)
@@ -216,16 +220,17 @@ def run_for_plan(db, plan: dict, now: datetime, *, use_ai: bool = True) -> dict 
         # 기한이 지난 계획은 옮길 자리가 없다 — 날마다 같은 '그대로 둠' 기록을 쌓지 않는다
         return None
 
-    rp = compute_replan(blocks, units, availability, deadline, now)
+    others = other_plan_blocks(db, user_id, except_plan_id=plan["id"])
+    rp = compute_replan(blocks, units, availability, deadline, now, others)
     if not rp.moves and not rp.unplaced:
         return None
 
-    # 이번 재조정으로 새로 생긴 위반만 본다. 사용자가 직접 옮긴(locked) 블록의 순서 경고는
-    # 이미 본인이 확인하고 고른 것이라 막지 않는다
-    before = {_key(v) for v in validate_schedule(blocks, units, deadline)}
+    # 이번 재조정으로 새로 생긴 위반만 본다 (다른 목표 블록과의 겹침·하루 상한 포함).
+    # 사용자가 직접 옮긴(locked) 블록의 순서 경고는 이미 본인이 확인하고 고른 것이라 막지 않는다
+    before = {_key(v) for v in validate_schedule(blocks + others, units, deadline)}
     locked = {b.id for b in rp.blocks if b.locked}
     bad = [
-        v for v in validate_schedule(rp.blocks, units, deadline)
+        v for v in validate_schedule(rp.blocks + others, units, deadline)
         if _key(v) not in before and not (v.kind == "prerequisite_violation" and v.block_id in locked)
     ]
     if bad:
@@ -360,18 +365,21 @@ def _streak(runs: list[dict], today: date) -> int:
 
 
 def recent_changes(db, user_id: str, now: datetime) -> dict:
-    """최근 7일의 재조정 묶음과 블록별 변경. 가장 최근 묶음만 되돌릴 수 있다."""
-    empty = {"runs": [], "streak_days": 0, "suggest_extension": False}
-    plan = active_plan_row(db, user_id)
-    if not plan:
+    """진행 중인 모든 목표의 최근 7일 재조정 묶음과 블록별 변경.
+
+    되돌리기는 목표마다 가장 최근 묶음 하나만. 기한 조정 제안도 목표별로 센다.
+    """
+    empty = {"runs": [], "streak_days": 0, "suggest_extension": False, "extension_goals": []}
+    plans = {p["id"]: p for p in active_plan_rows(db, user_id)}
+    if not plans:
         return empty
 
     since = now - timedelta(days=KEEP_DAYS)
     runs = [
         r for r in (
             db.table("plan_reschedule_runs").select("*")
-            .eq("plan_id", plan["id"]).eq("user_id", user_id)
-            .order("created_at", desc=True).limit(30).execute().data
+            .eq("user_id", user_id).in_("plan_id", list(plans))
+            .order("created_at", desc=True).limit(60).execute().data
         )
         if from_db_time(r["created_at"]) >= since
     ]
@@ -393,45 +401,59 @@ def recent_changes(db, user_id: str, now: datetime) -> dict:
             "reason": c["reason"],
         })
 
-    streak = _streak(runs, now.date())
+    latest_of_plan: dict[str, str] = {}
+    for r in runs:  # 최근 것부터 — 목표마다 처음 만난 것이 가장 최근
+        latest_of_plan.setdefault(r["plan_id"], r["id"])
+    streaks = {pid: _streak([r for r in runs if r["plan_id"] == pid], now.date()) for pid in latest_of_plan}
+    extension_goals = [plans[pid]["goal_title"] for pid, n in streaks.items() if n >= EXTEND_STREAK_DAYS]
     return {
         "runs": [
             {
                 "id": r["id"],
+                "plan_id": r["plan_id"],
+                "goal_title": plans[r["plan_id"]]["goal_title"],
                 "created_at": _iso(r["created_at"]),
                 "summary": r["summary"],
                 "ai_generated": r["summary_source"] == "ai",
                 "moved": r["moved"],
                 "unplaced": r["unplaced"],
                 "undone": bool(r.get("undone_at")),
-                "can_undo": i == 0 and not r.get("undone_at") and r["moved"] > 0,
+                "can_undo": latest_of_plan[r["plan_id"]] == r["id"] and not r.get("undone_at") and r["moved"] > 0,
                 "changes": by_run.get(r["id"], []),
             }
-            for i, r in enumerate(runs)
+            for r in runs
         ],
-        "streak_days": streak,
-        "suggest_extension": streak >= EXTEND_STREAK_DAYS,
+        "streak_days": max(streaks.values(), default=0),
+        "suggest_extension": bool(extension_goals),
+        "extension_goals": extension_goals,
     }
 
 
 def undo_run(db, user_id: str, run_id: str, now: datetime) -> dict:
-    """가장 최근 재조정을 한 번 되돌린다.
+    """그 목표의 가장 최근 재조정을 한 번 되돌린다.
 
     그 뒤에 사용자가 끝냈거나 직접 옮긴 블록은 건드리지 않는다 — 사용자가 한 일이 우선이다.
     """
-    plan = active_plan_row(db, user_id)
+    plan_ids = [p["id"] for p in active_plan_rows(db, user_id)]
+    found = (
+        db.table("plan_reschedule_runs").select("*")
+        .eq("id", run_id).eq("user_id", user_id).limit(1).execute().data
+        if plan_ids else []
+    )
+    if not found or found[0]["plan_id"] not in plan_ids:
+        raise ReplanError("가장 최근 재조정만 되돌릴 수 있어요.")
+    plan_id = found[0]["plan_id"]
     latest = (
         db.table("plan_reschedule_runs").select("*")
-        .eq("plan_id", plan["id"]).eq("user_id", user_id)
+        .eq("plan_id", plan_id).eq("user_id", user_id)
         .order("created_at", desc=True).limit(1).execute().data
-        if plan else []
     )
-    if not latest or str(latest[0]["id"]) != str(run_id):
+    if str(latest[0]["id"]) != str(run_id):
         raise ReplanError("가장 최근 재조정만 되돌릴 수 있어요.")
     if latest[0].get("undone_at"):
         raise ReplanError("이미 되돌렸어요. 되돌리기는 한 번만 됩니다.")
 
-    current = {b.id: b for b in plan_blocks(db, plan["id"])}
+    current = {b.id: b for b in plan_blocks(db, plan_id)}
     moves = (
         db.table("plan_changes").select("*")
         .eq("run_id", run_id).eq("user_id", user_id).eq("change_type", "move").execute().data
@@ -445,7 +467,7 @@ def undo_run(db, user_id: str, run_id: str, now: datetime) -> dict:
             continue
         db.table("plan_blocks").update(
             {"start_at": c["before_start"], "end_at": c["before_end"]}
-        ).eq("id", block.id).eq("plan_id", plan["id"]).execute()
+        ).eq("id", block.id).eq("plan_id", plan_id).execute()
         restored += 1
 
     db.table("plan_reschedule_runs").update({"undone_at": to_db_time(now)}).eq("id", run_id).execute()
@@ -455,14 +477,13 @@ def undo_run(db, user_id: str, run_id: str, now: datetime) -> dict:
 # ── 블록 직접 편집 (FR-PLAN-05) ───────────────────────
 
 def _load_for_edit(db, user_id: str, block_id: str):
-    plan = active_plan_row(db, user_id)
-    if not plan:
-        raise BlockNotFound(block_id)
-    blocks = plan_blocks(db, plan["id"])
-    target = next((b for b in blocks if b.id == str(block_id)), None)
-    if target is None:
-        raise BlockNotFound(block_id)
-    return plan, blocks, target
+    """진행 중인 목표 중 이 블록이 속한 계획을 찾는다. 남의 블록이나 끝낸 목표의 블록이면 BlockNotFound."""
+    for plan in active_plan_rows(db, user_id):
+        blocks = plan_blocks(db, plan["id"])
+        target = next((b for b in blocks if b.id == str(block_id)), None)
+        if target is not None:
+            return plan, blocks, target
+    raise BlockNotFound(block_id)
 
 
 def _key(v: Violation) -> tuple:
@@ -487,9 +508,11 @@ def move_block(db, user_id: str, block_id: str, new_start: datetime, now: dateti
     moved = target.model_copy(update={
         "start": new_start, "end": new_start + (target.end - target.start), "locked": True,
     })
+    # 다른 목표의 블록도 함께 본다 — 그 블록과 겹치거나 하루 상한을 넘기면 안 된다
+    others = other_plan_blocks(db, user_id, except_plan_id=plan["id"])
     after = [moved if b.id == target.id else b for b in blocks]
-    before = {_key(v) for v in validate_schedule(blocks, units, deadline)}
-    new_problems = [v for v in validate_schedule(after, units, deadline) if _key(v) not in before]
+    before = {_key(v) for v in validate_schedule(blocks + others, units, deadline)}
+    new_problems = [v for v in validate_schedule(after + others, units, deadline) if _key(v) not in before]
     hard = [v for v in new_problems if v.kind in HARD_VIOLATIONS]
 
     if hard or (new_problems and not force):

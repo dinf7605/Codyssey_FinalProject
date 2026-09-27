@@ -325,12 +325,14 @@ export const api = {
       return result;
     },
 
-    schedule: ({ units, availability, startDay, deadline }) =>
+    // 로그인 상태면 서버가 진행 중인 다른 목표의 블록을 피해서 놓는다. goalTitle 은 다시 만드는 같은 목표를 빼려고
+    schedule: ({ units, availability, startDay, deadline, goalTitle = null }) =>
       post('/plan/schedule', {
         units,
         availability,
         start_day: startDay,
         deadline,
+        goal_title: goalTitle,
       }),
 
     validate: ({ blocks, units, deadline }) =>
@@ -350,6 +352,12 @@ export const api = {
       post('/plan/save', { goal_title: goalTitle, goal_id: goalId, deadline, source, units, blocks, availability }),
 
     current: () => request('/plan/current'),
+
+    // 진행 중 계획 전부 — 목표는 동시에 최대 2개 (FR-GOAL-07). { plans, max_plans }
+    active: () => request('/plan/active'),
+
+    // 목표 끝내기 — 계획을 보관한다. 학습 기록은 남는다
+    archive: (planId) => post(`/plan/${encodeURIComponent(planId)}/archive`, {}),
 
     // FR-PLAN-07 — 최근 7일 재조정 내역 / FR-PLAN-06 — 가장 최근 것 되돌리기 1회
     changes: () => request('/plan/changes'),

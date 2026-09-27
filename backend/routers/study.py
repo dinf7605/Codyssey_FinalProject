@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field
 from db import get_db
 from services.aggregator import MIN_RECORDED_MINUTES, summarize
 from services import replan
-from services.plan_store import KST, active_plan_row, plan_blocks, record_session, session_events
+from services.plan_store import KST, active_plan_rows, plan_blocks, record_session, session_events
 from utils.auth import get_current_user
 
 router = APIRouter(prefix="/study", tags=["study"])
@@ -105,12 +105,12 @@ def week_progress(db, user_id: str, today: date) -> dict:
     """이번 주(월~일) 계획 대비 완료 — "주간 달성률" (FR-STUDY-03).
 
     분모는 이번 주에 놓인 블록 전체(오늘 이후 포함), 분자는 그중 완료한 블록. 분 단위로 잰다.
+    진행 중인 목표가 둘이면 둘을 합쳐서 잰다.
     계획이 없거나 이번 주 블록이 없으면 달성률은 None (0% 로 보이면 안 하고 있는 것처럼 읽힌다).
     """
     monday = today - timedelta(days=today.weekday())
     sunday = monday + timedelta(days=6)
-    plan = active_plan_row(db, user_id)
-    blocks = plan_blocks(db, plan["id"]) if plan else []
+    blocks = [b for plan in active_plan_rows(db, user_id) for b in plan_blocks(db, plan["id"])]
     week = [b for b in blocks if monday <= b.start.date() <= sunday]
     planned = sum(b.minutes for b in week)
     done = sum(b.minutes for b in week if b.done)

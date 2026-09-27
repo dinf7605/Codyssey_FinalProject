@@ -143,6 +143,7 @@ export default function PlanBuilder() {
       availability: current.availability,
       startDay: current.startDay,
       deadline,
+      goalTitle: current.goalTitle,
     });
     const check = await api.plan.validate({ blocks: placed.blocks, units, deadline });
     setPlan(placed);

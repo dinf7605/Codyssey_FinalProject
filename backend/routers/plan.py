@@ -5,8 +5,10 @@
   POST /plan/schedule          학습 단위 -> 블록 배치 (결정론적)
   POST /plan/reschedule        야간 재조정
   POST /plan/validate          규칙 위반 검사
-  POST /plan/save              계획 확정·저장 (로그인)
-  GET  /plan/current           진행 중 계획 조회 (로그인)
+  POST /plan/save              계획 확정·저장 (로그인) — 진행 중 목표는 최대 2개
+  GET  /plan/active            진행 중 계획 전부 (로그인) — 목표 최대 2개
+  GET  /plan/current           가장 최근 계획 하나 (로그인, 예전 화면 호환)
+  POST /plan/{id}/archive      목표 끝내기 (로그인)
   POST /plan/scope             공부량이 가용시간의 1.5배를 넘는지 + 범위 축소안
   GET  /plan/changes           최근 7일 재조정 내역 (로그인)
   POST /plan/changes/{id}/undo 가장 최근 재조정 되돌리기 1회 (로그인)
@@ -38,7 +40,16 @@ from schemas.plan import Availability, Block, DecomposeResult, SchedulePlan, Stu
 from services import llm
 from services.decomposer import decompose_goal
 from services import replan
-from services.plan_store import active_plan_row, load_active_plan, log_ai_call, save_plan
+from services.plan_store import (
+    PlanLimitReached,
+    active_plan_rows,
+    archive_plan,
+    load_active_plan,
+    load_active_plans,
+    log_ai_call,
+    other_plan_blocks,
+    save_plan,
+)
 from services.scope import check_scope
 from services.scheduler import build_schedule, reschedule_incomplete
 from services.validator import validate_schedule
@@ -78,6 +89,8 @@ class ScheduleRequest(BaseModel):
     start_day: date
     deadline: date
     fixed_blocks: list[Block] = Field(default_factory=list)
+    # 로그인 상태면 다른 목표의 진행 중 계획 블록을 피해서 놓는다. 같은 목표(다시 만들기)의 옛 계획은 빼고
+    goal_title: str | None = None
 
 
 class RescheduleRequest(BaseModel):
@@ -187,12 +200,32 @@ def decompose_stream(req: DecomposeRequest, user=Depends(get_optional_user)) -> 
     )
 
 
+def _others_for(user, goal_title: str | None) -> list[Block]:
+    """로그인한 사용자의 다른 목표 블록. 비회원이거나 DB 가 없으면 빈 목록."""
+    if user is None:
+        return []
+    try:
+        return other_plan_blocks(get_supabase_client(), user.id, except_goal_title=goal_title)
+    except Exception:  # noqa: BLE001 - 계획 만들기는 DB 없이도 된다 (저장할 때 한 번 더 검사한다)
+        return []
+
+
 @router.post("/schedule", response_model=SchedulePlan)
-def schedule(req: ScheduleRequest) -> SchedulePlan:
-    """FR-PLAN-03 — 학습 단위를 빈 시간에 놓는다. LLM을 쓰지 않는다."""
-    return build_schedule(
-        req.units, req.availability, req.start_day, req.deadline, req.fixed_blocks
+def schedule(req: ScheduleRequest, user=Depends(get_optional_user)) -> SchedulePlan:
+    """FR-PLAN-03 — 학습 단위를 빈 시간에 놓는다. LLM을 쓰지 않는다.
+
+    진행 중인 다른 목표가 있으면 그 블록 자리는 비켜 가고 하루 블록 수도 함께 센다 (목표 최대 2개).
+    결과에는 이번 목표의 블록만 담는다 — 다른 목표 블록이 섞여 저장되지 않게.
+    """
+    others = _others_for(user, req.goal_title)
+    plan = build_schedule(
+        req.units, req.availability, req.start_day, req.deadline, req.fixed_blocks + others
     )
+    if others:
+        other_ids = {b.id for b in others}
+        plan.blocks = [b for b in plan.blocks if b.id not in other_ids]
+        plan.notes.append(f"진행 중인 다른 목표의 블록 {len(others)}개와 겹치지 않게 놓았습니다.")
+    return plan
 
 
 @router.post("/reschedule", response_model=SchedulePlan)
@@ -234,18 +267,55 @@ def save(req: SavePlanRequest, user=Depends(get_current_user), db=Depends(get_db
             detail=f"규칙에 맞지 않는 블록이 {len(problems)}개 있어 저장하지 않았습니다. 다시 만들어 주세요.",
         )
 
-    plan_id = save_plan(
-        db, user.id,
-        goal_title=req.goal_title, goal_id=req.goal_id, deadline=req.deadline,
-        source=req.source, units=req.units, blocks=req.blocks, availability=req.availability,
-    )
+    # 다른 목표의 블록과 겹치거나 하루 상한을 넘기면 안 된다 — 이번에 새로 생기는 위반만 본다
+    others = other_plan_blocks(db, user.id, except_goal_title=req.goal_title)
+    if others:
+        key = lambda v: (v.kind, v.block_id, v.detail)  # noqa: E731
+        before = {key(v) for v in validate_schedule(others, [], req.deadline)}
+        clash = [v for v in validate_schedule(req.blocks + others, [], req.deadline)
+                 if key(v) not in before and v.kind != "deadline_exceeded"]
+        if clash:
+            raise HTTPException(
+                status_code=400,
+                detail="진행 중인 다른 목표의 일정과 겹쳐 저장하지 않았습니다. 계획을 다시 만들어 주세요.",
+            )
+
+    try:
+        plan_id = save_plan(
+            db, user.id,
+            goal_title=req.goal_title, goal_id=req.goal_id, deadline=req.deadline,
+            source=req.source, units=req.units, blocks=req.blocks, availability=req.availability,
+        )
+    except PlanLimitReached as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
     return SavePlanResponse(plan_id=plan_id, blocks=len(req.blocks), message="계획을 저장했습니다.")
 
 
 @router.get("/current", response_model=CurrentPlanResponse | None)
 def current(user=Depends(get_current_user), db=Depends(get_db)):
-    """FR-PLAN-04 — 진행 중인 계획. 아직 없으면 null (화면이 "계획 만들기"를 보여준다)."""
+    """가장 최근에 저장한 진행 중 계획 하나. 없으면 null. 목표가 둘이면 /plan/active 를 쓴다."""
     return load_active_plan(db, user.id)
+
+
+class ActivePlansResponse(BaseModel):
+    plans: list[CurrentPlanResponse]
+    max_plans: int
+
+
+@router.get("/active", response_model=ActivePlansResponse)
+def active(user=Depends(get_current_user), db=Depends(get_db)):
+    """FR-PLAN-04 · FR-GOAL-07 — 진행 중인 계획 전부 (최근 것부터). 목표는 동시에 최대 2개."""
+    from schemas.goal import MAX_ACTIVE_GOALS
+
+    return ActivePlansResponse(plans=load_active_plans(db, user.id), max_plans=MAX_ACTIVE_GOALS)
+
+
+@router.post("/{plan_id}/archive")
+def archive(plan_id: str, user=Depends(get_current_user), db=Depends(get_db)) -> dict:
+    """목표 끝내기 — 계획을 보관한다. 학습 기록·통계는 남고, 야간 재조정 대상에서 빠진다."""
+    if not archive_plan(db, user.id, plan_id):
+        raise HTTPException(status_code=404, detail="진행 중인 내 계획에서 찾지 못했어요.")
+    return {"message": "목표를 끝냈어요. 학습 기록은 그대로 남아요."}
 
 
 # ── 공부량 점검 (FR-PLAN-02) ───────────────────────────
@@ -288,15 +358,28 @@ def undo_changes(run_id: str, user=Depends(get_current_user), db=Depends(get_db)
 
 @router.post("/replan-now")
 def replan_now(user=Depends(get_current_user), db=Depends(get_db)) -> dict:
-    """내 계획만 지금 재조정한다 — 03:00 을 기다리지 않고 확인할 때 (시연·사용자 테스트)."""
-    plan = active_plan_row(db, user.id)
-    if not plan:
+    """내 계획들만 지금 재조정한다 — 03:00 을 기다리지 않고 확인할 때 (시연·사용자 테스트)."""
+    plans = active_plan_rows(db, user.id)
+    if not plans:
         raise HTTPException(status_code=404, detail="진행 중인 계획이 없어요.")
-    try:
-        result = replan.run_for_plan(db, plan, replan.now_kst())
-    except replan.ReplanError as exc:
-        _refuse(exc)
-    return result or {"run_id": None, "moved": 0, "unplaced": 0, "summary": "다시 놓을 지난 블록이 없어요."}
+    now = replan.now_kst()
+    moved = unplaced = 0
+    summaries: list[str] = []
+    for plan in plans:
+        try:
+            result = replan.run_for_plan(db, plan, now)
+        except replan.ReplanError as exc:
+            summaries.append(f"{plan['goal_title']}: {exc}")
+            continue
+        if result:
+            moved += result["moved"]
+            unplaced += result["unplaced"]
+            summaries.append(result["summary"] if len(plans) == 1 else f"{plan['goal_title']}: {result['summary']}")
+    return {
+        "moved": moved,
+        "unplaced": unplaced,
+        "summary": " ".join(summaries) or "다시 놓을 지난 블록이 없어요.",
+    }
 
 
 @router.post("/nightly", status_code=202)

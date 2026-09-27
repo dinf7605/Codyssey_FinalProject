@@ -15,6 +15,7 @@ import {
 // FR-PLAN-04 일정 조회 — 확정한 계획을 주·월 단위로 본다 (담당 C)
 // FR-PLAN-05 블록 수동 편집 — 날짜 칸으로 끌어다 놓거나(PC) 블록 메뉴로 옮기기·지우기
 // FR-PLAN-06 지난 미완료 블록은 매일 03:00 에 다시 놓인다 — 기다리지 않고 지금 놓을 수도 있다
+// FR-GOAL-07 목표는 동시에 최대 2개 — 두 목표의 블록을 한 달력에 모아 ①·② 로 구분하고, 목표별로 걸러 볼 수 있다
 //
 // 완료 · 미완료 · 예정을 색으로 나눈다. 조회는 목표 기한까지만.
 
@@ -49,17 +50,27 @@ function Day({ date, label, today, selected, blocks, disabled, dropping, onPick,
   );
 }
 
+export const GOAL_MARK = ['①', '②', '③'];
+
 export default function PlanCalendar() {
-  const { status, plan, error, reload } = usePlan();
+  const { status, plans, blocks: allBlocks, error, reload } = usePlan();
   const today = kstToday();
   const [view, setView] = useState('week'); // week | month
   const [picked, setPicked] = useState(null);
+  const [focus, setFocus] = useState('all'); // 'all' | plan_id
+  const [ending, setEnding] = useState(null); // '목표 끝내기' 확인 중인 plan_id
   const [dragging, setDragging] = useState(null);
   const [busy, setBusy] = useState(false);
   // { kind: 'ok' | 'error', text } 또는 { kind: 'warn', block, start, violations, forceable }
   const [notice, setNotice] = useState(null);
 
-  const byDay = useMemo(() => (plan ? blocksByDay(plan.blocks) : new Map()), [plan]);
+  // 끝낸 목표를 보고 있었다면 전체로 돌아간다
+  const focusId = plans.some((p) => p.plan_id === focus) ? focus : 'all';
+  const blocks = useMemo(
+    () => (focusId === 'all' ? allBlocks : allBlocks.filter((b) => b.plan_id === focusId)),
+    [allBlocks, focusId],
+  );
+  const byDay = useMemo(() => blocksByDay(blocks), [blocks]);
 
   if (status === 'loading') {
     return <p className="hint">계획을 불러오는 중…</p>;
@@ -91,8 +102,9 @@ export default function PlanCalendar() {
     );
   }
 
-  const deadline = plan.deadline;
-  const firstDay = plan.blocks.length ? plan.blocks.map((b) => dayKey(b.start)).sort()[0] : today;
+  const shown = focusId === 'all' ? plans : plans.filter((p) => p.plan_id === focusId);
+  const deadline = shown.map((p) => p.deadline).sort().at(-1); // 가장 늦은 기한까지 본다
+  const firstDay = blocks.length ? blocks.map((b) => dayKey(b.start)).sort()[0] : today;
   const minDay = firstDay < today ? firstDay : today;
   const clamp = (key) => (key < minDay ? minDay : key > deadline ? deadline : key);
   const selected = clamp(picked || today);
@@ -100,7 +112,7 @@ export default function PlanCalendar() {
   const days = weekOf(selected);
   const canPrev = view === 'week' ? days[0] > minDay : `${selected.slice(0, 7)}-01` > minDay;
   const canNext = view === 'week' ? days[6] < deadline : addMonths(selected, 1) <= deadline;
-  const missed = plan.blocks.filter((b) => !b.done && !b.locked && dayKey(b.start) < today).length;
+  const missed = allBlocks.filter((b) => !b.done && !b.locked && dayKey(b.start) < today).length;
 
   function move(step) {
     setPicked(clamp(view === 'week' ? addDays(selected, step * 7) : addMonths(selected, step)));
@@ -144,6 +156,14 @@ export default function PlanCalendar() {
       notifyPlanChanged();
     });
 
+  const endGoal = (p) =>
+    act(async () => {
+      await api.plan.archive(p.plan_id);
+      setEnding(null);
+      setNotice({ kind: 'ok', text: `‘${p.goal_title}’ 목표를 끝냈어요. 학습 기록은 그대로 남아요.` });
+      notifyPlanChanged();
+    });
+
   const replanNow = () =>
     act(async () => {
       const res = await api.plan.replanNow();
@@ -169,18 +189,55 @@ export default function PlanCalendar() {
   });
 
   const dayBlocks = byDay.get(selected) || [];
-  const doneCount = plan.blocks.filter((b) => b.done).length;
-  const dday = ddayOf(deadline, today);
+  const many = plans.length > 1;
 
   return (
     <div className="stack" style={{ gap: 'var(--gap-4)' }}>
-      <div className="row" style={{ borderBottom: 0, paddingBottom: 0 }}>
-        <div className="row-main">
-          <b>{plan.goal_title}</b>
-          <span>
-            {dday >= 0 ? `D-${dday}` : `기한 ${-dday}일 지남`} · 블록 {doneCount}/{plan.blocks.length} 완료
-          </span>
-        </div>
+      <ul className="rows" aria-label="진행 중인 목표">
+        {plans.map((p) => {
+          const done = p.blocks.filter((b) => b.done).length;
+          const dday = ddayOf(p.deadline, today);
+          return (
+            <li className="row" key={p.plan_id}>
+              <div className="row-main">
+                <b>
+                  {many && <span className="goal-mark" aria-hidden="true">{GOAL_MARK[p.slot]}</span>}
+                  {p.goal_title}
+                </b>
+                <span>
+                  {dday >= 0 ? `D-${dday}` : `기한 ${-dday}일 지남`} · 블록 {done}/{p.blocks.length} 완료
+                </span>
+              </div>
+              {ending === p.plan_id ? (
+                <div style={{ display: 'flex', gap: 4, flex: 'none' }}>
+                  <button type="button" className="btn btn-sm" disabled={busy} onClick={() => endGoal(p)}>끝내기</button>
+                  <button type="button" className="btn btn-quiet btn-sm" onClick={() => setEnding(null)}>취소</button>
+                </div>
+              ) : (
+                <button type="button" className="btn btn-quiet btn-sm" onClick={() => setEnding(p.plan_id)}>
+                  목표 끝내기
+                </button>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+      {ending && (
+        <p className="hint">목표를 끝내면 남은 블록이 일정에서 빠지고 자동 재조정도 멈춰요. 공부한 기록과 통계는 남아요.</p>
+      )}
+
+      <div className="cal-toolbar">
+        {many ? (
+          <div className="cal-seg" role="group" aria-label="목표 골라 보기">
+            <button type="button" className="chip" aria-pressed={focusId === 'all'} onClick={() => setFocus('all')}>전체</button>
+            {plans.map((p) => (
+              <button key={p.plan_id} type="button" className="chip" aria-pressed={focusId === p.plan_id}
+                onClick={() => setFocus(p.plan_id)} aria-label={`${p.goal_title}만 보기`}>
+                {GOAL_MARK[p.slot]}
+              </button>
+            ))}
+          </div>
+        ) : <span />}
         <div className="cal-seg" role="group" aria-label="보기 전환">
           <button type="button" className="chip" aria-pressed={view === 'week'} onClick={() => setView('week')}>주</button>
           <button type="button" className="chip" aria-pressed={view === 'month'} onClick={() => setView('month')}>월</button>
@@ -251,7 +308,7 @@ export default function PlanCalendar() {
             key={selected}
             blocks={dayBlocks}
             today={today}
-            deadline={deadline}
+            showGoal={many}
             busy={busy}
             onMove={moveBlock}
             onDelete={deleteBlock}

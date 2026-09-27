@@ -334,6 +334,10 @@ button { font: inherit; color: inherit; cursor: pointer; background: none; borde
 .cal-legend span { display: inline-flex; align-items: center; gap: 5px; }
 .cal-legend .dot { display: inline-block; }
 .cal-drop { border-color: var(--accent); background: var(--accent-soft); }
+.cal-toolbar { display: flex; justify-content: space-between; align-items: center; gap: var(--gap-2); flex-wrap: wrap; }
+
+/* 목표 구분 (FR-GOAL-07 동시 진행 2개) — 색이 아니라 번호로 구분한다 (완료·미완료 색과 섞이지 않게) */
+.goal-mark { display: inline-block; margin-right: 5px; font-weight: 600; color: var(--ink-2); }
 
 /* ── 블록 편집 (FR-PLAN-05) ──────────────────────────── */
 .tl-item[draggable="true"] { cursor: grab; }

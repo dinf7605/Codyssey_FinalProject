@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { IconCheck } from './Icon';
 import { canCancelDone, dayKey, hhmm } from '@/lib/planView';
 
+const GOAL_MARK = ['①', '②', '③'];
+
 // 저장된 계획의 하루치 블록 (담당 C)
 //   FR-PLAN-05 블록 수동 편집 — 메뉴로 옮기기·지우기, PC 에서는 달력 날짜로 끌어다 놓기
 //   FR-STUDY-01 시작 → 학습 타이머
@@ -12,7 +14,9 @@ import { canCancelDone, dayKey, hhmm } from '@/lib/planView';
 //
 // 모양은 DayTimeline 과 같은 시간 축(.tl)을 쓴다. 대시보드는 DayTimeline 을 그대로 쓴다.
 
-function MoveForm({ block, today, deadline, busy, onMove, onCancel }) {
+// 옮길 수 있는 마지막 날은 그 블록이 속한 목표의 기한이다
+function MoveForm({ block, today, busy, onMove, onCancel }) {
+  const deadline = block.deadline;
   const [date, setDate] = useState(dayKey(block.start) < today ? today : dayKey(block.start));
   const [time, setTime] = useState(hhmm(block.start));
   return (
@@ -41,7 +45,7 @@ function MoveForm({ block, today, deadline, busy, onMove, onCancel }) {
   );
 }
 
-export default function PlanDayBlocks({ blocks, today, deadline, busy, onMove, onDelete, onCancelDone, onDragStart, onDragEnd }) {
+export default function PlanDayBlocks({ blocks, today, showGoal = false, busy, onMove, onDelete, onCancelDone, onDragStart, onDragEnd }) {
   const [menu, setMenu] = useState(null);    // 메뉴가 열린 블록 id
   const [mode, setMode] = useState(null);    // null | 'move' | 'delete'
 
@@ -80,7 +84,14 @@ export default function PlanDayBlocks({ blocks, today, deadline, busy, onMove, o
             <span className="tl-dot" />
             <div className="tl-row">
               <div className="tl-body">
-                <span className="tl-title">{block.title}</span>
+                <span className="tl-title">
+                  {showGoal && (
+                    <span className="goal-mark" title={block.goal_title} aria-label={`${block.goal_title} 목표`}>
+                      {GOAL_MARK[block.slot]}
+                    </span>
+                  )}
+                  {block.title}
+                </span>
                 <span className="tl-sub">
                   {block.minutes}분{block.locked ? ' · 직접 옮김(자동 재조정 제외)' : ''}
                 </span>
@@ -113,7 +124,7 @@ export default function PlanDayBlocks({ blocks, today, deadline, busy, onMove, o
               </div>
             )}
             {open && mode === 'move' && (
-              <MoveForm block={block} today={today} deadline={deadline} busy={busy}
+              <MoveForm block={block} today={today} busy={busy}
                 onMove={(b, start) => { onMove(b, start); close(); }} onCancel={close} />
             )}
             {open && mode === 'delete' && (

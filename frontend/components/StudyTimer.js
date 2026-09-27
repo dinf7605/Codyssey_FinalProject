@@ -97,7 +97,7 @@ const useMounted = () => useSyncExternalStore(subscribeNothing, () => true, () =
 
 export default function StudyTimer({ blockId = null }) {
   const mounted = useMounted();
-  const { status, plan } = usePlan();
+  const { status, blocks: allBlocks } = usePlan();
   const [timer, setTimer] = useState(restoreDraft); // {blockId, accum(초), runStart(ms|null)} | null
   const [now, setNow] = useState(() => Date.now());
   const [idleSeconds, setIdleSeconds] = useState(0);
@@ -112,7 +112,7 @@ export default function StudyTimer({ blockId = null }) {
 
   // 진행 중 타이머가 있으면 그 블록, 아니면 주소의 블록, 아니면 오늘 남은 첫 블록
   const today = kstToday();
-  const blocks = plan?.blocks || [];
+  const blocks = allBlocks; // 진행 중인 모든 목표의 블록 (목표는 최대 2개)
   const wanted = timer ? timer.blockId : blockId;
   const block = wanted
     ? blocks.find((b) => b.id === wanted) || null
@@ -271,7 +271,7 @@ export default function StudyTimer({ blockId = null }) {
         <h1 style={{ fontSize: 20 }}>학습</h1>
         <p className="muted tiny">
           {block
-            ? `${block.title} · ${Number(block.start.slice(5, 7))}/${Number(block.start.slice(8, 10))} ${hhmm(block.start)}~${hhmm(block.end)}`
+            ? `${block.goal_title} · ${block.title} · ${Number(block.start.slice(5, 7))}/${Number(block.start.slice(8, 10))} ${hhmm(block.start)}~${hhmm(block.end)}`
             : status === 'loading'
               ? '계획을 불러오는 중…'
               : wanted && status === 'ready'

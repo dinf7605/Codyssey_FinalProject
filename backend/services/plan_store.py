@@ -15,9 +15,14 @@ from __future__ import annotations
 import uuid
 from datetime import date, datetime, timedelta, timezone
 
+from schemas.goal import MAX_ACTIVE_GOALS
 from schemas.plan import Availability, Block, StudyUnit
 
 KST = timezone(timedelta(hours=9))  # 한국은 서머타임이 없어 고정 오프셋으로 충분하다
+
+
+class PlanLimitReached(ValueError):
+    """진행 중 목표가 이미 최대 개수(FR-GOAL-07)라 새 목표의 계획을 저장할 수 없다."""
 
 
 def to_db_time(value: datetime) -> str:
@@ -57,12 +62,14 @@ def save_plan(
     Supabase REST 에는 트랜잭션이 없어서, 단위·블록 저장이 실패하면 방금 만든 계획을 지운다
     (외래키 cascade 로 딸린 행도 함께 지워진다). 반쯤 저장된 계획이 남지 않게 한다.
     이전 계획 보관은 새 계획이 다 저장된 뒤에 한다 — 저장이 실패했을 때 진행 중 계획이 사라지지 않게.
+
+    동시에 진행하는 목표는 최대 MAX_ACTIVE_GOALS(2)개 (FR-GOAL-07). 다른 목표가 이미 그만큼 있으면
+    PlanLimitReached — 목표 하나를 끝낸(archive_plan) 뒤 만든다. 같은 목표를 다시 만드는 것은 교체라 괜찮다.
     """
-    previous = [
-        r["id"] for r in db.table("study_plans").select("id")
-        .eq("user_id", user_id).eq("goal_title", goal_title).eq("status", "active")
-        .execute().data
-    ]
+    active = active_plan_rows(db, user_id)
+    previous = [r["id"] for r in active if r["goal_title"] == goal_title]
+    if len(active) - len(previous) >= MAX_ACTIVE_GOALS:
+        raise PlanLimitReached(f"진행 중인 목표가 이미 {MAX_ACTIVE_GOALS}개예요. 하나를 끝낸 뒤 새 계획을 만들어 주세요.")
 
     plan = db.table("study_plans").insert({
         "user_id": user_id,
@@ -113,15 +120,45 @@ def save_plan(
     return plan_id
 
 
-def active_plan_row(db, user_id: str) -> dict | None:
-    """가장 최근의 진행 중 계획 행. 없으면 None."""
-    plans = (
+def active_plan_rows(db, user_id: str) -> list[dict]:
+    """진행 중인 계획 행들, 최근 것부터 (목표는 최대 2개)."""
+    return (
         db.table("study_plans").select("*")
         .eq("user_id", user_id).eq("status", "active")
-        .order("created_at", desc=True).limit(1)
+        .order("created_at", desc=True)
         .execute().data
     )
-    return plans[0] if plans else None
+
+
+def active_plan_row(db, user_id: str) -> dict | None:
+    """가장 최근의 진행 중 계획 행. 없으면 None."""
+    rows = active_plan_rows(db, user_id)
+    return rows[0] if rows else None
+
+
+def other_plan_blocks(db, user_id: str, *, except_plan_id: str | None = None,
+                      except_goal_title: str | None = None) -> list[Block]:
+    """다른 목표의 진행 중 계획에 놓인 블록 — 새로 놓거나 옮길 때 피해야 할 자리.
+
+    unit_id 앞에 계획 id 를 붙여 돌려준다. 두 계획의 단위 id 가 같을 수 있어서(템플릿 tpl-01 등)
+    그대로 섞으면 배치 엔진이 '이미 놓인 단위'로 착각해 이쪽 단위를 건너뛴다.
+    """
+    blocks: list[Block] = []
+    for plan in active_plan_rows(db, user_id):
+        if plan["id"] == except_plan_id or plan["goal_title"] == except_goal_title:
+            continue
+        blocks += [b.model_copy(update={"unit_id": f"{plan['id']}:{b.unit_id}"}) for b in plan_blocks(db, plan["id"])]
+    return blocks
+
+
+def archive_plan(db, user_id: str, plan_id: str) -> bool:
+    """목표 끝내기 — 계획을 보관으로 돌린다. 지우지 않는다 (학습 기록·통계는 남는다)."""
+    rows = (
+        db.table("study_plans").update({"status": "archived"})
+        .eq("id", plan_id).eq("user_id", user_id).eq("status", "active")
+        .execute().data
+    )
+    return bool(rows)
 
 
 def plan_blocks(db, plan_id: str) -> list[Block]:
@@ -156,11 +193,18 @@ def plan_units(db, plan_id: str) -> list[StudyUnit]:
     ]
 
 
+def load_active_plans(db, user_id: str) -> list[dict]:
+    """진행 중인 계획 전부 (단위·블록 포함), 최근 것부터."""
+    return [_plan_payload(db, plan) for plan in active_plan_rows(db, user_id)]
+
+
 def load_active_plan(db, user_id: str) -> dict | None:
     """가장 최근의 진행 중 계획 (단위·블록 포함). 없으면 None."""
     plan = active_plan_row(db, user_id)
-    if not plan:
-        return None
+    return _plan_payload(db, plan) if plan else None
+
+
+def _plan_payload(db, plan: dict) -> dict:
     return {
         "plan_id": plan["id"],
         "goal_title": plan["goal_title"],
