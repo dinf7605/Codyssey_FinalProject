@@ -18,8 +18,11 @@ import {
 // FR-GOAL-07 목표는 동시에 최대 2개 — 두 목표의 블록을 한 달력에 모아 ①·② 로 구분하고, 목표별로 걸러 볼 수 있다
 //
 // 완료 · 미완료 · 예정을 색으로 나눈다. 조회는 목표 기한까지만.
+// 미배치(기한 안에 자리가 없어 블록이 없는 단원)는 날짜가 없어 달력 칸에 못 들어간다 — 목표별로 따로 모아 보여 주고,
+// 빈 시간이 생겼으면 넣어 볼 수 있게 한다. 점선 동그라미로 모양까지 달리한다 (색만으로 구분하지 않기).
 
 const DOT = { done: 'dot dot-done', miss: 'dot dot-miss', plan: 'dot' };
+const UNPLACED_PREVIEW = 5; // 미배치 단원은 이만큼만 이름을 보여 주고 나머지는 개수로
 
 function Day({ date, label, today, selected, blocks, disabled, dropping, onPick, onDrop }) {
   const [over, setOver] = useState(false);
@@ -164,6 +167,21 @@ export default function PlanCalendar() {
       notifyPlanChanged();
     });
 
+  const placeUnplaced = (p) =>
+    act(async () => {
+      const res = await api.plan.placeUnplaced(p.plan_id);
+      const left = res.left ? ` ${res.left}개는 기한 안에 빈 시간이 없어 그대로 남았어요.` : '';
+      setNotice(
+        res.placed
+          ? { kind: 'ok', text: `미배치 단원 ${res.placed}개를 빈 시간에 넣었어요.${left}` }
+          : { kind: 'info', text: '기한 안에 남은 빈 시간이 없어 넣지 못했어요. 기한을 늘리거나 공부 시간을 더해 계획을 다시 만들어 보세요.' },
+      );
+      if (res.placed) {
+        setPicked(dayKey(res.blocks[0].start));
+        notifyPlanChanged();
+      }
+    });
+
   const replanNow = () =>
     act(async () => {
       const res = await api.plan.replanNow();
@@ -190,6 +208,8 @@ export default function PlanCalendar() {
 
   const dayBlocks = byDay.get(selected) || [];
   const many = plans.length > 1;
+  const waiting = shown.filter((p) => p.unplaced?.length);
+  const unplacedCount = waiting.reduce((n, p) => n + p.unplaced.length, 0);
 
   return (
     <div className="stack" style={{ gap: 'var(--gap-4)' }}>
@@ -206,6 +226,7 @@ export default function PlanCalendar() {
                 </b>
                 <span>
                   {dday >= 0 ? `D-${dday}` : `기한 ${-dday}일 지남`} · 블록 {done}/{p.blocks.length} 완료
+                  {p.unplaced?.length ? ` · 미배치 ${p.unplaced.length}` : ''}
                 </span>
               </div>
               {ending === p.plan_id ? (
@@ -252,6 +273,30 @@ export default function PlanCalendar() {
         </div>
       )}
 
+      {waiting.map((p) => (
+        <div className="progress" role="note" key={`unplaced-${p.plan_id}`} aria-label={`${p.goal_title} 미배치 단원`}>
+          <b>
+            {many && <span className="goal-mark" aria-hidden="true">{GOAL_MARK[p.slot]}</span>}
+            미배치 단원 {p.unplaced.length}개
+          </b>
+          <p className="muted tiny">
+            기한 안에 빈 시간이 없어 아직 일정에 없는 단원이에요. 블록을 옮기거나 지워 자리가 생겼다면 넣어 볼 수 있어요.
+          </p>
+          <ul className="unplaced-list">
+            {p.unplaced.slice(0, UNPLACED_PREVIEW).map((u) => (
+              <li key={u.id}><i className="dot dot-unplaced" aria-hidden="true" />{u.title}<span className="dim tiny">{u.estimated_minutes}분</span></li>
+            ))}
+            {p.unplaced.length > UNPLACED_PREVIEW && (
+              <li className="dim tiny">외 {p.unplaced.length - UNPLACED_PREVIEW}개</li>
+            )}
+          </ul>
+          <button type="button" className="btn btn-sm" disabled={busy || ddayOf(p.deadline, today) < 0}
+            onClick={() => placeUnplaced(p)}>
+            빈 시간에 넣어 보기
+          </button>
+        </div>
+      ))}
+
       <div className="stack" style={{ gap: 'var(--gap-3)' }}>
         <div className="cal-nav">
           <button type="button" className="btn btn-quiet btn-sm" disabled={!canPrev} onClick={() => move(-1)} aria-label="이전">‹</button>
@@ -273,6 +318,7 @@ export default function PlanCalendar() {
           <span><i className="dot dot-done" /> 완료</span>
           <span><i className="dot dot-miss" /> 미완료</span>
           <span><i className="dot" /> 예정</span>
+          {unplacedCount > 0 && <span><i className="dot dot-unplaced" /> 미배치 {unplacedCount}</span>}
           <span>기한 {deadline}까지</span>
         </p>
       </div>
@@ -297,6 +343,7 @@ export default function PlanCalendar() {
         </div>
       )}
       {notice?.kind === 'ok' && <p className="hint" role="status" style={{ color: 'var(--ok)' }}>{notice.text}</p>}
+      {notice?.kind === 'info' && <p className="hint" role="status">{notice.text}</p>}
       {notice?.kind === 'error' && <p className="hint hint-error" role="alert">{notice.text}</p>}
 
       <div className="stack" style={{ gap: 'var(--gap-2)' }}>

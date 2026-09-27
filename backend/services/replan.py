@@ -8,6 +8,7 @@
   FR-PLAN-05  블록을 직접 옮기거나 지운다. 옮긴 블록은 재조정이 건드리지 않는다(locked)
               선행 관계 등 규칙을 어기면 경고하고, 강행할지는 사용자가 고른다
   FR-STUDY-02 완료 취소는 24시간 안에만
+  FR-PLAN-04  미배치 단위(블록이 없는 단위)를 사용자가 원할 때 빈 시간에 넣어 본다
 
 배치(어디에 놓을지)는 여전히 scheduler.build_schedule 이 한다 — 여기는 저장된 계획에 적용하고 기록하는 일만.
 시각은 전부 시간대 없는 한국 시각(datetime)으로 다룬다. DB 에 쓸 때만 to_db_time.
@@ -25,10 +26,13 @@ from services.plan_store import (
     KST,
     active_plan_rows,
     from_db_time,
+    mark_unit_removed,
     other_plan_blocks,
     plan_blocks,
     plan_units,
+    removed_unit_keys,
     to_db_time,
+    unplaced_units,
 )
 from services.scheduler import blocks_to_redo, build_schedule
 from services.validator import validate_schedule
@@ -49,6 +53,10 @@ _BLAME_WORDS = ("게으", "탓", "실패", "안 하셨", "하지 않으셨", "�
 
 class ReplanError(ValueError):
     """사용자에게 그대로 보여줄 수 있는 이유로 거절할 때."""
+
+
+class PlanNotFound(LookupError):
+    """진행 중인 내 계획이 아니다."""
 
 
 class BlockNotFound(LookupError):
@@ -534,7 +542,7 @@ def move_block(db, user_id: str, block_id: str, new_start: datetime, now: dateti
 
 def delete_block(db, user_id: str, block_id: str, now: datetime) -> None:
     """블록을 지운다. 완료한 블록은 학습 기록이라 지우지 않는다."""
-    plan, _, target = _load_for_edit(db, user_id, block_id)
+    plan, blocks, target = _load_for_edit(db, user_id, block_id)
     if target.done:
         raise ReplanError("완료한 블록은 지울 수 없어요.")
     db.table("plan_changes").insert({
@@ -544,6 +552,9 @@ def delete_block(db, user_id: str, block_id: str, now: datetime) -> None:
         "reason": "직접 지웠어요.", "created_at": to_db_time(now),
     }).execute()
     db.table("plan_blocks").delete().eq("id", target.id).eq("plan_id", plan["id"]).execute()
+    if not any(b.unit_id == target.unit_id and b.id != target.id for b in blocks):
+        # 단위의 마지막 블록이었다 — 미배치(자리가 없어 못 넣은 단위)와 구분해 둔다 (migration 012)
+        mark_unit_removed(db, plan["id"], target.unit_id, now)
 
 
 # ── 완료 취소 (FR-STUDY-02) ───────────────────────────
@@ -558,3 +569,65 @@ def cancel_done(db, user_id: str, block_id: str, now: datetime) -> None:
     db.table("plan_blocks").update({"done": False, "done_at": None}).eq("id", target.id).eq(
         "plan_id", plan["id"]
     ).execute()
+
+
+# ── 미배치 단위 넣기 (FR-PLAN-04) ─────────────────────
+
+def place_unplaced(db, user_id: str, plan_id: str, now: datetime) -> dict:
+    """블록이 없는 단위를 오늘 이후 빈 시간에 넣어 본다. 넣은 블록은 확인 없이 저장한다.
+
+    이미 놓인 블록(이 목표·다른 목표 모두)은 움직이지 않고 비켜 간다 — 사용자가 누른 버튼이
+    다른 일정을 흔들면 안 된다. 직접 지운 단위는 넣지 않는다. 자리가 없으면 그대로 미배치로 남는다.
+    """
+    plan = next((p for p in active_plan_rows(db, user_id) if p["id"] == str(plan_id)), None)
+    if plan is None:
+        raise PlanNotFound(plan_id)
+
+    blocks = plan_blocks(db, plan["id"])
+    units = plan_units(db, plan["id"])
+    removed = removed_unit_keys(db, plan["id"])
+    waiting = unplaced_units(units, blocks, removed)
+    if not waiting:
+        return {"placed": 0, "left": 0, "blocks": []}
+
+    deadline = _plan_deadline(plan)
+    if deadline < now.date():
+        raise ReplanError("기한이 지난 목표라 넣을 자리가 없어요.")
+    availability = availability_of(plan, blocks)
+    if availability is None:
+        raise ReplanError("빈 시간표가 없어 넣을 수 없어요. 계획을 다시 만들어 주세요.")
+
+    others = other_plan_blocks(db, user_id, except_plan_id=plan["id"])
+    live = [u for u in units if u.id not in removed]  # 지운 단위에 기대던 단위는 기다리지 않는다
+    result = build_schedule(live, availability, _place_from(availability, now), deadline,
+                            fixed_blocks=blocks + others)
+    waiting_ids = {u.id for u in waiting}
+    new = [b for b in result.blocks if b.unit_id in waiting_ids]
+    if not new:
+        return {"placed": 0, "left": len(waiting), "blocks": []}
+
+    before = {_key(v) for v in validate_schedule(blocks + others, live, deadline)}
+    bad = [v for v in validate_schedule(blocks + new + others, live, deadline) if _key(v) not in before]
+    if bad:
+        raise ReplanError(f"넣을 자리가 규칙 {len(bad)}건을 어겨 넣지 않았어요.")
+
+    saved = db.table("plan_blocks").insert([
+        {
+            "plan_id": plan["id"], "unit_key": b.unit_id, "title": b.title,
+            "start_at": to_db_time(b.start), "end_at": to_db_time(b.end),
+            "minutes": b.minutes, "locked": False, "done": False,
+        }
+        for b in new
+    ]).execute().data
+    db.table("plan_changes").insert([
+        {
+            "user_id": user_id, "plan_id": plan["id"], "block_id": row["id"],
+            "origin": "manual", "change_type": "add", "title": b.title,
+            "after_start": to_db_time(b.start), "after_end": to_db_time(b.end),
+            "reason": f"미배치였던 단원을 {_when(b.start)}에 넣었어요.",
+            "created_at": to_db_time(now),
+        }
+        for row, b in zip(saved, new)
+    ]).execute()
+    placed = [b.model_copy(update={"id": str(row["id"])}) for row, b in zip(saved, new)]
+    return {"placed": len(placed), "left": len(waiting) - len(placed), "blocks": placed}

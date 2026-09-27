@@ -9,6 +9,7 @@
   GET  /plan/active            진행 중 계획 전부 (로그인) — 목표 최대 2개
   GET  /plan/current           가장 최근 계획 하나 (로그인, 예전 화면 호환)
   POST /plan/{id}/archive      목표 끝내기 (로그인)
+  POST /plan/{id}/place-unplaced  미배치 단위를 빈 시간에 넣어 보기 (로그인)
   POST /plan/scope             공부량이 가용시간의 1.5배를 넘는지 + 범위 축소안
   GET  /plan/changes           최근 7일 재조정 내역 (로그인)
   POST /plan/changes/{id}/undo 가장 최근 재조정 되돌리기 1회 (로그인)
@@ -136,6 +137,7 @@ class CurrentPlanResponse(BaseModel):
     source: str
     units: list[StudyUnit]
     blocks: list[Block]
+    unplaced: list[StudyUnit] = []  # FR-PLAN-04 블록이 없는 단위 (직접 지운 단위는 빠짐)
 
 
 @router.get("/ping")
@@ -316,6 +318,23 @@ def archive(plan_id: str, user=Depends(get_current_user), db=Depends(get_db)) ->
     if not archive_plan(db, user.id, plan_id):
         raise HTTPException(status_code=404, detail="진행 중인 내 계획에서 찾지 못했어요.")
     return {"message": "목표를 끝냈어요. 학습 기록은 그대로 남아요."}
+
+
+class PlaceUnplacedResponse(BaseModel):
+    placed: int
+    left: int                # 그래도 자리가 없어 남은 단위 수
+    blocks: list[Block]
+
+
+@router.post("/{plan_id}/place-unplaced", response_model=PlaceUnplacedResponse)
+def place_unplaced(plan_id: str, user=Depends(get_current_user), db=Depends(get_db)):
+    """FR-PLAN-04 — 미배치 단위를 오늘 이후 빈 시간에 넣어 본다. 이미 놓인 블록은 움직이지 않는다."""
+    try:
+        return replan.place_unplaced(db, user.id, plan_id, replan.now_kst())
+    except replan.PlanNotFound:
+        raise HTTPException(status_code=404, detail="진행 중인 내 계획에서 찾지 못했어요.")
+    except replan.ReplanError as exc:
+        _refuse(exc)
 
 
 # ── 공부량 점검 (FR-PLAN-02) ───────────────────────────

@@ -4,6 +4,7 @@
   GET  /study/stats     내 누적·주간·연속·레벨 + 이번 주 달성률 (로그인, DB 기준)
   POST /study/stats     받은 기록으로 계산만 (DB 없이 화면 시험용)
   DELETE /study/blocks/{id}/done  완료 취소 — 24시간 안에만 (로그인)
+  GET  /study/notes     학습 메모를 목표별로 모아보기 (로그인)
 """
 
 from __future__ import annotations
@@ -16,7 +17,7 @@ from pydantic import BaseModel, Field
 from db import get_db
 from services.aggregator import MIN_RECORDED_MINUTES, summarize
 from services import replan
-from services.plan_store import KST, active_plan_rows, plan_blocks, record_session, session_events
+from services.plan_store import KST, active_plan_rows, plan_blocks, record_session, session_events, study_notes
 from utils.auth import get_current_user
 
 router = APIRouter(prefix="/study", tags=["study"])
@@ -119,6 +120,12 @@ def week_progress(db, user_id: str, today: date) -> dict:
         "week_done_minutes": done,
         "week_rate": round(done / planned * 100) if planned else None,
     }
+
+
+@router.get("/notes")
+def notes(user=Depends(get_current_user), db=Depends(get_db)) -> dict:
+    """FR-STUDY-05 — 블록마다 남긴 메모를 목표별로 모아본다. 끝낸 목표의 메모도 남아 있다."""
+    return {"groups": study_notes(db, user.id)}
 
 
 @router.post("/stats")

@@ -359,6 +359,9 @@ export const api = {
     // 목표 끝내기 — 계획을 보관한다. 학습 기록은 남는다
     archive: (planId) => post(`/plan/${encodeURIComponent(planId)}/archive`, {}),
 
+    // FR-PLAN-04 — 미배치 단원을 오늘 이후 빈 시간에 넣어 본다. { placed, left, blocks }
+    placeUnplaced: (planId) => post(`/plan/${encodeURIComponent(planId)}/place-unplaced`, {}),
+
     // FR-PLAN-07 — 최근 7일 재조정 내역 / FR-PLAN-06 — 가장 최근 것 되돌리기 1회
     changes: () => request('/plan/changes'),
     undoChanges: (runId) => post(`/plan/changes/${encodeURIComponent(runId)}/undo`, {}),
@@ -387,6 +390,9 @@ export const api = {
 
     // FR-STUDY-02 — 완료 취소 (24시간 안에만)
     cancelDone: (blockId) => del(`/study/blocks/${encodeURIComponent(blockId)}/done`),
+
+    // FR-STUDY-05 — 학습 메모를 목표별로 모아보기. { groups: [{ plan_id, goal_title, active, notes }] }
+    notes: () => request('/study/notes'),
   },
 };
 

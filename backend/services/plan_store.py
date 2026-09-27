@@ -179,18 +179,42 @@ def plan_blocks(db, plan_id: str) -> list[Block]:
     ]
 
 
+def _unit_rows(db, plan_id: str) -> list[dict]:
+    return db.table("study_units").select("*").eq("plan_id", plan_id).order("position").execute().data
+
+
+def _to_unit(r: dict) -> StudyUnit:
+    return StudyUnit(
+        id=r["unit_key"],
+        title=r["title"],
+        estimated_minutes=r["estimated_minutes"],
+        prerequisites=r.get("prerequisites") or [],
+        estimated=r.get("estimated", False),
+    )
+
+
 def plan_units(db, plan_id: str) -> list[StudyUnit]:
-    rows = db.table("study_units").select("*").eq("plan_id", plan_id).order("position").execute().data
-    return [
-        StudyUnit(
-            id=r["unit_key"],
-            title=r["title"],
-            estimated_minutes=r["estimated_minutes"],
-            prerequisites=r.get("prerequisites") or [],
-            estimated=r.get("estimated", False),
-        )
-        for r in rows
-    ]
+    return [_to_unit(r) for r in _unit_rows(db, plan_id)]
+
+
+def removed_unit_keys(db, plan_id: str) -> set[str]:
+    """사용자가 마지막 블록을 직접 지운 단위 — 미배치로 보지 않는다 (migration 012)."""
+    return {r["unit_key"] for r in _unit_rows(db, plan_id) if r.get("removed_at")}
+
+
+def unplaced_units(units: list[StudyUnit], blocks: list[Block], removed: set[str]) -> list[StudyUnit]:
+    """FR-PLAN-04 미배치 — 블록이 하나도 없는 단위. 직접 지운 단위는 뺀다.
+
+    처음 만들 때 기한 안에 자리가 없었거나, 선행 단위가 못 놓여서 함께 밀린 단위다.
+    """
+    placed = {b.unit_id for b in blocks}
+    return [u for u in units if u.id not in placed and u.id not in removed]
+
+
+def mark_unit_removed(db, plan_id: str, unit_key: str, now: datetime) -> None:
+    db.table("study_units").update({"removed_at": to_db_time(now)}).eq("plan_id", plan_id).eq(
+        "unit_key", unit_key
+    ).execute()
 
 
 def load_active_plans(db, user_id: str) -> list[dict]:
@@ -205,14 +229,19 @@ def load_active_plan(db, user_id: str) -> dict | None:
 
 
 def _plan_payload(db, plan: dict) -> dict:
+    rows = _unit_rows(db, plan["id"])
+    units = [_to_unit(r) for r in rows]
+    blocks = plan_blocks(db, plan["id"])
+    removed = {r["unit_key"] for r in rows if r.get("removed_at")}
     return {
         "plan_id": plan["id"],
         "goal_title": plan["goal_title"],
         "goal_id": plan["goal_id"],
         "deadline": plan["deadline"],
         "source": plan["source"],
-        "units": plan_units(db, plan["id"]),
-        "blocks": plan_blocks(db, plan["id"]),
+        "units": units,
+        "blocks": blocks,
+        "unplaced": unplaced_units(units, blocks, removed),
     }
 
 
@@ -274,6 +303,55 @@ def record_session(
             "id", block_id
         ).eq("done", False).execute()
     return mine
+
+
+NOTES_LIMIT = 200  # 메모 모아보기에 한 번에 보여 줄 최대 개수
+
+
+def study_notes(db, user_id: str) -> list[dict]:
+    """FR-STUDY-05 목표별로 모아본 학습 메모, 최근 메모가 있는 목표부터.
+
+    끝낸 목표의 메모도 보여 준다 — 회고는 목표를 끝낸 뒤에 더 찾게 된다.
+    계획 블록 없이 적었거나 블록이 지워진 메모는 plan_id None 묶음으로 모은다.
+    """
+    sessions = (
+        db.table("study_sessions").select("id, block_id, started_at, minutes, note")
+        .eq("user_id", user_id).order("started_at", desc=True).limit(NOTES_LIMIT * 5)
+        .execute().data
+    )
+    sessions = [s for s in sessions if (s.get("note") or "").strip()][:NOTES_LIMIT]
+
+    block_ids = sorted({s["block_id"] for s in sessions if s.get("block_id")})
+    blocks = (
+        {r["id"]: r for r in db.table("plan_blocks").select("id, plan_id, title").in_("id", block_ids).execute().data}
+        if block_ids else {}
+    )
+    plan_ids = sorted({b["plan_id"] for b in blocks.values()})
+    plans = (
+        {r["id"]: r for r in db.table("study_plans").select("id, goal_title, status")
+         .eq("user_id", user_id).in_("id", plan_ids).execute().data}
+        if plan_ids else {}
+    )
+
+    groups: dict[str | None, dict] = {}
+    for s in sessions:
+        block = blocks.get(s.get("block_id"))
+        plan = plans.get(block["plan_id"]) if block else None
+        key = plan["id"] if plan else None
+        group = groups.setdefault(key, {
+            "plan_id": key,
+            "goal_title": plan["goal_title"] if plan else None,
+            "active": plan["status"] == "active" if plan else False,
+            "notes": [],
+        })
+        group["notes"].append({
+            "id": str(s["id"]),
+            "note": s["note"].strip(),
+            "started_at": from_db_time(s["started_at"]),
+            "minutes": s["minutes"],
+            "block_title": block["title"] if plan else None,
+        })
+    return list(groups.values())  # 세션을 최근 순으로 돌았으므로 묶음도 최근 메모 순
 
 
 def session_events(db, user_id: str) -> list[tuple[date, int]]:

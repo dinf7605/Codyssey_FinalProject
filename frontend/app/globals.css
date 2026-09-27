@@ -155,6 +155,7 @@ button { font: inherit; color: inherit; cursor: pointer; background: none; borde
 /* ── 칩 · 배지 ───────────────────────────────────────── */
 .chip { display: inline-flex; align-items: center; padding: 7px 13px; border-radius: 999px; border: 1px solid var(--rule-2); font-size: 13px; color: var(--ink-2); background: var(--surface); }
 .chip[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--paper); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
 
 .tag { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-family: var(--f-mono); color: var(--ink-3); white-space: nowrap; }
 .tag::before { content: ""; width: 5px; height: 5px; border-radius: 999px; background: currentColor; }
@@ -314,6 +315,11 @@ button { font: inherit; color: inherit; cursor: pointer; background: none; borde
 .dot { width: 5px; height: 5px; border-radius: 999px; background: var(--rule-2); }
 .dot-done { background: var(--accent); }
 .dot-miss { background: var(--late); }
+.dot-unplaced { background: transparent; border: 1px dashed var(--ink-3); width: 7px; height: 7px; }
+.unplaced-list { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--ink-2); }
+.unplaced-list li { display: flex; align-items: center; gap: 8px; }
+.unplaced-list li .dot { flex: none; display: inline-block; }
+.unplaced-list li .tiny { margin-left: auto; }
 
 /* ── 일정 달력 (FR-PLAN-04) ──────────────────────────── */
 .cal-seg { display: flex; gap: 4px; flex: none; }

@@ -205,10 +205,12 @@ pytest -q                     # 테스트
 | GET | `/plan/active` | 진행 중 계획 전부 `{plans, max_plans}` — 목표는 동시에 최대 2개 (`FR-GOAL-07`, 로그인) |
 | GET | `/plan/current` | 가장 최근 계획 하나, 없으면 `null` (예전 화면 호환, 로그인) |
 | POST | `/plan/{id}/archive` | 목표 끝내기 — 보관, 학습 기록은 남음 (로그인) |
+| POST | `/plan/{id}/place-unplaced` | 미배치 단위(블록 없는 단위)를 오늘 이후 빈 시간에 넣어 보기. 놓인 블록은 안 움직임, 직접 지운 단위는 제외 (`FR-PLAN-04`, 로그인) |
 | POST | `/study/sessions` | 학습 세션 저장 + 본인 블록 완료 (`FR-STUDY-01/02`, 로그인) |
 | GET | `/study/stats` | 내 누적·주간·연속·레벨 + 이번 주 달성률 — 저장된 기록 기준 (`FR-STUDY-03/04`, 로그인) |
 | POST | `/study/stats` | 받은 기록으로 계산만 (DB 없이 시험용) |
 | DELETE | `/study/blocks/{id}/done` | 완료 취소 — 24시간 안에만. 공부한 시간 기록은 남긴다 (`FR-STUDY-02`, 로그인) |
+| GET | `/study/notes` | 학습 메모를 목표별로 모아보기, 끝낸 목표 포함 (`FR-STUDY-05`, 로그인) |
 | POST | `/plan/scope` | 공부량이 기한까지 가용시간의 1.5배를 넘으면 범위 축소안(뺄 단위·늘릴 기한) (`FR-PLAN-02`) |
 | GET | `/plan/changes` | 최근 7일 재조정 내역 + 3일 연속 밀림 여부 (`FR-PLAN-07`, 로그인) |
 | POST | `/plan/changes/{id}/undo` | 가장 최근 재조정 되돌리기 — 한 번만 (`FR-PLAN-06`, 로그인) |
@@ -256,7 +258,7 @@ pytest -q                     # 테스트
 ### 테스트
 
 ```bash
-pytest -q       # 전체 200개 (C 담당 111개)
+pytest -q       # 전체 213개 (C 담당 124개)
 ```
 
 | 파일 | 확인하는 것 |
