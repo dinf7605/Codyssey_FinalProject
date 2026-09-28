@@ -1,7 +1,6 @@
 """위비티 HTML을 네트워크 요청 없이 해석하는 파서.
 
-이 모듈은 HTML 문자열만 입력받는다. 실제 HTTP 요청과 실행 주기는 사용 허락을
-확인한 뒤 별도 수집기에서 연결한다.
+이 모듈은 HTML 문자열만 입력받는다. 실제 요청·저장·실행 주기는 services/wevity_collector.py 가 맡는다.
 """
 
 from __future__ import annotations
