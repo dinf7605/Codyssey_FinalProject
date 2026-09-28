@@ -53,6 +53,14 @@ pytest -q                     # 테스트
 | `004_db_standard.sql` | — | 아래 DB 기준으로 통일 (`auth_id` → `user_id`, `password_hash` 삭제) |
 | `008_replan_changes.sql` | C | `plan_reschedule_runs`, `plan_changes` + `study_plans.availability`, `plan_blocks.done_at` (재조정·변경 내역·완료 취소) |
 | `009_curriculum.sql` | C | `curriculum_units` — 정보처리기사 필기·SQLD·ADsP 출제 범위 70항목 (학습 분해 에이전트의 근거) |
+| `010_withdrawal_retention.sql` | E | 탈퇴 프로필 1년 보관 (`private.withdrawn_profiles`, `auth.users` 삭제 전 트리거, `pg_cron` 삭제 작업) |
+| `011_admin_ai_call_logs.sql` | E | `ai_call_logs` 날짜별 조회 인덱스 (관리자 화면) |
+| `012_unit_removed.sql` | C | `study_units.removed_at` — 직접 지운 단위를 미배치와 구분 |
+| `013_preparation_standards_seed.sql` | D | `preparation_time_standards` 17개 분야 시드 (팀 추정치) |
+| `007_goal_feedback.sql` | B | `goal_feedback` — 목표 추천 피드백 (FR-GOAL-08). 09-28 적용, 정책을 `(select auth.uid())` 로 고쳐서 |
+| `014_notification_settings.sql` | E | `user_notification_settings`(알림 켜기·방해금지·강도) + `notification_logs.block_id`·중복 방지 인덱스. 개인 DB 기준이던 005·006 을 공용 기준으로 다시 쓴 것 (005·006 파일은 삭제) |
+
+공용 DB 에 무엇이 적용됐는지는 Supabase 대시보드 → Database → Migrations 에서 본다 (적용한 이름이 이 표의 파일 이름과 같다).
 
 키 받는 곳: Supabase 대시보드 → Project Settings → API Keys.
 `SUPABASE_URL` · `SUPABASE_ANON_KEY` 는 공개돼도 되는 값, 비밀 키(`sb_secret_…`)는 **`SUPABASE_SERVICE_ROLE_KEY` 한 곳**에만 넣는다.
@@ -79,6 +87,34 @@ pytest -q                     # 테스트
 | RLS | **모든 테이블에 켠다.** 브라우저에 보여줄 것은 `select` 정책 `(select auth.uid()) = user_id`. 쓰기는 백엔드만 — 쓰기 정책은 만들지 않는다. 백엔드 전용 테이블은 정책 없이 둔다 |
 | 비밀번호·토큰 | DB 에 저장하지 않는다. 비밀번호는 Supabase Auth 가 가진다 |
 | 적용 후 | Supabase 점검 도구(Advisors)의 WARN 을 0 으로 만든다 |
+
+#### 같이 작업할 때 DB 바꾸는 순서
+
+**DB 는 팀 공용 하나(`spgrerxkdavykunujipn`)만 쓴다.** 개인 Supabase 프로젝트에서 만든 테이블은 팀 코드와 맞지 않는다 —
+09-27 에 개인 DB 기준(`auth_id`)으로 짠 가입·탈퇴 코드가 공용 DB(`user_id`)에서 동작하지 않은 것이 이 때문이다 (루트 README 개발 기록 5차 점검 참고).
+
+**처음 한 번**
+
+1. 루트 `.env` 의 `SUPABASE_URL` · `SUPABASE_ANON_KEY` · `SUPABASE_SERVICE_ROLE_KEY` 를 공용 프로젝트 값으로 바꾼다.
+   키는 대시보드 → Project Settings → API Keys. 비밀 키는 `.env` 에만 두고 커밋·메신저 공유하지 않는다
+2. 대시보드를 봐야 하면 공용 프로젝트 소유자에게 Organization 멤버 초대를 받는다
+3. 개인 DB 에 만들어 둔 테이블·데이터는 **옮기지 않는다.** 필요한 구조만 아래 순서대로 migration 파일로 다시 쓴다
+
+**테이블·컬럼·시드를 바꿀 때마다**
+
+| 순서 | 할 일 | 왜 |
+|---|---|---|
+| 1 | `git pull` → `migrations/` 의 마지막 번호 +1 을 쓴다. 팀 채널에 "014 씁니다" 로 먼저 알린다 | 둘이 같은 번호를 쓰면 순서가 꼬인다 |
+| 2 | `migrations/NNN_설명.sql` 작성 — 맨 위에 담당·이유 주석, 위 **스키마 기준** 그대로 (`user_id` 참조, RLS, `check`). `create table if not exists` · `add column if not exists` 처럼 두 번 돌려도 되게 | 적용이 중간에 끊겨도 다시 돌릴 수 있다 |
+| 3 | 그 테이블을 쓰는 코드·테스트와 **같은 커밋**으로 올린다. 코드의 테이블·컬럼 이름이 파일과 글자까지 같은지 확인 | 파일만 있고 코드가 없거나 그 반대면 배포에서 깨진다 |
+| 4 | 공용 DB 적용은 **한 사람**이 한다 (지금은 C). 파일을 push 하고 "014 적용 부탁" 을 남긴다 | 적용 기록(Database → Migrations)이 한 목록에 남아야 무엇이 적용됐는지 헷갈리지 않는다. 각자 SQL Editor 에서 돌리면 기록이 빠진다 |
+| 5 | 적용 후 Advisors WARN 0 확인 → 위 표에 한 줄 추가 → 팀에 "pull 받으세요" | 다른 사람 로컬 코드가 새 구조를 알게 |
+
+**하지 않는다**
+
+- 이미 적용한 파일을 고치기 — 공용 DB 에는 반영되지 않는다. 고칠 것은 다음 번호에 `alter table` 로
+- 다른 담당의 테이블을 말없이 바꾸기 — 담당(위 표)에게 먼저 묻는다
+- 대시보드에서 손으로 테이블을 만들거나 행을 넣고 지우기 — 시드도 migration(예: `013`)이나 스크립트(예: `scripts/collect_contests.py`)로
 
 ---
 
