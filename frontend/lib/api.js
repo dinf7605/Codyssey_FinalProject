@@ -157,6 +157,12 @@ export const api = {
       if (day) params.set('day', day);
       return request(`/admin/ai-logs?${params}`, { cache: 'no-store' });
     },
+    // DB 현황 (읽기 전용) — 테이블별 행 수 · 마지막 기록 / 한 테이블의 최근 행 (개인정보는 가려서 온다)
+    dbTables: () => request('/admin/db/tables', { cache: 'no-store' }),
+    dbTable: (name, { page = 1, pageSize = 20 } = {}) => {
+      const params = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
+      return request(`/admin/db/tables/${encodeURIComponent(name)}?${params}`, { cache: 'no-store' });
+    },
   },
   health: () => request('/health'),
 

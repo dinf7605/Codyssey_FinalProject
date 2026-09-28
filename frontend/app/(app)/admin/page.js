@@ -5,6 +5,7 @@ import Link from 'next/link';
 import SectionTitle from '@/components/SectionTitle';
 import AdminRequestMetrics from '@/components/AdminRequestMetrics';
 import AdminContestInspection from '@/components/AdminContestInspection';
+import AdminDbStatus from '@/components/AdminDbStatus';
 import { api, getToken } from '@/lib/api';
 
 const SOURCE_LABELS = {
@@ -236,6 +237,10 @@ export default function AdminPage() {
           <section className="sec">
             <SectionTitle>수집 공고 점검</SectionTitle>
             <AdminContestInspection />
+          </section>
+          <section className="sec">
+            <SectionTitle>DB 현황</SectionTitle>
+            <AdminDbStatus />
           </section>
         </>
       )}

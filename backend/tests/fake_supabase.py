@@ -8,7 +8,7 @@
     ...
     db.rows("study_plans")   # 저장된 행 확인
 
-지원: table().select/insert/upsert/update/delete · eq · in_ · lt · order · limit · execute
+지원: table().select(count='exact')/insert/upsert/update/delete · eq · in_ · lt · order · limit · range · execute
 기본값: id 자동 생성(uuid), study_plans.status='active', created_at 은 넣은 순서대로 증가
 """
 
@@ -51,10 +51,13 @@ class _Query:
         self.filters: list[tuple[str, object]] = []
         self._order: tuple[str, bool] | None = None
         self._limit: int | None = None
+        self._offset = 0
+        self._count = False
 
     # 동작
-    def select(self, *_columns):
+    def select(self, *_columns, count=None):
         self.op = "select"
+        self._count = count == "exact"  # 결과에 전체 개수(count)를 함께 돌려준다
         return self
 
     def insert(self, values):
@@ -94,6 +97,11 @@ class _Query:
 
     def limit(self, n):
         self._limit = n
+        return self
+
+    def range(self, start, end):
+        """supabase-py 처럼 양 끝을 포함한다 (0, 19 → 20개)."""
+        self._offset, self._limit = start, end - start + 1
         return self
 
     def _matches(self, row):
@@ -144,9 +152,11 @@ class _Query:
             column, desc = self._order
             # 빈 값은 맨 뒤로, 나머지는 값 그대로 비교 (숫자·문자 섞지 않는다)
             hits = sorted(hits, key=lambda r: (r.get(column) is None, r.get(column)), reverse=desc)
+        total = len(hits)
+        hits = hits[self._offset:]
         if self._limit is not None:
             hits = hits[: self._limit]
-        return SimpleNamespace(data=[dict(r) for r in hits])
+        return SimpleNamespace(data=[dict(r) for r in hits], count=total if self._count else None)
 
 
 class _In:

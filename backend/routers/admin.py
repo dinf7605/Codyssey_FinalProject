@@ -112,6 +112,11 @@ from routers.admin_contests import router as contest_inspection_router
 
 router.include_router(contest_inspection_router)
 
+# DB 현황(테이블별 행 수 · 최근 행, 읽기 전용)도 같은 관리자 권한 검사를 받는다.
+from routers.admin_db import router as db_status_router  # noqa: E402
+
+router.include_router(db_status_router)
+
 
 @router.get("/ai-request-metrics")
 def ai_request_metrics(response: Response, day: date | None = Query(default=None)):

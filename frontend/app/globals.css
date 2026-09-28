@@ -540,3 +540,13 @@ button { font: inherit; color: inherit; cursor: pointer; background: none; borde
   .profile-name { font-size: 22px; }
   .profile-stat-value { font-size: 19px; }
 }
+
+/* 관리자 DB 현황 (components/AdminDbStatus.js) — 테이블 이름 줄을 누르면 최근 행이 펼쳐진다 */
+.db-row { width: 100%; background: none; border: 0; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.db-row:hover .row-main b { text-decoration: underline; }
+.db-count { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; flex: none; }
+.db-scroll { overflow-x: auto; border: 1px solid var(--rule); border-radius: var(--radius); }
+.db-table { border-collapse: collapse; font-size: 12px; min-width: 100%; }
+.db-table th, .db-table td { padding: 6px 10px; border-bottom: 1px solid var(--rule); text-align: left; white-space: nowrap; }
+.db-table th { font-family: var(--f-mono); font-weight: 500; color: var(--ink-3); background: var(--surface-2); }
+.db-table td { max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
