@@ -120,8 +120,35 @@ export default function AdminPage() {
             </p>
             <p className="hint">
               템플릿 대체 처리도 포함됩니다. 처리 기록 수는 실제 AI 호출 횟수와 다를 수 있습니다.
-              비용과 실패율은 아직 집계되지 않습니다.
+              통계는 선택 날짜 전체의 저장된 기록 기준입니다. 비용·실패율은 필요한 기록 항목이 없어 집계할 수 없습니다.
             </p>
+
+            {data.summary ? (
+              <dl style={{ display: 'flex', gap: 24, flexWrap: 'wrap', margin: '16px 0' }}>
+                <div>
+                  <dt>일별 처리 기록</dt>
+                  <dd style={{ margin: 0 }}><b>{data.summary.record_count.toLocaleString('ko-KR')}건</b></dd>
+                </div>
+                <div>
+                  <dt>평균 처리 시간</dt>
+                  <dd style={{ margin: 0 }}>
+                    <b>{data.summary.average_latency_ms == null
+                      ? '미기록'
+                      : `${(data.summary.average_latency_ms / 1000).toLocaleString('ko-KR', { maximumFractionDigits: 2 })}초`}</b>
+                    <span className="muted tiny"> · 시간 기록 {data.summary.latency_record_count.toLocaleString('ko-KR')}건 기준</span>
+                  </dd>
+                </div>
+                <div>
+                  <dt>도구 호출 합계</dt>
+                  <dd style={{ margin: 0 }}><b>{data.summary.tool_calls_total.toLocaleString('ko-KR')}회</b></dd>
+                </div>
+              </dl>
+            ) : (
+              <p role="status" className="hint">
+                일별 통계를 집계하지 못했습니다. 목록은 계속 확인할 수 있습니다.
+                새로고침 후에도 같으면 조회 상태를 확인해 주세요. 하루 20,000건 초과 시 통계는 제공되지 않습니다.
+              </p>
+            )}
 
             {data.items.length === 0 ? (
               <p>조회된 처리 기록이 없습니다.</p>

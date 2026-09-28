@@ -4,6 +4,7 @@ from fastapi import HTTPException, Query, Response
 from pydantic import BaseModel
 
 from db import get_supabase_client
+from services.admin_log_summary import AdminLogSummary, try_summarize_ai_logs
 
 from fastapi import APIRouter, Depends
 
@@ -48,6 +49,7 @@ class AdminLogPage(BaseModel):
     page_size: int
     total: int
     items: list[AdminLogItem]
+    summary: AdminLogSummary | None = None
 
 
 @router.get("/ai-logs", response_model=AdminLogPage)
@@ -72,8 +74,9 @@ def list_ai_logs(
     columns = "id,feature,model,source,tool_calls,latency_ms,created_at"
 
     try:
+        db = get_supabase_client()
         result = (
-            get_supabase_client()
+            db
             .table("ai_call_logs")
             .select(columns, count="exact")
             .gte("created_at", start_utc)
@@ -100,6 +103,7 @@ def list_ai_logs(
             detail="AI 처리 기록을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.",
         )
 
+    payload.summary = try_summarize_ai_logs(db, start_utc, end_utc, payload.total)
     response.headers["Cache-Control"] = "no-store"
     return payload
 

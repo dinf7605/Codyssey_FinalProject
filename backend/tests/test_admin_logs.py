@@ -24,14 +24,23 @@ def client():
 
 
 @pytest.fixture
-def query(monkeypatch):
+def summary_query():
+    query = MagicMock()
+    for name in ("select", "gte", "lt", "order", "range"):
+        getattr(query, name).return_value = query
+    query.execute.return_value = SimpleNamespace(data=[], count=0)
+    return query
+
+
+@pytest.fixture
+def query(monkeypatch, summary_query):
     query = MagicMock()
     for name in ("select", "gte", "lt", "order", "range"):
         getattr(query, name).return_value = query
 
     query.execute.return_value = SimpleNamespace(data=[], count=0)
     db = MagicMock()
-    db.table.return_value = query
+    db.table.side_effect = [query, summary_query]
     monkeypatch.setattr(admin, "get_supabase_client", lambda: db)
     return query
 
@@ -47,6 +56,12 @@ def test_empty_day(client, query):
         "page_size": 20,
         "total": 0,
         "items": [],
+        "summary": {
+            "record_count": 0,
+            "tool_calls_total": 0,
+            "latency_record_count": 0,
+            "average_latency_ms": None,
+        },
     }
     assert response.headers["cache-control"] == "no-store"
 
@@ -151,3 +166,63 @@ def test_login_required(client, query):
 
     assert response.status_code in (401, 403)
     query.execute.assert_not_called()
+
+
+def test_summary_covers_whole_day(client, query, summary_query):
+    query.execute.return_value = SimpleNamespace(
+        count=3,
+        data=[{
+            "id": 2,
+            "feature": "plan.decompose",
+            "model": None,
+            "source": "template",
+            "tool_calls": 2,
+            "latency_ms": 0,
+            "created_at": "2026-09-27T01:00:00+00:00",
+        }],
+    )
+    summary_query.execute.return_value = SimpleNamespace(
+        count=3,
+        data=[
+            {"id": 1, "tool_calls": 1, "latency_ms": None},
+            {"id": 2, "tool_calls": 2, "latency_ms": 0},
+            {"id": 3, "tool_calls": 3, "latency_ms": 300},
+        ],
+    )
+
+    response = client.get(
+        "/admin/ai-logs?day=2026-09-27&page=2&page_size=1"
+    )
+
+    assert response.status_code == 200
+    assert len(response.json()["items"]) == 1
+    assert response.json()["summary"] == {
+        "record_count": 3,
+        "tool_calls_total": 6,
+        "latency_record_count": 2,
+        "average_latency_ms": 150.0,
+    }
+    query.range.assert_called_once_with(1, 1)
+    summary_query.range.assert_called_once_with(0, 499)
+    summary_query.gte.assert_called_once_with(
+        "created_at", "2026-09-26T15:00:00+00:00"
+    )
+    summary_query.lt.assert_called_once_with(
+        "created_at", "2026-09-27T15:00:00+00:00"
+    )
+    summary_query.select.assert_called_once_with(
+        "id,tool_calls,latency_ms", count="exact"
+    )
+
+
+def test_summary_failure_keeps_list_available(client, query, summary_query):
+    summary_query.execute.side_effect = RuntimeError("private summary detail")
+
+    response = client.get("/admin/ai-logs?day=2026-09-27")
+
+    assert response.status_code == 200
+    assert response.json()["items"] == []
+    assert response.json()["total"] == 0
+    assert response.json()["summary"] is None
+    assert response.headers["cache-control"] == "no-store"
+    assert "private summary detail" not in response.text
