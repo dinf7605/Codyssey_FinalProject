@@ -57,7 +57,8 @@ pytest -q                     # 테스트
 | `011_admin_ai_call_logs.sql` | E | `ai_call_logs` 날짜별 조회 인덱스 (관리자 화면) |
 | `012_unit_removed.sql` | C | `study_units.removed_at` — 직접 지운 단위를 미배치와 구분 |
 | `013_preparation_standards_seed.sql` | D | `preparation_time_standards` 17개 분야 시드 (팀 추정치) |
-| `005`·`006`·`007` | E·E·B | **공용 DB 미적용** — 005·006 은 공용 기준(`user_id uuid`, `block_id uuid`)으로 고쳐 새 번호로, 007 은 정책을 `(select auth.uid())` 로 바꿔 적용 |
+| `007_goal_feedback.sql` | B | `goal_feedback` — 목표 추천 피드백 (FR-GOAL-08). 09-28 적용, 정책을 `(select auth.uid())` 로 고쳐서 |
+| `005`·`006` | E | **공용 DB 미적용** — 공용 기준(`user_id uuid`, `block_id uuid`)으로 고쳐 새 번호로 |
 
 공용 DB 에 무엇이 적용됐는지는 Supabase 대시보드 → Database → Migrations 에서 본다 (적용한 이름이 이 표의 파일 이름과 같다).
 

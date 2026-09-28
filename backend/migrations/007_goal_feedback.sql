@@ -25,6 +25,9 @@ alter table public.goal_feedback enable row level security;
 
 -- 백엔드는 서비스 키로 쓰기 때문에 이 정책과 무관하게 insert 된다.
 -- 브라우저가 공개 키로 직접 읽으려는 경우만 본인 것으로 제한한다.
+-- (select auth.uid()) 로 감싸야 행마다 다시 계산하지 않는다 — Supabase 점검 도구 경고 기준 (003 과 같음).
+-- 09-28 공용 DB 에 처음 적용하면서 이렇게 고쳤다. 다시 돌려도 되게 정책을 지우고 만든다.
+drop policy if exists "users can read own goal feedback" on public.goal_feedback;
 create policy "users can read own goal feedback"
     on public.goal_feedback for select
-    using (auth.uid() = user_id);
+    using ((select auth.uid()) = user_id);
