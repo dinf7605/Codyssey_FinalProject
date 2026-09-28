@@ -136,6 +136,11 @@ function del(path) {
 
 export const api = {
   admin: {
+    requestMetrics: ({ day = '' } = {}) => {
+      const params = new URLSearchParams();
+      if (day) params.set('day', day);
+      return request(`/admin/ai-request-metrics?${params}`, { cache: 'no-store' });
+    },
     contestInspection: ({ page = 1, pageSize = 20 } = {}) => {
       const params = new URLSearchParams({
         page: String(page),

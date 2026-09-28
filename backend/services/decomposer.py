@@ -41,6 +41,7 @@ from schemas.plan import (
     StudyUnit,
 )
 from services import llm
+from services.ai_request_metrics import track_decomposition, tracked_create
 from services.agent_tools import CONFIRM_REQUIRED, TOOL_SCHEMAS, run_tool
 from services.template import template_units
 
@@ -115,6 +116,7 @@ def _is_timeout(exc: Exception) -> bool:
 _text_of = llm.text_of
 
 
+@track_decomposition
 def decompose_goal(
     goal_title: str,
     goal_id: str,
@@ -179,7 +181,7 @@ def decompose_goal(
 
         emit({"type": "thinking", "step": step})
         try:
-            response = client.messages.create(
+            response = tracked_create(client,
                 model=model,
                 max_tokens=MAX_TOKENS,
                 system=SYSTEM_PROMPT,
@@ -254,7 +256,7 @@ def decompose_goal(
 def _retry_once(client, model: str, messages: list[dict], tool_calls: int, timeout: float):
     """도구 없이 한 번만 더 물어본다 (AI기능명세 6: 동일 프롬프트로 1회 재시도)."""
     try:
-        response = client.messages.create(
+        response = tracked_create(client,
             model=model,
             max_tokens=MAX_TOKENS,
             system=SYSTEM_PROMPT,

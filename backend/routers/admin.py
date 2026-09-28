@@ -111,3 +111,18 @@ def list_ai_logs(
 from routers.admin_contests import router as contest_inspection_router
 
 router.include_router(contest_inspection_router)
+
+
+@router.get("/ai-request-metrics")
+def ai_request_metrics(response: Response, day: date | None = Query(default=None)):
+    """한국 시간 기준 저장된 학습 분해 요청 통계. 관리자 전용 읽기 API."""
+    import os
+    from services.admin_request_summary import request_metrics_payload
+
+    selected_day = day or datetime.now(KST).date()
+    enabled = os.getenv("AI_REQUEST_METRICS_ENABLED", "").strip() == "1"
+    response.headers["Cache-Control"] = "no-store"
+    try:
+        return request_metrics_payload(get_supabase_client, selected_day, enabled)
+    except (ValueError, OverflowError):
+        raise HTTPException(status_code=422, detail="조회할 수 없는 날짜입니다")

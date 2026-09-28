@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import SectionTitle from '@/components/SectionTitle';
+import AdminRequestMetrics from '@/components/AdminRequestMetrics';
 import AdminContestInspection from '@/components/AdminContestInspection';
 import { api, getToken } from '@/lib/api';
 
@@ -23,6 +24,9 @@ export default function AdminPage() {
   const [day, setDay] = useState('');
   const [page, setPage] = useState(1);
   const [revision, setRevision] = useState(0);
+  const [access, setAccess] = useState(null);
+  const accessReady = access?.revision === revision;
+  const accessAllowed = accessReady && access?.allowed;
   const [result, setResult] = useState(null);
   const requestKey = `${day}:${page}:${revision}`;
   const loading = result?.key !== requestKey;
@@ -30,6 +34,21 @@ export default function AdminPage() {
   const error = loading ? null : result?.error;
 
   useEffect(() => {
+    let active = true;
+    api.admin.me().then(
+      () => { if (active) setAccess({ revision, allowed: true }); },
+      (error) => {
+        if (active) setAccess({ revision, allowed: false, status: error.status,
+          message: error.status === 401 ? '로그인이 필요하거나 로그인 시간이 만료되었습니다.'
+            : error.status === 403 ? '관리자 권한이 있는 계정만 이용할 수 있습니다.'
+              : '관리자 권한을 확인하지 못했습니다. 다시 확인해 주세요.' });
+      },
+    );
+    return () => { active = false; };
+  }, [revision]);
+
+  useEffect(() => {
+    if (!accessAllowed) return;
     let active = true;
 
     Promise.resolve()
@@ -58,7 +77,7 @@ export default function AdminPage() {
       });
 
     return () => { active = false; };
-  }, [day, page, requestKey]);
+  }, [day, page, requestKey, accessAllowed]);
 
   function changeDay(event) {
     setDay(event.target.value);
@@ -80,9 +99,35 @@ export default function AdminPage() {
         <p className="muted tiny">AI 처리 기록 · 한국 시간 기준</p>
       </header>
 
-      {loading && <p role="status">권한 및 처리 기록을 확인하고 있습니다.</p>}
+      {!accessReady && <p role="status">관리자 권한을 확인하고 있습니다.</p>}
+      {accessReady && !accessAllowed && (
+        <section className="sec">
+          <p role="alert">{access.message}</p>
+          {access.status === 401 && <Link href="/login">로그인</Link>}
+          <button type="button" className="btn btn-sm" onClick={refresh}>다시 확인</button>
+        </section>
+      )}
+      {accessAllowed && (
+        <section className="sec">
+            <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+              <label htmlFor="admin-log-day">조회 날짜</label>
+              <input
+                id="admin-log-day"
+                type="date"
+                min="2000-01-01"
+                max="9998-12-31"
+                value={day || data?.day || ''}
+                onChange={changeDay}
+              />
+              <button type="button" className="btn btn-sm" onClick={refresh}>
+                새로고침
+              </button>
+            </div>
+        </section>
+      )}
+      {accessAllowed && loading && <p role="status">처리 기록을 확인하고 있습니다.</p>}
 
-      {error && (
+      {accessAllowed && error && (
         <section className="sec">
           <p role="alert">{error.message}</p>
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
@@ -95,32 +140,19 @@ export default function AdminPage() {
         </section>
       )}
 
-      {data && (
+      {accessAllowed && data && (
         <>
           <section className="sec">
             <SectionTitle>AI 처리 기록</SectionTitle>
 
-            <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-              <label htmlFor="admin-log-day">조회 날짜</label>
-              <input
-                id="admin-log-day"
-                type="date"
-                min="2000-01-01"
-                max="9998-12-31"
-                value={day || data.day}
-                onChange={changeDay}
-              />
-              <button type="button" className="btn btn-sm" onClick={refresh}>
-                새로고침
-              </button>
-            </div>
+
 
             <p className="hint">
               {data.day} · 전체 처리 기록 {data.total}건
             </p>
             <p className="hint">
               템플릿 대체 처리도 포함됩니다. 처리 기록 수는 실제 AI 호출 횟수와 다를 수 있습니다.
-              통계는 선택 날짜 전체의 저장된 기록 기준입니다. 비용·실패율은 필요한 기록 항목이 없어 집계할 수 없습니다.
+              통계는 선택 날짜 전체의 저장된 처리 기록 기준입니다. AI 요청 실패율·토큰 사용량은 아래 별도 영역에서 확인하세요.
             </p>
 
             {data.summary ? (
@@ -192,6 +224,15 @@ export default function AdminPage() {
             </nav>
           </section>
 
+
+        </>
+      )}
+      {accessAllowed && (
+        <>
+          <section className="sec">
+            <SectionTitle>AI 요청 실패율 · 토큰 사용량</SectionTitle>
+            <AdminRequestMetrics day={day} revision={revision} />
+          </section>
           <section className="sec">
             <SectionTitle>수집 공고 점검</SectionTitle>
             <AdminContestInspection />
