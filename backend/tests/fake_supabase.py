@@ -8,7 +8,7 @@
     ...
     db.rows("study_plans")   # 저장된 행 확인
 
-지원: table().select/insert/update/delete · eq · in_ · order · limit · execute
+지원: table().select/insert/upsert/update/delete · eq · in_ · lt · order · limit · execute
 기본값: id 자동 생성(uuid), study_plans.status='active', created_at 은 넣은 순서대로 증가
 """
 
@@ -65,6 +65,12 @@ class _Query:
         self.op, self.payload = "update", values
         return self
 
+    def upsert(self, values, on_conflict=""):
+        """on_conflict 열이 같은 행이 있으면 덮어쓰고, 없으면 넣는다."""
+        self.op, self.payload = "upsert", values
+        self._conflict = [c.strip() for c in on_conflict.split(",") if c.strip()] or ["id"]
+        return self
+
     def delete(self):
         self.op = "delete"
         return self
@@ -78,6 +84,10 @@ class _Query:
         self.filters.append((column, _In(values)))
         return self
 
+    def lt(self, column, value):
+        self.filters.append((column, _Lt(value)))
+        return self
+
     def order(self, column, desc=False):
         self._order = (column, desc)
         return self
@@ -87,7 +97,7 @@ class _Query:
         return self
 
     def _matches(self, row):
-        return all(v.has(row.get(c)) if isinstance(v, _In) else row.get(c) == v for c, v in self.filters)
+        return all(v.has(row.get(c)) if isinstance(v, (_In, _Lt)) else row.get(c) == v for c, v in self.filters)
 
     def execute(self):
         table = self.db.tables.setdefault(self.name, [])
@@ -96,6 +106,19 @@ class _Query:
             new = [self.db._new_row(self.name, v) for v in values]
             table.extend(new)
             return SimpleNamespace(data=[dict(r) for r in new])
+        if self.op == "upsert":
+            values = self.payload if isinstance(self.payload, list) else [self.payload]
+            out = []
+            for v in values:
+                same = next((r for r in table if all(r.get(c) == v.get(c) for c in self._conflict)), None)
+                if same is not None:
+                    same.update(v)
+                    out.append(same)
+                else:
+                    row = self.db._new_row(self.name, v)
+                    table.append(row)
+                    out.append(row)
+            return SimpleNamespace(data=[dict(r) for r in out])
         hits = [r for r in table if self._matches(r)]
         if self.op == "update":
             for r in hits:
@@ -132,3 +155,11 @@ class _In:
 
     def has(self, value):
         return value in self.values
+
+
+class _Lt:
+    def __init__(self, value):
+        self.value = value
+
+    def has(self, value):
+        return value is not None and value < self.value

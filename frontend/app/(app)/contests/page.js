@@ -1,23 +1,19 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import EmptyState from '@/components/EmptyState';
-import api from '@/lib/api';
 import ContestInterestMemory from '@/components/ContestInterestMemory';
 import { useContestInterestMemory } from '@/lib/contest-interest-memory';
+import { SOURCE_LABEL, daysLeft, safeUrl, searchByKeywords } from '@/lib/contests';
+import { dday } from '@/lib/ui';
 import styles from './contests.module.css';
 
-const SUGGESTIONS = ['AI', '데이터', '웹', '디자인', '환경'];
+// FR-CONT-03 공모전 검색 — 위비티에서 모은 실제 공고 (담당 D, 수집기 services/wevity_collector.py)
+// 관심 키워드가 제목·주최에 들어간 공고를 찾고, 많이 맞은 공고 · 마감 임박순으로 보여 준다.
 
-function originalUrl(contest) {
-  if (contest.is_demo || !contest.source_url) return null;
-  try {
-    const url = new URL(contest.source_url);
-    return ['http:', 'https:'].includes(url.protocol) ? url.href : null;
-  } catch {
-    return null;
-  }
-}
+const SUGGESTIONS = ['AI', '아이디어', '영상', '창업', '해커톤', '디자인']; // 수집한 공고에 실제로 많이 나오는 말 (09-28 기준)
+const splitKeywords = (text) => text.split(',').map((k) => k.trim()).filter(Boolean);
 
 export default function ContestsPage() {
   const [input, setInput] = useState(null);
@@ -34,10 +30,11 @@ export default function ContestsPage() {
   useEffect(() => {
     if (!ready) return;
     const controller = new AbortController();
-    api.contests.demoList(activeKeywords, { signal: controller.signal })
+    const keywords = splitKeywords(activeKeywords);
+    searchByKeywords(keywords, { signal: controller.signal })
       .then((data) => {
         if (!controller.signal.aborted) {
-          setResult(data);
+          setResult({ ...data, keywords });
           setLoading(false);
         }
       })
@@ -71,9 +68,12 @@ export default function ContestsPage() {
         <p className="muted">관심 있는 주제로 공모전을 찾아보세요.</p>
       </header>
 
-      <aside className={styles.notice} aria-label="테스트 데이터 안내">
-        <strong>테스트 데이터로 체험 중</strong>
-        <p>직접 만든 가상 공모전 20개입니다. 실제 모집 공고가 아니며 원문 링크는 제공하지 않습니다.</p>
+      <aside className={styles.notice} aria-label="공고 출처 안내">
+        <strong>공고 출처: 위비티</strong>
+        <p>
+          위비티에 올라온 공모전 중 접수 중인 공고의 제목·주최·기간만 모아 보여 줍니다. 매일 새벽에 새로 모아요.
+          지원 자격과 자세한 내용은 반드시 공고 원문에서 확인해 주세요.
+        </p>
       </aside>
 
       <section className={styles.searchPanel} aria-labelledby="interest-heading">
@@ -97,7 +97,7 @@ export default function ContestsPage() {
               </button>
             </div>
             <p id="contest-interest-help" className="hint">
-              여러 키워드는 쉼표로 구분하세요. 제목에 일치하는 키워드가 많은 순서로 추천합니다.
+              여러 키워드는 쉼표로 구분하세요. 제목·주최에 키워드가 많이 들어간 공고부터, 같으면 마감 임박순으로 보여 줍니다.
             </p>
           </div>
         </form>
@@ -128,7 +128,7 @@ export default function ContestsPage() {
             {recommended ? '관심 키워드 추천' : '공모전 목록'}
           </h2>
           <span className="muted" role="status" aria-live="polite">
-            {loading ? '불러오는 중' : error ? '연결 확인 필요' : `${result?.total ?? 0}개`}
+            {loading ? '불러오는 중' : error ? '연결 확인 필요' : result && result.total > result.items.length ? `${result.total}개 중 ${result.items.length}개` : `${result?.total ?? 0}개`}
           </span>
         </div>
 
@@ -151,7 +151,7 @@ export default function ContestsPage() {
           <>
             {recommended && (
               <p className="muted tiny">
-                적용한 키워드: {result.keywords.join(', ')} · 제목 기준 추천
+                적용한 키워드: {result.keywords.join(', ')} · 제목·주최 기준
               </p>
             )}
             {result.items.length === 0 ? (
@@ -167,29 +167,35 @@ export default function ContestsPage() {
             ) : (
               <ul className={styles.grid} aria-label="공모전 결과">
                 {result.items.map((contest) => {
-                  const url = originalUrl(contest);
+                  const url = safeUrl(contest.source_url);
+                  const source = SOURCE_LABEL[contest.source] || contest.source;
+                  const left = daysLeft(contest.deadline);
                   return (
                     <li className={styles.card} key={contest.id}>
                       <div className={styles.cardTop}>
-                        <span className="tag">{contest.is_demo ? '실습용 가상 공고' : contest.source}</span>
-                        {contest.matched_keywords.length > 0 && (
-                          <span className="tiny muted">키워드 {contest.matched_keywords.length}개 일치</span>
+                        <span className={left <= 7 ? 'tag tag-late' : 'tag'}>
+                          {contest.status === 'upcoming' ? '접수 예정' : dday(left)}
+                        </span>
+                        {contest.matched.length > 0 && (
+                          <span className="tiny muted">키워드 {contest.matched.length}개 일치</span>
                         )}
                       </div>
-                      <h3 className={styles.cardTitle}>{contest.title}</h3>
-                      <p className="tiny muted">출처: {contest.source}</p>
-                      {contest.recommendation_reason && (
-                        <p className={styles.reason}>{contest.recommendation_reason}</p>
+                      <h3 className={styles.cardTitle}>
+                        <Link href={`/contests/${contest.id}`}>{contest.title}</Link>
+                      </h3>
+                      <p className="tiny muted">
+                        {contest.host} · 마감 {contest.deadline}
+                        {contest.eligibility_text ? ` · ${contest.eligibility_text}` : ''}
+                      </p>
+                      {contest.fields.length > 0 && (
+                        <p className="tiny dim">{contest.fields.slice(0, 3).join(' · ')}</p>
                       )}
-                      <div className={styles.cardAction}>
-                        {url ? (
-                          <a className="btn btn-sm" href={url} target="_blank" rel="noopener noreferrer">
-                            {contest.source}에서 공고 확인하기 ↗
+                      <div className={styles.cardAction} style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                        <Link className="btn btn-sm" href={`/contests/${contest.id}`}>준비 기간 계산</Link>
+                        {url && (
+                          <a className="btn btn-sm btn-quiet" href={url} target="_blank" rel="noopener noreferrer">
+                            {source} 원문 ↗
                           </a>
-                        ) : (
-                          <button className="btn btn-sm" type="button" disabled>
-                            {contest.is_demo ? '테스트 공고 · 원문 없음' : '원문 링크 없음'}
-                          </button>
                         )}
                       </div>
                     </li>
@@ -202,7 +208,7 @@ export default function ContestsPage() {
       </section>
 
       <p className="hint">
-        제목 키워드를 비교하는 기초 추천입니다. 접수 여부, 마감일, 응모 자격은 판단하지 않습니다.
+        제목·주최의 키워드를 비교하는 기초 검색입니다. 응모 자격을 충족하는지는 판단하지 않습니다.
       </p>
     </>
   );

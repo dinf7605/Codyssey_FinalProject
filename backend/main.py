@@ -7,7 +7,6 @@ from fastapi.responses import JSONResponse
 
 from db import DatabaseNotConfigured
 from routers import admin, auth, batch, contests, goal, notifications, plan, settings, study
-from routers import contest_demo
 
 # ── FastAPI 앱 생성 ──
 app = FastAPI(title="StudyPace API")
@@ -23,7 +22,6 @@ app.include_router(notifications.router)
 app.include_router(settings.router)
 app.include_router(admin.router)
 app.include_router(batch.router)
-app.include_router(contest_demo.router)
 app.include_router(contests.router)  # FR-CONT-03/10 (담당 D)
 app.include_router(plan.router)    # FR-PLAN-* (담당 C)
 app.include_router(study.router)   # FR-STUDY-* (담당 C)

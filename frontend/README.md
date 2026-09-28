@@ -165,7 +165,7 @@ PC에서는 사이드바 하단에도 목표와 D-Day가 함께 보인다.
 
 ## 지금 상태
 
-- `/contests`는 백엔드 `/demo/contests`의 가상 공모전 20개와 제목 키워드 추천에 연결되어 있다.
+- `/contests`·`/contests/[id]`·대시보드의 공모전 카드는 위비티에서 모은 실제 공고(`GET /contests`)를 쓴다. 관심 키워드마다 검색해 많이 맞은 공고·마감 임박순으로 보여 주고, 상세에서 준비 기간을 서버가 계산한다(`POST /contests/{id}/estimate`). 공고 본문은 없고 원문 링크로 보낸다.
 - `/schedule`·`/study`는 실제 API 를 쓴다 (담당 C). 진행 중 목표는 최대 2개 — 달력에 ①·② 로 함께 보이고 목표별로 걸러 보거나 끝낼 수 있다 — 계획 만들기·공부량 점검·확정, 주·월 달력(`/plan/current`), 블록 옮기기·지우기·끌어다 놓기, 최근 바뀐 일정·되돌리기(`/plan/changes`), 미배치 단원 표시·빈 시간에 넣어 보기(`/plan/{id}/place-unplaced`), 학습 타이머·메모(`/study/sessions`), 메모 목표별 모아보기(`/study/notes`), 완료 취소, 집계·주간 달성률(`/study/stats`).
   로그인 전에는 "로그인" 안내가 나온다. 로그인 화면은 성공 시 `localStorage['sp_access_token']` 에 토큰을 넣고 `?next=` 주소로 돌려보내면 된다.
 - 나머지 화면은 아직 `lib/mock.js`의 예시값을 사용한다.

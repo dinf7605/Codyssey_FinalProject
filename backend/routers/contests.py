@@ -1,11 +1,19 @@
-"""공모전 공개 검색과 준비 기간 계산 API."""
+"""공모전 공개 검색과 준비 기간 계산 API.
+
+  POST /contests/collect  위비티 공고 수집 (매일 05:00 스케줄러, X-Batch-Key) — services/wevity_collector.py
+"""
 
 from __future__ import annotations
 
-from datetime import date
+import hmac
+import os
+from datetime import date, datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query
+
+from db import get_supabase_client
+from services import wevity_collector
 
 from schemas.contest import (
     Contest,
@@ -58,6 +66,25 @@ def search_contests(
         )
     )
     return ContestListResponse(items=items, total=total)
+
+
+@router.post("/collect", status_code=202, description="FR-CONT-01 위비티 공고 수집 (매일 05:00, X-Batch-Key)")
+def collect_contests(background: BackgroundTasks, x_batch_key: str | None = Header(default=None)) -> dict:
+    """사람이 부르는 API 가 아니라 스케줄러가 부른다 — 로그인 대신 X-Batch-Key(.env 의 BATCH_SECRET)를 본다.
+
+    요청 사이 3초씩 쉬느라 몇 분 걸리므로 바로 202 로 답하고 뒤에서 돈다. 결과는 batch_runs 에 남는다.
+    """
+    expected = os.getenv("BATCH_SECRET")
+    if not expected:
+        raise HTTPException(status_code=503, detail="BATCH_SECRET 환경변수가 없어 수집을 실행하지 않습니다.")
+    if not (x_batch_key and hmac.compare_digest(x_batch_key, expected)):
+        raise HTTPException(status_code=401, detail="배치 키가 맞지 않습니다.")
+    db = get_supabase_client()
+    now = datetime.now(wevity_collector.KST)
+    if wevity_collector.running(db, now):
+        raise HTTPException(status_code=409, detail="공고 수집이 이미 실행 중입니다.")
+    background.add_task(wevity_collector.run_daily, db, now)
+    return {"status": "started", "message": "결과는 batch_runs 에 남습니다."}
 
 
 @router.get("/{contest_id}", response_model=Contest)

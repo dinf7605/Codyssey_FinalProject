@@ -155,9 +155,19 @@ export const api = {
   },
   health: () => request('/health'),
 
+  // 공모전 (담당 D) — 위비티에서 모은 공고. 비회원도 볼 수 있다
   contests: {
-    demoList: (keywords = '', options = {}) =>
-      request('/demo/contests?' + new URLSearchParams({ keywords }), options),
+    // FR-CONT-03 검색 — query 는 제목·주최에서 찾는다. 기본은 마감 임박순, 마감 지난 공고는 빠진다
+    search: ({ query = '', field = '', sort = 'deadline', limit = 20 } = {}, options = {}) => {
+      const params = new URLSearchParams({ sort, limit: String(limit) });
+      if (query) params.set('query', query);
+      if (field) params.set('field', field);
+      return request(`/contests?${params}`, options);
+    },
+    get: (id) => request(`/contests/${encodeURIComponent(id)}`),
+    // FR-CONT-10 준비 기간 산정 (LLM 미사용)
+    estimate: (id, weeklyHours) =>
+      post(`/contests/${encodeURIComponent(id)}/estimate`, { weekly_hours: weeklyHours }),
   },
 
   // 인증

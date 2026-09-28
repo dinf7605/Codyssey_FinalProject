@@ -6,13 +6,12 @@ import ProfileSummary from '@/components/ProfileSummary';
 import DayTimeline from '@/components/DayTimeline';
 import StudyGrass from '@/components/StudyGrass';
 import PaceSignal from '@/components/PaceSignal';
-import ContestCard from '@/components/ContestCard';
+import DeadlineContests from '@/components/DeadlineContests';
 import SectionTitle from '@/components/SectionTitle';
 import EmptyState from '@/components/EmptyState';
 import GrowthPreview from '@/components/GrowthPreview';
-import { AiNotice } from '@/components/AiNotice';
 import { levelOf, isOpen, nextUnlock, nextFromLevel } from '@/lib/growth';
-import { goal, pace, todayBlocks, contests, user, studyHistory, hourPattern } from '@/lib/mock';
+import { goal, pace, todayBlocks, user, studyHistory, hourPattern } from '@/lib/mock';
 
 // FR-MAIN-03~05 / FR-PACE-04 / FR-UI-01 / FR-UI-02
 //
@@ -144,22 +143,11 @@ export default function DashboardPage() {
         </section>
       )}
 
-      {/* 레벨 3 — 공모전 추천 */}
+      {/* 레벨 3 — 공모전 (실제 공고, 마감 임박순 · 개인화 추천 FR-CONT-04 가 생기면 교체) */}
       {isOpen(level, 'contests') && (
         <section className="sec">
-          <SectionTitle moreHref="/contests">이번 주 추천 공모전</SectionTitle>
-          {contests.length === 0 ? (
-            <EmptyState title="이번 주에는 조건에 맞는 공모전을 찾지 못했습니다" />
-          ) : (
-            <>
-              <ul className="list">
-                {contests.slice(0, 2).map((c) => (
-                  <ContestCard key={c.id} contest={c} />
-                ))}
-              </ul>
-              <AiNotice />
-            </>
-          )}
+          <SectionTitle moreHref="/contests">마감 임박 공모전</SectionTitle>
+          <DeadlineContests />
         </section>
       )}
 
