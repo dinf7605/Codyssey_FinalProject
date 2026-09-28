@@ -58,7 +58,7 @@ pytest -q                     # 테스트
 | `012_unit_removed.sql` | C | `study_units.removed_at` — 직접 지운 단위를 미배치와 구분 |
 | `013_preparation_standards_seed.sql` | D | `preparation_time_standards` 17개 분야 시드 (팀 추정치) |
 | `007_goal_feedback.sql` | B | `goal_feedback` — 목표 추천 피드백 (FR-GOAL-08). 09-28 적용, 정책을 `(select auth.uid())` 로 고쳐서 |
-| `005`·`006` | E | **공용 DB 미적용** — 공용 기준(`user_id uuid`, `block_id uuid`)으로 고쳐 새 번호로 |
+| `014_notification_settings.sql` | E | `user_notification_settings`(알림 켜기·방해금지·강도) + `notification_logs.block_id`·중복 방지 인덱스. 개인 DB 기준이던 005·006 을 공용 기준으로 다시 쓴 것 (005·006 파일은 삭제) |
 
 공용 DB 에 무엇이 적용됐는지는 Supabase 대시보드 → Database → Migrations 에서 본다 (적용한 이름이 이 표의 파일 이름과 같다).
 

@@ -287,7 +287,7 @@ C 연결부(로그인 토큰 `sp_access_token`, `lib/api.js` 의 plan·study 함
 | 3 | E | 첫 화면이 로그인 화면으로 바뀌며 **`/onboarding` 링크가 사라짐** | 비회원 목표 탐색(P1, 담당 B)에 들어갈 길이 없다 |
 | 4 | E | 로그인 후 이동이 `/login` → `/schedule`, `/` → `/dashboard` 로 다르고 `?next=` 를 무시 | C 화면의 "로그인" 링크를 눌러도 원래 화면으로 안 돌아온다 |
 | 5 | D | 저장소 최상위에 `직접 만든 가상 공모전 … API.txt` (기존 `routers/contest_demo.py` 복사본) | ✅ 09-28 가상 공모전 API 와 함께 삭제 |
-| 6 | B·E | 005~007 여전히 미적용 (4차와 같음) | |
+| 6 | B·E | 005~007 여전히 미적용 (4차와 같음) | ✅ 09-28 007 적용 · 005·006 은 014 로 다시 써서 적용 |
 
 **조치 (09-28, E 담당 대신 처리)**
 
@@ -321,7 +321,7 @@ E 의 로컬 `.env` 는 여전히 다른 Supabase 프로젝트(`skhtvbx…`)를 
 | P0 | D | ~~`contests`·`preparation_time_standards` 시드, 공모전 화면 목업 걷어내기~~ ✅ 09-28 위비티 수집기 연결(92건), 준비시간 기준 17개, 목록·상세·대시보드 실제 API — 남은 것: 05:00 수집 스케줄 연결(E) | 10-02 |
 | P0 | E·C | 배포 뒤 03:00 `POST /plan/nightly` 호출 연결 (`BATCH_SECRET`) — M3 | 10-04 |
 | P1 | A | 대시보드 목업 → 실제 API (`/plan/active`·`/study/stats` 는 C 가 준비됨) · 진도 계산 FR-PACE-01~03 (백엔드 없음) | 10-05 |
-| P1 | E | 005·006 공용 DB 기준으로 고쳐 적용 — 알림 설정 테이블이 없어 알림 스케줄러가 지금은 동작할 수 없다 · `/notifications/test` 삭제 | 10-04 |
+| P1 | E | ~~005·006 공용 DB 기준으로 고쳐 적용~~ ✅ 09-28 `014_notification_settings` 로 적용 · 남은 것: 방해금지 시간을 UTC 로 비교하는 버그(`notification_scheduler._can_send_now`) · `/notifications/test` 삭제 | 10-04 |
 | P1 | B | ~~007 적용~~ ✅ 09-28 `goal_feedback` 생성 (B 요청) · 온보딩 `activeGoalCount` 를 `api.plan.active()` 로 · 마이페이지 목업 | 10-04 |
 | P1 | D | 추천·추천 이유·피드백 API (FR-CONT-04/05/08) · 임베딩 수단 결정 | 10-05 |
 | P2 | D·E·C | 루트의 `API.txt` 사본 삭제(D) · 합쳐진 원격 브랜치 `e/withdrawal-retention-…` 삭제(E) · `ai_call_logs` 시험 행 정리 · 커리큘럼 원문 대조(C) | 10-06 |
@@ -336,7 +336,7 @@ E 의 로컬 `.env` 는 여전히 다른 Supabase 프로젝트(`skhtvbx…`)를 
 - **임베딩 (D·B)** — RAG ①② 모두 걸려 있음
 - **배포 (E)** — 실사용자 테스트(10-08~)가 여기 걸려 있음
 - **03:00 야간 재조정 스케줄 (E)** — `POST /plan/nightly` 를 Make·cron 으로 부르고 `BATCH_SECRET` 설정. 그전까지는 일정 화면의 "지금 다시 놓기"로 확인
-- **마이그레이션 005~007 정리 후 적용 (E·B)**
+- ~~마이그레이션 005~007 정리 후 적용 (E·B)~~ ✅ 09-28 — 007 적용, 005·006 은 014 로 대체해 적용. 팀 코드가 쓰는 테이블은 이제 공용 DB 에 모두 있다
 - `ai_call_logs` 의 테스트 흔적 1건(id 2, `source=template`) 삭제 여부
 
 ---
