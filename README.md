@@ -321,7 +321,7 @@ E 의 로컬 `.env` 는 여전히 다른 Supabase 프로젝트(`skhtvbx…`)를 
 | P0 | D | ~~`contests`·`preparation_time_standards` 시드, 공모전 화면 목업 걷어내기~~ ✅ 09-28 위비티 수집기 연결(92건), 준비시간 기준 17개, 목록·상세·대시보드 실제 API — 남은 것: 05:00 수집 스케줄 연결(E) | 10-02 |
 | P0 | E·C | 배포 뒤 03:00 `POST /plan/nightly` 호출 연결 (`BATCH_SECRET`) — M3 | 10-04 |
 | P1 | A | 대시보드 목업 → 실제 API (`/plan/active`·`/study/stats` 는 C 가 준비됨) · 진도 계산 FR-PACE-01~03 (백엔드 없음) | 10-05 |
-| P1 | E | ~~005·006 공용 DB 기준으로 고쳐 적용~~ ✅ 09-28 `014_notification_settings` 로 적용 · 남은 것: 방해금지 시간을 UTC 로 비교하는 버그(`notification_scheduler._can_send_now`) · `/notifications/test` 삭제 | 10-04 |
+| P1 | E | ~~005·006 공용 DB 기준으로 고쳐 적용~~ ✅ 09-28 `014_notification_settings` 로 적용 · 방해금지 시간을 한국 시각으로 비교하게 고침(09-28) · 남은 것: `/notifications/test` 삭제 | 10-04 |
 | P1 | B | ~~007 적용~~ ✅ 09-28 `goal_feedback` 생성 (B 요청) · 온보딩 `activeGoalCount` 를 `api.plan.active()` 로 · 마이페이지 목업 | 10-04 |
 | P1 | D | 추천·추천 이유·피드백 API (FR-CONT-04/05/08) · 임베딩 수단 결정 | 10-05 |
 | P2 | D·E·C | 루트의 `API.txt` 사본 삭제(D) · 합쳐진 원격 브랜치 `e/withdrawal-retention-…` 삭제(E) · `ai_call_logs` 시험 행 정리 · 커리큘럼 원문 대조(C) | 10-06 |

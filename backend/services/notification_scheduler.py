@@ -18,6 +18,10 @@ from db import get_supabase_client
 
 NOTIFICATION_TYPE_10MIN = "10min_before"
 
+# 방해금지 시간(quiet_start·quiet_end)은 사용자가 한국 시각으로 넣는다 (예: 22:00~07:00).
+# 한국은 서머타임이 없어 고정 오프셋으로 충분하다 (plan_store.KST 와 같음).
+KST = timezone(timedelta(hours=9))
+
 
 def run_10min_before_notifications() -> None:
     """10분 뒤 시작하는 학습 블록에 대해 알림을 생성한다.
@@ -138,9 +142,10 @@ def _can_send_now(db: Any, user_id: str, now: datetime) -> bool:
     quiet_start = settings.get("quiet_start")
     quiet_end = settings.get("quiet_end")
 
-    # 방해금지 시간이 둘 다 있을 때만 검사
+    # 방해금지 시간이 둘 다 있을 때만 검사.
+    # now 는 UTC 라서 그대로 .time() 을 쓰면 9시간 어긋난다 — 한국 시각으로 바꿔 비교한다
     if quiet_start and quiet_end:
-        if _is_quiet_time(now.time(), quiet_start, quiet_end):
+        if _is_quiet_time(now.astimezone(KST).time(), quiet_start, quiet_end):
             return False
 
     return True
