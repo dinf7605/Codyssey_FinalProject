@@ -51,7 +51,7 @@ def summarize_requests(db, start_utc, end_utc):
             raise ValueError("Incomplete response")
         for row in rows:
             key = row.get("id")
-            if not isinstance(key, str) or not key or key in seen:
+            if type(key) is not int or key <= 0 or key in seen:
                 raise ValueError("Missing or repeated ID")
             seen.add(key)
             succeeded = row.get("succeeded")

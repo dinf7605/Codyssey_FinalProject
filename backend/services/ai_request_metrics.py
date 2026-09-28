@@ -44,7 +44,6 @@ def tracked_create(client, **kwargs):
     if rows is None:
         return client.messages.create(**kwargs)
     row = {
-        "id": str(uuid4()),
         "attempt_no": len(rows) + 1,
         "model": str(kwargs.get("model", ""))[:128],
         "created_at": datetime.now(timezone.utc).isoformat(),

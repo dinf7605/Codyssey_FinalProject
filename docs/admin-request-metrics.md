@@ -27,3 +27,10 @@ git status --short
 
 공용 DB 변경, .env 수정, 커밋/푸시는 자동으로 수행하지 않는다.
 실제 로그인 및 공용 DB 저장·조회 검증은 팀 연동 후 별도 수행한다.
+
+## 팀 DB 기준 반영
+
+- SQL: backend/migrations/015_ai_request_logs.sql (팀 채널에서 번호 확정 필요).
+- id는 bigint identity이며 관리자 집계는 양의 정수 ID를 검증한다. run_id는 실행 간 구분용 UUID를 유지한다.
+- 사용자 식별자 없는 전역 운영 로그이며 관리자 권한으로만 집계한다.
+- 담당 C가 공용 DB 적용·이력·Advisors를 확인한 뒤 활성화한다. 개인 SQL Editor에서는 실행하지 않는다.

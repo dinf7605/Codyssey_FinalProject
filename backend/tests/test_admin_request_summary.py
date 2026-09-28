@@ -10,7 +10,7 @@ from services.admin_request_summary import (
 
 
 def row(key, succeeded=True, **values):
-    return {"id": str(key), "succeeded": succeeded,
+    return {"id": int(key), "succeeded": succeeded,
             **dict.fromkeys(TOKEN_FIELDS), **values}
 
 
@@ -85,7 +85,7 @@ class RequestSummaryTests(unittest.TestCase):
         self.assertEqual(self.payload(FakeDB([row(1)]))['summary']['failure_rate_percent'], 0)
 
     def test_server_page_cap_is_respected(self):
-        db = FakeDB([row(i) for i in range(7)], cap=2)
+        db = FakeDB([row(i + 1) for i in range(7)], cap=2)
         self.assertEqual(self.payload(db)['summary']['request_count'], 7)
         self.assertEqual(db.executions, 4)
 
@@ -126,6 +126,13 @@ class RequestSummaryTests(unittest.TestCase):
             with self.subTest(value=value):
                 self.assertEqual(self.payload(FakeDB([row(1, input_tokens=value)]))['status'], 'unavailable')
 
+    def test_identity_id_must_be_a_positive_integer(self):
+        for key in ["uuid-from-legacy-schema", True, 0, -1, None]:
+            with self.subTest(key=key):
+                item = row(1)
+                item["id"] = key
+                self.assertEqual(self.payload(FakeDB([item]))["status"], "unavailable")
+
     def test_invalid_success_flag(self):
         self.assertEqual(self.payload(FakeDB([row(1, succeeded=1)]))['status'], 'unavailable')
 
@@ -133,7 +140,7 @@ class RequestSummaryTests(unittest.TestCase):
         self.assertEqual(self.payload(FakeDB(counts=[None]))['status'], 'unavailable')
 
     def test_read_request_limit(self):
-        data = self.payload(FakeDB([row(i) for i in range(101)], cap=1))
+        data = self.payload(FakeDB([row(i + 1) for i in range(101)], cap=1))
         self.assertEqual(data['status'], 'limit_exceeded')
 
     def test_invalid_date(self):

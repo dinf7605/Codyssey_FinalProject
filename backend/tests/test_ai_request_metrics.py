@@ -47,7 +47,7 @@ class MetricsTests(unittest.TestCase):
         self.assertEqual(len(rows), 2)
         self.assertEqual([r["attempt_no"] for r in rows], [1, 2])
         self.assertEqual(rows[0]["run_id"], rows[1]["run_id"])
-        self.assertNotEqual(rows[0]["id"], rows[1]["id"])
+        self.assertTrue(all("id" not in item for item in rows))  # DB identity supplies the ID
         self.assertEqual(rows[0]["input_tokens"], 0)
         self.assertEqual(rows[0]["cache_read_input_tokens"], 30)
         self.assertEqual(len(client.calls), 2)
@@ -119,7 +119,7 @@ class MetricsTests(unittest.TestCase):
     def test_persistence_enabled_is_single_batch(self):
         db = MagicMock()
         module = SimpleNamespace(get_supabase_client=lambda: db)
-        rows = [{"id": "a"}, {"id": "b"}]
+        rows = [{"attempt_no": 1}, {"attempt_no": 2}]
         with patch.dict(os.environ, {"AI_REQUEST_METRICS_ENABLED": "1"}):
             with patch.dict("sys.modules", {"db": module}):
                 metrics._persist_rows(rows)
