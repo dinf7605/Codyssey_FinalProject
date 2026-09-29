@@ -33,7 +33,7 @@ pytest -q                     # 테스트
 | 자동 재시도 | 끔 (`max_retries=0`) | SDK 가 타임아웃마다 2번 더 기다려 사용자 대기가 3배 |
 | 시간 제한 | 기능마다 `get_client(timeout=…)` 로 준다 — 학습 분해 전체 60초, 짧은 문장 20초 | |
 | 키 없음·실패 | `get_client()` 가 `None` → 규칙·템플릿으로 대체. 결과에 AI 여부를 남긴다 (`source`, `ai_generated`) | AI 가 조용히 실패해도 모른다 — B 의 추천 이유가 실제로 그랬다 |
-| OpenAI 형식 | 이 키로는 `/v1/chat/completions` 가 **403**. 임베딩 API 도 없다 | 임베딩은 별도 수단이 필요 (D·B 과제) |
+| OpenAI 형식 | 이 키로는 `/v1/chat/completions` 가 **403**. 임베딩 API 도 없다 | 09-29 결정: 임베딩 없이 Claude 관련성 판단으로 검색 (`goal_claude.py` · `contest_claude.py`). JSON 뒤에 설명이 붙어 오면 `llm.json_object_of()` 로 첫 객체만 읽는다 |
 
 쓸 수 있는 모델: `claude-sonnet-4` · `claude-haiku-4` · `claude-opus-4-8`. 바꿀 때는 `.env` 의 `ANTHROPIC_MODEL` / `ANTHROPIC_HAIKU_MODEL`.
 테스트는 `conftest.py` 가 키를 지워서 실제 Claude 를 부르지 않는다 (느리고 비용이 든다).
@@ -333,7 +333,7 @@ pytest -q       # 전체 237개 (C 담당 124개)
 
 - 데이터베이스에는 `migrations/016_wevity_link_only.sql`이 필요하다. 016은 제목·링크 전용 공고에 마감일이 없을 수 있게 한다. 날짜 없는 공고는 사용자가 원문에서 마감일을 확인해 직접 입력한 뒤 준비 기간을 계산한다. 입력값은 계산 단계에서 DB에 저장하지 않고, 사용자가 일정을 확정하면 계획 정보로 저장된다.
 - `GET /contests/recommendations?tags=AI`는 저장된 공고 최대 20건의 **제목과 관심 키워드만** Codyssey Claude Haiku 게이트웨이에 보내 관련성을 판단한다. 응답의 공고 ID·점수를 검증한 뒤 최대 5건을 재랭킹한다. Claude 키가 없거나 호출·응답 검증이 실패하면 제목 키워드 일치로 복구한다. Claude가 정상적으로 빈 결과를 주면 관련 공고가 없다고 안내한다. 위비티 추천의 자격 점수는 검증되지 않은 중립값이며 지원 자격을 단정하지 않는다.
-- 이 방식은 **임베딩·pgvector RAG가 아니다**. 교육 과정에서 제공하는 Claude Messages 게이트웨이에 임베딩 API가 없어 `FR-CONT-02`의 원래 색인 요건은 충족하지 못한다. 이전 실험용 `017_contest_title_vectors.sql` 파일은 호환성 기록으로 남겨 두되 적용할 필요가 없다. 관리자 화면의 기존 색인 상태도 과거 데이터 점검용이다.
+- 이 방식은 **임베딩·pgvector 가 아니라 Claude 관련성 판단으로 하는 RAG** 다. 교육 과정에서 제공하는 Claude Messages 게이트웨이에 임베딩 API가 없어, 09-29 팀 결정으로 `FR-CONT-02`의 색인 요건을 이 방식으로 대체했다 (기획서 4-4). 목표 카탈로그(RAG ①)도 같은 방식이다 — `services/goal_claude.py`. 이전 실험용 `017_contest_title_vectors.sql` 파일은 호환성 기록으로 남겨 두되 적용할 필요가 없다. 관리자 화면의 기존 색인 상태도 과거 데이터 점검용이다.
 - `.github/workflows/contest-jobs.yml`은 기본 비활성화다. 추천만 운영하려면 배포 API의 `BATCH_SECRET`과 GitHub Secrets `BATCH_SECRET`·`STUDYPACE_API_BASE`를 설정하고 Repository variable `CONTEST_RECOMMENDATIONS_ENABLED=true`로 켠다. 수집은 별도 `CONTEST_COLLECTION_ENABLED=true`에 더해 배포 API의 `WEVITY_CRAWLING_ENABLED=true`가 필요하다. 출처 정책 확인 전에는 수집을 켜지 않는다. API는 202로 즉시 응답하므로 완료 여부는 `batch_runs`에서 확인한다.
 - 계정별 관심 태그는 `PUT /memories/interest-tags`, 조회는 `GET /memories`, 항목/전체 즉시 삭제는 `DELETE /memories/{id}` / `DELETE /memories`다. 학습 기록을 새로 저장하면 최근 4주 기록으로 선호 학습 시간대·노력 편차·완료율을 갱신한다. 삭제한 학습 통계도 이후 새 기록이 생기면 다시 계산될 수 있다. `POST /contests/{id}/feedback`은 당시 점수를 함께 저장하고 '안 맞음' 기억의 영향은 4주마다 절반으로 줄인다. 모든 계정 데이터는 서버에서 토큰 사용자 ID로 제한한다.
 - 예전 92건의 저장 자료를 삭제하거나 배포 DB 마이그레이션을 실행하지 않았다. 팀이 자료 보관·정리와 운영 정책을 결정해야 한다.

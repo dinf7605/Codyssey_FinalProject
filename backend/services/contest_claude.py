@@ -89,18 +89,11 @@ def _ask(client, candidates: list[Contest], tags: list[str]) -> tuple[dict[str, 
         # 예외 본문에는 키·요청 내용이 섞일 수 있어 종류만 남긴다
         return None, f"게이트웨이 오류 ({type(exc).__name__})"
 
-    try:
-        raw = llm.text_of(response).strip()
-        if raw.startswith("```json"):
-            raw = raw[7:]
-        elif raw.startswith("```"):
-            raw = raw[3:]
-        if raw.endswith("```"):
-            raw = raw[:-3]
-        data = json.loads(raw.strip())
-    except Exception:  # noqa: BLE001 - 형식 오류도 키워드 추천으로 복구
+    # 코드블록 뒤에 설명 문장이 붙어도 첫 JSON 객체만 읽는다 (llm.json_object_of)
+    data = llm.json_object_of(response)
+    if data is None:
         return None, "응답이 JSON 이 아님"
-    if not isinstance(data, dict) or not isinstance(data.get("matches"), list):
+    if not isinstance(data.get("matches"), list):
         return None, "응답 형식 오류"
 
     scores: dict[str, float] = {}

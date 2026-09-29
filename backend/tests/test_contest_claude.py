@@ -60,6 +60,15 @@ def test_같은_제목과_관심사_요청은_짧게_재사용한다(monkeypatch
     assert client.messages.create.call_count == 1
 
 
+def test_JSON_뒤에_설명이_붙어도_읽는다(monkeypatch):
+    client = MagicMock()
+    client.messages.create.return_value = response(
+        '```json\n{"matches":[{"id":"contest-1","score":0.8}]}\n```\n\nAI 관련 공모전입니다.'
+    )
+    monkeypatch.setattr(llm, "get_client", lambda timeout: client)
+    assert contest_claude.score_titles([CONTEST], ["설명 붙음"]) == {"contest-1": 0.8}
+
+
 def test_실제_호출만_기록하고_캐시_재사용은_기록하지_않는다(monkeypatch):
     client = MagicMock()
     client.messages.create.return_value = response('{"matches":[{"id":"contest-1","score":0.7}]}')
