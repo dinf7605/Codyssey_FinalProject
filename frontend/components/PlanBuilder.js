@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { api, getToken } from '@/lib/api';
 import { loadExploration } from '@/lib/goalSession';
+import { clearContestPlanning, loadContestPlanning } from '@/lib/contest-planning';
 import { planInput } from '@/lib/planInput';
 import { notifyPlanChanged } from '@/lib/usePlan';
 import { AiBadge, AiNotice } from './AiNotice';
@@ -42,7 +43,7 @@ function subscribeStorage(onChange) {
   window.addEventListener('storage', onChange);
   return () => window.removeEventListener('storage', onChange);
 }
-const readSaved = () => JSON.stringify(loadExploration());
+const readSaved = () => JSON.stringify({ exploration: loadExploration(), contest: loadContestPlanning() });
 const readSavedOnServer = () => 'server';
 
 function blockWhen(iso) {
@@ -55,7 +56,11 @@ function blockWhen(iso) {
 export default function PlanBuilder() {
   const [phase, setPhase] = useState('idle'); // idle | running | done | error
   const saved = useSyncExternalStore(subscribeStorage, readSaved, readSavedOnServer);
-  const input = useMemo(() => (saved === 'server' ? null : planInput(JSON.parse(saved))), [saved]);
+  const input = useMemo(() => {
+    if (saved === 'server') return null;
+    const state = JSON.parse(saved);
+    return planInput(state.exploration, new Date(), state.contest);
+  }, [saved]);
   const [last, setLast] = useState(null);
   const [tools, setTools] = useState([]); // [{name, count}] 처음 부른 순서대로
   const [elapsed, setElapsed] = useState(0);
@@ -196,6 +201,7 @@ export default function PlanBuilder() {
         availability: input.availability,
       });
       setSaveState({ state: 'saved', message: '' });
+      if (input.fromContest) clearContestPlanning();
       notifyPlanChanged(); // 같은 화면의 일정 달력이 새 계획을 다시 읽는다
     } catch (err) {
       if (err.status === 401 || err.status === 403) {

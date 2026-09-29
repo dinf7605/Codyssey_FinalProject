@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import EmptyState from '@/components/EmptyState';
-import { api } from '@/lib/api';
+import { api, getToken } from '@/lib/api';
+import { saveContestPlanning } from '@/lib/contest-planning';
 import { SOURCE_LABEL, daysLeft, safeUrl } from '@/lib/contests';
 import { dday } from '@/lib/ui';
 
@@ -26,8 +27,11 @@ const HOURS_SOURCE = {
 
 export default function ContestDetailPage() {
   const { id } = useParams();
+  const router = useRouter();
   const [state, setState] = useState({ status: 'loading', contest: null, error: '' });
   const [hours, setHours] = useState(8);
+  const [manualDeadline, setManualDeadline] = useState('');
+  const [manualField, setManualField] = useState('');
   const [estimate, setEstimate] = useState(null);
   const [estimateError, setEstimateError] = useState('');
 
@@ -42,16 +46,18 @@ export default function ContestDetailPage() {
 
   // 슬라이더를 움직이는 동안 매번 부르지 않게 잠깐 기다렸다 계산한다
   useEffect(() => {
-    if (state.status !== 'ready' || !state.contest?.deadline) return;
+    if (state.status !== 'ready') return;
+    const wevity = state.contest?.source === 'wevity';
+    if (!(wevity ? manualDeadline : state.contest?.deadline)) return;
     let alive = true;
     const timer = setTimeout(() => {
-      api.contests.estimate(id, hours).then(
+      api.contests.estimate(id, hours, wevity ? { deadline: manualDeadline, field: manualField } : {}).then(
         (res) => { if (alive) { setEstimate(res); setEstimateError(''); } },
         (err) => alive && setEstimateError(err.message || '준비 기간을 계산하지 못했습니다.'),
       );
     }, 250);
     return () => { alive = false; clearTimeout(timer); };
-  }, [id, hours, state.status, state.contest?.deadline]);
+  }, [id, hours, manualDeadline, manualField, state.status, state.contest?.deadline, state.contest?.source]);
 
   if (state.status === 'loading') return <p className="hint">공고를 불러오는 중…</p>;
   if (state.status !== 'ready') {
@@ -65,6 +71,21 @@ export default function ContestDetailPage() {
   }
 
   const c = state.contest;
+  function continueToPlan() {
+    if (!estimate) return;
+    try {
+      saveContestPlanning({
+        contestId: c.id, title: c.title,
+        deadline: c.source === 'wevity' ? manualDeadline : c.deadline,
+        field: c.source === 'wevity' ? manualField : (c.fields[0] || ''),
+        weeklyHours: hours, weeksNeeded: estimate.weeks_needed,
+      });
+      const destination = '/schedule#plan-builder';
+      router.push(getToken() ? destination : `/signup?next=${encodeURIComponent(destination)}`);
+    } catch (error) {
+      setEstimateError(error.message || '계산값을 이 탭에 저장하지 못했습니다.');
+    }
+  }
   if (c.source === 'wevity') {
     const url = safeUrl(c.source_url);
     return (
@@ -74,6 +95,33 @@ export default function ContestDetailPage() {
         <p className="muted">출처: 위비티</p>
         <p className="hint">지원 자격, 접수 기간, 제출 방법은 위비티의 공고 원문에서 확인해 주세요.</p>
         {url && <a className="btn btn-primary" href={url} target="_blank" rel="noopener noreferrer">위비티에서 공고 확인하기 ↗</a>}
+        <section className="panel" style={{ padding: 'var(--gap-4)', marginTop: 'var(--gap-4)' }}>
+          <h2 style={{ fontSize: 15 }}>준비 기간 계산</h2>
+          <p className="hint">원문에서 마감일을 확인해 직접 입력해 주세요. 입력한 날짜·분야·시간은 서버에 저장하지 않습니다.</p>
+          <div className="field" style={{ marginTop: 'var(--gap-3)' }}>
+            <label htmlFor="wevity-deadline">원문에서 확인한 마감일</label>
+            <input id="wevity-deadline" type="date" className="input" value={manualDeadline}
+              onChange={(event) => { setManualDeadline(event.target.value); setEstimate(null); }} />
+          </div>
+          <div className="field" style={{ marginTop: 'var(--gap-3)' }}>
+            <label htmlFor="wevity-field">분야 (선택)</label>
+            <input id="wevity-field" className="input" value={manualField} maxLength={50}
+              placeholder="예: 과학/공학" onChange={(event) => { setManualField(event.target.value); setEstimate(null); }} />
+          </div>
+          <div className="field" style={{ marginTop: 'var(--gap-3)' }}>
+            <label htmlFor="wevity-hours">주당 투입 가능 시간: {hours}시간</label>
+            <input id="wevity-hours" type="range" min={1} max={30} value={hours}
+              onChange={(event) => { setHours(Number(event.target.value)); setEstimate(null); }} />
+          </div>
+          {estimateError && <p className="hint hint-error" role="alert">{estimateError}</p>}
+          {estimate && <p className="hint" role="status">
+            최소 {estimate.weeks_needed}주 · {VERDICT[estimate.verdict].label}. {estimate.message}
+            {' '}기준 {estimate.standard_hours}시간 ({HOURS_SOURCE[estimate.hours_source]}, 추정치).
+          </p>}
+          <button type="button" className="btn btn-primary" disabled={!estimate || estimate.verdict === 'impossible'} onClick={continueToPlan}>
+            이 준비 기간으로 일정 만들기
+          </button>
+        </section>
       </>
     );
   }
@@ -159,9 +207,10 @@ export default function ContestDetailPage() {
           </>
         )}
 
-        <Link className="btn btn-primary" href="/schedule#plan-builder" style={{ marginTop: 'var(--gap-4)' }}>
+        <button type="button" className="btn btn-primary" disabled={!estimate || estimate.verdict === 'impossible'}
+          onClick={continueToPlan} style={{ marginTop: 'var(--gap-4)' }}>
           이 공모전 준비 일정 만들기
-        </Link>
+        </button>
         <p className="hint" style={{ marginTop: 6, textAlign: 'center' }}>
           일정 저장에는 가입이 필요합니다 · 계획 만들기에서 공모전 이름을 목표로 넣어 주세요
         </p>

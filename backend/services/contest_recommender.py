@@ -1,6 +1,6 @@
 """공고 제목과 직접 입력한 관심 태그를 비교하는 검증 가능한 기본 추천.
 
-위비티 원문·포스터·세부 자격을 추측하지 않는다. 향후 벡터 색인이 들어와도
+위비티 원문·포스터·세부 자격을 추측하지 않는다. Claude가 제목 관련성을 판단해도
 근거 없는 자격 적합 판정과 생성된 공고를 반환하지 않도록 이 경계를 유지한다.
 """
 
@@ -22,6 +22,8 @@ def matching_tags(contest: Contest, tags: list[str]) -> list[str]:
 def rank_contests(
     contests: list[Contest], tags: list[str], rejected: set[str], today: date,
     similarities: dict[str, float] | None = None,
+    previous_ids: set[str] | None = None,
+    goal_deadline: date | None = None,
 ) -> list[dict]:
     if not tags:
         return []
@@ -30,6 +32,8 @@ def rank_contests(
         if contest.id in rejected or contest.status not in ("open", "upcoming", "unknown"):
             continue
         if contest.deadline is not None and contest.deadline < today:
+            continue
+        if goal_deadline and contest.deadline and contest.deadline > goal_deadline:
             continue
         matched = matching_tags(contest, tags)
         if not matched and similarities is None:
@@ -48,9 +52,21 @@ def rank_contests(
             "eligibility_score": eligibility_score, "rerank_score": rerank_score,
             "reason": (f"공고 제목에 관심 키워드 ‘{matched[0]}’가 포함되어 있습니다. 응모 자격은 원문에서 확인해 주세요."
                        if matched else "공고 제목이 관심 분야와 의미상 유사합니다. 응모 자격은 원문에서 확인해 주세요."),
-            "ai_generated": False,
+            "ai_generated": similarities is not None,
         })
-    return sorted(ranked, key=lambda row: (-row["rerank_score"], row["contest"].deadline or date.max))[:5]
+    ordered = sorted(ranked, key=lambda row: (-row["rerank_score"], row["contest"].deadline or date.max))
+    previous_ids = previous_ids or set()
+    selected: list[dict] = []
+    repeated = 0
+    for row in ordered:
+        was_recommended = row["contest"].id in previous_ids
+        if was_recommended and repeated >= 3:
+            continue
+        selected.append(row)
+        repeated += int(was_recommended)
+        if len(selected) == 5:
+            break
+    return selected
 
 
 def recommendation_week(today: date) -> str:

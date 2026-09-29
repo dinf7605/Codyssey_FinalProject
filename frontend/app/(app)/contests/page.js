@@ -23,11 +23,12 @@ export default function ContestsPage() {
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [filters, setFilters] = useState({ query: '', field: '', eligibility: '', deadlineBefore: '', sort: 'deadline' });
 
   const { memory, ready } = useContestInterestMemory();
   const savedKeywords = memory?.keywords.join(', ') || '';
   const inputValue = input ?? savedKeywords;
-  const activeKeywords = request?.keywords ?? savedKeywords;
+  const activeKeywords = request?.mode === 'recommend' ? request.keywords : savedKeywords;
 
   useEffect(() => {
     if (!getToken()) return;
@@ -44,10 +45,14 @@ export default function ContestsPage() {
     if (!ready) return;
     const controller = new AbortController();
     const keywords = splitKeywords(activeKeywords);
-    searchByKeywords(keywords, { signal: controller.signal })
+    const search = request?.mode === 'filters'
+      ? api.contests.search({ ...request.filters, limit: 20 }, { signal: controller.signal })
+          .then((data) => ({ items: data.items.map((item) => ({ ...item, matched: [] })), total: data.total, keywords: [] }))
+      : searchByKeywords(keywords, { signal: controller.signal });
+    search
       .then((data) => {
         if (!controller.signal.aborted) {
-          setResult({ ...data, keywords });
+          setResult({ ...data, keywords: request?.mode === 'filters' ? [] : keywords });
           setLoading(false);
         }
       })
@@ -68,10 +73,25 @@ export default function ContestsPage() {
     setLoading(true);
     setError('');
     setResult(null);
-    setRequest({ keywords });
+    setRequest({ mode: 'recommend', keywords });
   }
 
-  const recommended = Boolean(result?.keywords.length);
+  function searchWithFilters(event) {
+    event.preventDefault();
+    setLoading(true);
+    setError('');
+    setResult(null);
+    setRequest({ mode: 'filters', filters: { ...filters } });
+  }
+
+  function retry() {
+    setLoading(true);
+    setError('');
+    setResult(null);
+    setRequest(request ? { ...request } : { mode: 'recommend', keywords: '' });
+  }
+
+  const recommended = request?.mode !== 'filters' && Boolean(result?.keywords.length);
 
   return (
     <>
@@ -132,12 +152,43 @@ export default function ContestsPage() {
         </div>
       </section>
 
+      <section className={styles.searchPanel} aria-labelledby="contest-filter-heading">
+        <h2 id="contest-filter-heading" className={styles.sectionTitle}>조건으로 공모전 찾기</h2>
+        <form className={styles.filterGrid} onSubmit={searchWithFilters}>
+          <label className="field">검색어
+            <input className="input" value={filters.query} maxLength={100} placeholder="제목 또는 주최"
+              onChange={(event) => setFilters((old) => ({ ...old, query: event.target.value }))} />
+          </label>
+          <label className="field">분야 (정확한 명칭)
+            <input className="input" value={filters.field} maxLength={50} placeholder="예: 과학/공학"
+              onChange={(event) => setFilters((old) => ({ ...old, field: event.target.value }))} />
+          </label>
+          <label className="field">응모 대상
+            <input className="input" value={filters.eligibility} maxLength={100} placeholder="예: 대학생"
+              onChange={(event) => setFilters((old) => ({ ...old, eligibility: event.target.value }))} />
+          </label>
+          <label className="field">이 날짜까지 마감
+            <input className="input" type="date" value={filters.deadlineBefore}
+              onChange={(event) => setFilters((old) => ({ ...old, deadlineBefore: event.target.value }))} />
+          </label>
+          <label className="field">정렬
+            <select className="input" value={filters.sort}
+              onChange={(event) => setFilters((old) => ({ ...old, sort: event.target.value }))}>
+              <option value="deadline">마감 임박순</option>
+              <option value="latest">최신순</option>
+            </select>
+          </label>
+          <button className="btn btn-sm" type="submit" disabled={loading}>조건 검색</button>
+        </form>
+        <p className="hint">위비티 제목·링크 전용 공고는 분야·마감일·응모 대상 정보가 없어 해당 조건을 적용하면 결과에서 제외됩니다.</p>
+      </section>
+
       <ContestInterestMemory draftKeywords={inputValue} onApply={load} disabled={loading} />
 
       <section className={styles.results} aria-labelledby="contest-results-heading" aria-busy={loading}>
         <div className="sec-head">
           <h2 id="contest-results-heading" className={styles.sectionTitle}>
-            {recommended ? '관심 키워드 추천' : '공모전 목록'}
+            {request?.mode === 'filters' ? '조건 검색 결과' : recommended ? '관심 키워드 추천' : '공모전 목록'}
           </h2>
           <span className="muted" role="status" aria-live="polite">
             {loading ? '불러오는 중' : error ? '연결 확인 필요' : result && result.total > result.items.length ? `${result.total}개 중 ${result.items.length}개` : `${result?.total ?? 0}개`}
@@ -151,7 +202,7 @@ export default function ContestsPage() {
               title="목록을 불러오지 못했습니다"
               description={error}
               action={
-                <button className="btn btn-sm" type="button" onClick={() => load(activeKeywords)}>
+                <button className="btn btn-sm" type="button" onClick={retry}>
                   다시 시도
                 </button>
               }
@@ -169,7 +220,7 @@ export default function ContestsPage() {
             {result.items.length === 0 ? (
               <EmptyState
                 title="일치하는 공모전이 없습니다"
-                description="다른 키워드를 입력하거나 전체 공모전을 확인해 보세요."
+                description="검색 조건을 줄이거나 전체 공모전을 확인해 보세요."
                 action={
                   <button className="btn btn-sm" type="button" onClick={() => load('')}>
                     전체 공모전 보기
@@ -186,11 +237,12 @@ export default function ContestsPage() {
                   return (
                     <li className={styles.card} key={contest.id}>
                       <div className={styles.cardTop}>
+                        {recommended && <span className="pill">{contest.aiGenerated ? 'AI 추천' : '키워드 추천'}</span>}
                         {!limited && left !== null && <span className={left <= 7 ? 'tag tag-late' : 'tag'}>
                           {contest.status === 'upcoming' ? '접수 예정' : dday(left)}
                         </span>}
                         {contest.matched.length > 0 && (
-                          <span className="tiny muted">키워드 {contest.matched.length}개 일치</span>
+                          <span className="tiny muted">근거 태그: {contest.matched.join(', ')}</span>
                         )}
                       </div>
                       <h3 className={styles.cardTitle}>
@@ -226,7 +278,7 @@ export default function ContestsPage() {
       </section>
 
       <p className="hint">
-        제목 키워드 또는 제목 임베딩으로 찾은 추천입니다. AI 추천은 부정확할 수 있으며 응모 자격 충족 여부는 판단하지 않습니다.
+        제목 키워드 또는 Claude가 제목과 관심 키워드를 비교해 찾은 추천입니다. AI 추천은 부정확할 수 있으며 응모 자격 충족 여부는 판단하지 않습니다.
       </p>
     </>
   );

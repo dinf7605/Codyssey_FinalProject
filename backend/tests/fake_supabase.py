@@ -91,6 +91,14 @@ class _Query:
         self.filters.append((column, _Lt(value)))
         return self
 
+    def gte(self, column, value):
+        self.filters.append((column, _Gte(value)))
+        return self
+
+    def lte(self, column, value):
+        self.filters.append((column, _Lte(value)))
+        return self
+
     def order(self, column, desc=False):
         self._order = (column, desc)
         return self
@@ -105,7 +113,7 @@ class _Query:
         return self
 
     def _matches(self, row):
-        return all(v.has(row.get(c)) if isinstance(v, (_In, _Lt)) else row.get(c) == v for c, v in self.filters)
+        return all(v.has(row.get(c)) if isinstance(v, (_In, _Lt, _Gte, _Lte)) else row.get(c) == v for c, v in self.filters)
 
     def execute(self):
         table = self.db.tables.setdefault(self.name, [])
@@ -173,3 +181,19 @@ class _Lt:
 
     def has(self, value):
         return value is not None and value < self.value
+
+
+class _Gte:
+    def __init__(self, value):
+        self.value = value
+
+    def has(self, value):
+        return value is not None and value >= self.value
+
+
+class _Lte:
+    def __init__(self, value):
+        self.value = value
+
+    def has(self, value):
+        return value is not None and value <= self.value

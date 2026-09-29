@@ -86,8 +86,8 @@
 | LLM 접속 | Codyssey 게이트웨이 | 과정 제공 키. 호출은 `backend/services/llm.py` 에서만 — 규칙은 `backend/README.md` |
 | LLM (주) | Claude Sonnet 4 (`claude-sonnet-4`) | 도구 호출 + 고정 JSON 스키마 준수가 동시에 필요한 구간 |
 | LLM (보조) | Claude Haiku 4 (`claude-haiku-4`) | 추천 이유처럼 짧고 잦은 호출은 빠른 모델로 분리 |
-| 임베딩 | `text-embedding-3-small` (1536차원) | 한국어 공고 검색 정확도 대비 비용 우위 |
-| DB · 인증 · 벡터 | Supabase (PostgreSQL + pgvector + Auth) | 업무 데이터·벡터·메모리를 한 DB에서 조인 · 가입/로그인이 설정으로 해결 |
+| 공모전 관련성 | Claude Haiku 4 (제목 최대 20건 평가) | 과정 제공 키만 사용. 호출 실패 시 제목 키워드 추천 |
+| DB · 인증 · 벡터 확장 | Supabase (PostgreSQL + pgvector + Auth) | 업무 데이터·메모리와 가입/로그인 관리. 현재 공모전 추천에는 벡터를 사용하지 않음 |
 | 실시간 집계 | PostgreSQL (1차) → Redis (확장 시) | 실사용자 5~10명 규모에서는 테이블 집계로 충분 · 배울 기술을 하나 줄임 |
 | 자동화 | **Make** | **팀이 이미 쓸 줄 아는 도구** · 반복은 Python에서 돌리고 Make는 트리거만 담당 |
 | 배포 | **Vercel** (프론트) · Railway (백엔드) | GitHub 연동 자동 배포 · **Vercel 경험 활용** |

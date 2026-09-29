@@ -60,6 +60,8 @@ pytest -q                     # 테스트
 | `007_goal_feedback.sql` | B | `goal_feedback` — 목표 추천 피드백 (FR-GOAL-08). 09-28 적용, 정책을 `(select auth.uid())` 로 고쳐서 |
 | `014_notification_settings.sql` | E | `user_notification_settings`(알림 켜기·방해금지·강도) + `notification_logs.block_id`·중복 방지 인덱스. 개인 DB 기준이던 005·006 을 공용 기준으로 다시 쓴 것 (005·006 파일은 삭제) |
 | `015_ai_request_logs.sql` | E | `ai_request_logs` — 학습 분해의 Claude 요청 한 번에 한 행 (성공·실패, 오류 종류, 토큰). 사용자 식별자·본문 없음. 09-29 적용 · 저장은 `AI_REQUEST_METRICS_ENABLED=1` 일 때만 |
+| `016_wevity_link_only.sql` | D | 위비티 제목·링크 전용 공고의 빈 마감일 허용 |
+| `017_contest_title_vectors.sql` | D | 이전 OpenAI 임베딩 설계의 선택적 RPC. Claude 제목 추천에는 필요하지 않음 |
 
 공용 DB 에 무엇이 적용됐는지는 Supabase 대시보드 → Database → Migrations 에서 본다 (적용한 이름이 이 표의 파일 이름과 같다).
 
@@ -327,13 +329,13 @@ pytest -q       # 전체 237개 (C 담당 124개)
 | 요청 간격 | 여러 목록을 요청할 때 사이에 3초 |
 | 기록 | `batch_runs` (`job_name=contest.collect`) — 성공·부분 성공·실패와 건수 |
 | 수동 실행 | `cd backend` 후 `python -m scripts.collect_contests --dry-run` (활성화한 경우만) |
-| 매일 실행 | `POST /contests/collect` + `X-Batch-Key`. 외부 스케줄러 설정은 담당 E와 연결 필요 |
+| 매일 실행 | `POST /contests/collect` + `X-Batch-Key`. GitHub Actions에서 별도 스위치로 관리 |
 
-- 데이터베이스에 `migrations/016_wevity_link_only.sql` → `017_contest_title_vectors.sql` 순서로 적용한다. 016은 제목·링크 전용 공고에 마감일이 없을 수 있게 한다. 날짜 없는 공고는 준비 기간 산정 대신 원문 확인으로 안내한다.
-- `GET /contests/recommendations?tags=AI`는 제목 임베딩이 준비되면 pgvector 유사도 0.62 이상 후보 20건을 재랭킹해 5건까지 반환한다. `OPENAI_API_KEY`가 없거나 벡터 검색이 실패하면 제목 키워드 일치로 복구한다. 빈 결과는 실제로 찾지 못했다는 뜻이다. 위비티 추천의 자격 점수는 검증되지 않은 중립값이며 지원 자격을 단정하지 않는다.
-- `FR-CONT-02` 색인은 수집 직후 키가 있을 때 실행한다. 제목 외의 정보는 임베딩에 보내지 않는다. 색인 스키마를 적용하지 않았거나 키가 없으면 키워드 추천만 제공한다.
-- 기존 DB 공고를 웹 재수집 없이 색인하려면 `cd backend` 후 `python -m scripts.index_contests`를 실행한다. OpenAI 키가 없으면 실행하지 않는다.
-- 계정별 관심 태그는 `PUT /memories/interest-tags`, 조회는 `GET /memories`, 항목/전체 즉시 삭제는 `DELETE /memories/{id}` / `DELETE /memories`다. `POST /contests/{id}/feedback`은 당시 점수를 함께 저장하고 '안 맞음' 기억의 영향은 4주마다 절반으로 줄인다. 모든 계정 데이터는 서버에서 토큰 사용자 ID로 제한한다.
+- 데이터베이스에는 `migrations/016_wevity_link_only.sql`이 필요하다. 016은 제목·링크 전용 공고에 마감일이 없을 수 있게 한다. 날짜 없는 공고는 사용자가 원문에서 마감일을 확인해 직접 입력한 뒤 준비 기간을 계산한다. 입력값은 계산 단계에서 DB에 저장하지 않고, 사용자가 일정을 확정하면 계획 정보로 저장된다.
+- `GET /contests/recommendations?tags=AI`는 저장된 공고 최대 20건의 **제목과 관심 키워드만** Codyssey Claude Haiku 게이트웨이에 보내 관련성을 판단한다. 응답의 공고 ID·점수를 검증한 뒤 최대 5건을 재랭킹한다. Claude 키가 없거나 호출·응답 검증이 실패하면 제목 키워드 일치로 복구한다. Claude가 정상적으로 빈 결과를 주면 관련 공고가 없다고 안내한다. 위비티 추천의 자격 점수는 검증되지 않은 중립값이며 지원 자격을 단정하지 않는다.
+- 이 방식은 **임베딩·pgvector RAG가 아니다**. 교육 과정에서 제공하는 Claude Messages 게이트웨이에 임베딩 API가 없어 `FR-CONT-02`의 원래 색인 요건은 충족하지 못한다. 이전 실험용 `017_contest_title_vectors.sql` 파일은 호환성 기록으로 남겨 두되 적용할 필요가 없다. 관리자 화면의 기존 색인 상태도 과거 데이터 점검용이다.
+- `.github/workflows/contest-jobs.yml`은 기본 비활성화다. 추천만 운영하려면 배포 API의 `BATCH_SECRET`과 GitHub Secrets `BATCH_SECRET`·`STUDYPACE_API_BASE`를 설정하고 Repository variable `CONTEST_RECOMMENDATIONS_ENABLED=true`로 켠다. 수집은 별도 `CONTEST_COLLECTION_ENABLED=true`에 더해 배포 API의 `WEVITY_CRAWLING_ENABLED=true`가 필요하다. 출처 정책 확인 전에는 수집을 켜지 않는다. API는 202로 즉시 응답하므로 완료 여부는 `batch_runs`에서 확인한다.
+- 계정별 관심 태그는 `PUT /memories/interest-tags`, 조회는 `GET /memories`, 항목/전체 즉시 삭제는 `DELETE /memories/{id}` / `DELETE /memories`다. 학습 기록을 새로 저장하면 최근 4주 기록으로 선호 학습 시간대·노력 편차·완료율을 갱신한다. 삭제한 학습 통계도 이후 새 기록이 생기면 다시 계산될 수 있다. `POST /contests/{id}/feedback`은 당시 점수를 함께 저장하고 '안 맞음' 기억의 영향은 4주마다 절반으로 줄인다. 모든 계정 데이터는 서버에서 토큰 사용자 ID로 제한한다.
 - 예전 92건의 저장 자료를 삭제하거나 배포 DB 마이그레이션을 실행하지 않았다. 팀이 자료 보관·정리와 운영 정책을 결정해야 한다.
 
 ## 남은 작업

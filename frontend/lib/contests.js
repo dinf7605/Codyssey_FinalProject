@@ -31,7 +31,7 @@ export async function searchByKeywords(keywords, options = {}) {
   const res = await api.contests.recommend(keywords.slice(0, 10).join(', '));
   const items = res.items.map((item) => ({
     ...item.contest, matched: item.matching_tags, reason: item.reason,
-    aiGenerated: res.method === 'title_vectors',
+    aiGenerated: res.method === 'title_claude',
   }));
   return { items, total: items.length };
 }

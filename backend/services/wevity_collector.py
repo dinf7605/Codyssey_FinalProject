@@ -12,6 +12,7 @@ import time
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from typing import Callable
+from urllib.robotparser import RobotFileParser
 
 import httpx
 
@@ -41,6 +42,17 @@ def fetch_html(url: str) -> str:
     response = httpx.get(url, headers={"User-Agent": USER_AGENT}, timeout=20.0, follow_redirects=True)
     response.raise_for_status()
     return response.text
+
+
+def robots_allows(url: str) -> bool:
+    """목록을 요청하기 전 robots.txt를 확인한다. 읽기 실패 시 수집하지 않는다."""
+    response = httpx.get(f"{BASE_URL}/robots.txt", headers={"User-Agent": USER_AGENT}, timeout=20.0)
+    if response.status_code == 404:
+        return True
+    response.raise_for_status()
+    rules = RobotFileParser()
+    rules.parse(response.text.splitlines())
+    return rules.can_fetch(USER_AGENT, url)
 
 
 def today_kst() -> date:
@@ -80,7 +92,6 @@ class CollectResult:
     skipped_closed: int = 0
     saved: int = 0
     failed: int = 0
-    indexed: int = 0
     run_id: str | None = None
     errors: list[str] = field(default_factory=list)
 
@@ -93,6 +104,7 @@ def collect(
     refresh: bool = False,
     dry_run: bool = False,
     fetch: Callable[[str], str] = fetch_html,
+    allowed: Callable[[str], bool] | None = None,
     sleep: Callable[[float], None] = time.sleep,
     now: datetime | None = None,
 ) -> CollectResult:
@@ -108,8 +120,10 @@ def collect(
         }).execute().data[0]["id"]
         result.run_id = run_id
 
-    known = set() if (refresh or dry_run) else {
-        r["source_id"] for r in db.table("contests").select("source_id").eq("source", SOURCE).execute().data
+    known = {} if (refresh or dry_run) else {
+        r["source_id"]: r["content_hash"] for r in db.table("contests").select(
+            "source_id,content_hash"
+        ).eq("source", SOURCE).execute().data
     }
     seen: set[str] = set()
     rows: list[dict] = []
@@ -126,8 +140,14 @@ def collect(
         for page in range(1, pages + 1):
             if result.listed >= MAX_ITEMS:
                 break
+            url = list_url(category, page)
             try:
-                items = parse_wevity_links(polite_fetch(list_url(category, page)), base_url=BASE_URL)
+                checker = allowed or (robots_allows if fetch is fetch_html else None)
+                if checker and not checker(url):
+                    result.failed += 1
+                    result.errors.append(f"목록 {category}-{page}: robots.txt에서 허용하지 않음")
+                    continue
+                items = parse_wevity_links(polite_fetch(url), base_url=BASE_URL)
             except Exception as exc:  # noqa: BLE001 - 한 분야가 실패해도 다른 분야는 계속한다
                 result.failed += 1
                 result.errors.append(f"목록 {category}-{page}: {type(exc).__name__}")
@@ -139,7 +159,7 @@ def collect(
                     continue
                 seen.add(item.source_id)
                 result.listed += 1
-                if item.source_id in known:
+                if known.get(item.source_id) == _content_hash(item):
                     result.skipped_known += 1
                     continue
                 rows.append(to_row(item, now))
@@ -181,33 +201,11 @@ def running(db, now: datetime) -> bool:
 
 
 def run_daily(db, now: datetime | None = None) -> CollectResult:
-    """배치 호출: 허용 설정을 확인하고 목록 수집 후 제목 색인을 시도한다."""
+    """배치 호출: 허용 설정을 확인하고 목록의 제목·링크만 수집한다."""
     if not crawling_enabled():
         raise RuntimeError("위비티 수집이 비활성화되어 있습니다")
     now = now or datetime.now(KST)
-    result = collect(db, now=now)
-    from services import contest_vector
-
-    if contest_vector.enabled():
-        try:
-            indexed, failed = contest_vector.index_titles(db)
-            result.indexed = indexed
-            result.failed += failed
-            if result.run_id:
-                db.table("batch_runs").update({
-                    "indexed_count": indexed, "failed_count": result.failed,
-                    "status": "partial" if result.failed else "success",
-                }).eq("id", result.run_id).execute()
-        except Exception as exc:  # noqa: BLE001 - 수집 성공분은 유지하고 다음 실행에서 재시도
-            result.failed += 1
-            result.errors.append(f"색인: {type(exc).__name__}")
-            if result.run_id:
-                db.table("batch_runs").update({
-                    "status": "partial" if result.saved else "failed",
-                    "failed_count": result.failed,
-                    "error_message": "; ".join(result.errors)[:500],
-                }).eq("id", result.run_id).execute()
-    return result
+    return collect(db, now=now)
 
 
 def close_expired(db, today: date) -> None:

@@ -59,7 +59,8 @@ def test_empty_list(client, database):
     response = client.get("/admin/contests")
     assert response.status_code == 200
     assert response.json() == {
-        "page": 1, "page_size": 20, "total": 0, "items": []
+        "page": 1, "page_size": 20, "total": 0, "items": [],
+        "collection_failure_streak": 0,
     }
     assert response.headers["cache-control"] == "no-store"
     queries["contest_embeddings"].execute.assert_not_called()

@@ -7,7 +7,9 @@ from __future__ import annotations
 
 import hmac
 import os
+import re
 from datetime import date, datetime, timedelta, timezone
+from types import SimpleNamespace
 from typing import Annotated
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query
@@ -28,11 +30,12 @@ from schemas.contest import (
 from services.contest_repository import (
     ContestRepository,
     ContestSearch,
+    SupabaseContestRepository,
     get_contest_repository,
 )
 from services.contest_service import estimate_preparation
 from services.contest_recommender import rank_contests, recommendation_week, rejection_weight
-from services import contest_vector
+from services import contest_claude
 from utils.auth import get_current_user, get_optional_user
 
 
@@ -102,13 +105,20 @@ def recommend_contests(
     user=Depends(get_optional_user),
     db=Depends(get_db),
 ) -> ContestRecommendationResponse:
-    """현재 저장된 공고 최대 20건을 제목 키워드로 재랭킹한다. 사용자 거절은 제외한다."""
+    """현재 저장된 공고 최대 20건을 Claude 또는 제목 키워드로 재랭킹한다."""
     user_id = str(user.id) if user else None
+    plans = db.table("study_plans").select("goal_title,deadline").eq(
+        "user_id", user_id
+    ).eq("status", "active").execute().data if user_id else []
     if tags is None and user_id:
         rows = db.table("user_memories").select("value").eq("user_id", user_id).eq(
             "memory_type", "interest_tags"
         ).eq("memory_key", "default").limit(1).execute().data
         interests = rows[0]["value"].get("tags", []) if rows else []
+        if not interests:
+            interests = [word for plan in plans
+                         for word in re.findall(r"[\w가-힣]{2,}", plan.get("goal_title", ""))
+                         if word not in {"공부", "준비", "목표"}]
     else:
         interests = [value.strip() for value in (tags or "").split(",") if value.strip()]
     interests = list(dict.fromkeys(interests))[:10]
@@ -116,6 +126,8 @@ def recommend_contests(
         return ContestRecommendationResponse(items=[], message="관심 키워드를 입력하면 공고를 추천할 수 있습니다.")
 
     rejected: set[str] = set()
+    previous_ids: set[str] = set()
+    goal_deadline = None
     if user_id:
         memories = db.table("user_memories").select("memory_key,value").eq("user_id", user_id).eq(
             "memory_type", "rejected_recommendations"
@@ -124,22 +136,21 @@ def recommend_contests(
                     if isinstance(row.get("value"), dict) and row["value"].get("rated_at")
                     and rejection_weight(row["value"]["rated_at"]) >= 0.5}
     today = datetime.now(wevity_collector.KST).date()
-    ranked = []
-    method = "title_keywords"
-    if contest_vector.enabled():
-        try:
-            matches = contest_vector.vector_candidates(db, interests)
-            scores = {row["contest_id"]: float(row["similarity"]) for row in matches}
-            candidates = [contest for contest_id in scores
-                          if (contest := repository.get(contest_id)) is not None]
-            ranked = rank_contests(candidates, interests, rejected, today, scores)
-            if ranked:
-                method = "title_vectors"
-        except Exception:  # noqa: BLE001 - 벡터 서비스 장애 시 제목 일치 검색으로 복구
-            pass
-    if not ranked:
-        candidates, _ = repository.search(ContestSearch(limit=20))
-        ranked = rank_contests(candidates, interests, rejected, today)
+    if user_id:
+        last_week = recommendation_week(today - timedelta(days=7))
+        previous = db.table("contest_recommendations").select("contest_id").eq(
+            "user_id", user_id
+        ).eq("recommendation_week", last_week).execute().data
+        previous_ids = {str(row["contest_id"]) for row in previous}
+        dates = [date.fromisoformat(row["deadline"]) for row in plans if row.get("deadline")]
+        goal_deadline = max(dates) if dates else None
+    candidates, _ = repository.search(ContestSearch(sort="latest", limit=20))
+    scores = contest_claude.score_titles(candidates, interests)
+    method = "title_claude" if scores is not None else "title_keywords"
+    ranked = rank_contests(
+        candidates, interests, rejected, today,
+        similarities=scores, previous_ids=previous_ids, goal_deadline=goal_deadline,
+    )
     if user_id and ranked:
         week = recommendation_week(today)
         db.table("contest_recommendations").upsert([{
@@ -155,6 +166,47 @@ def recommend_contests(
         method=method,
         message=None if ranked else "관심 키워드와 일치하는 공고를 찾지 못했습니다.",
     )
+
+
+def run_weekly_recommendations(db, at: datetime) -> None:
+    """월요일 09:00 외부 스케줄러가 호출한다. 사용자별 실패는 다른 사용자를 막지 않는다."""
+    run = db.table("batch_runs").insert({
+        "job_name": "contest.recommend", "status": "running", "started_at": at.isoformat(),
+    }).execute().data[0]
+    completed = failed = 0
+    repository = SupabaseContestRepository(db)
+    try:
+        offset = 0
+        while True:
+            users = db.table("users").select("auth_id").range(offset, offset + 99).execute().data
+            for row in users:
+                try:
+                    recommend_contests(repository, tags=None, user=SimpleNamespace(id=row["auth_id"]), db=db)
+                    completed += 1
+                except Exception:  # noqa: BLE001 - 한 계정의 추천 장애는 나머지 계정과 분리
+                    failed += 1
+            if len(users) < 100:
+                break
+            offset += 100
+    except Exception:  # noqa: BLE001 - 배치 실패는 batch_runs에 남긴다
+        failed += 1
+    db.table("batch_runs").update({
+        "status": "failed" if failed and not completed else "partial" if failed else "success",
+        "collected_count": completed, "failed_count": failed,
+        "finished_at": datetime.now(wevity_collector.KST).isoformat(),
+    }).eq("id", run["id"]).execute()
+
+
+@router.post("/recommend-weekly", status_code=202, description="FR-CONT-04 월요일 09:00 주간 추천 배치")
+def start_weekly_recommendations(background: BackgroundTasks, x_batch_key: str | None = Header(default=None)) -> dict:
+    expected = os.getenv("BATCH_SECRET")
+    if not expected:
+        raise HTTPException(status_code=503, detail="BATCH_SECRET 환경변수가 없어 추천 배치를 실행하지 않습니다.")
+    if not (x_batch_key and hmac.compare_digest(x_batch_key, expected)):
+        raise HTTPException(status_code=401, detail="배치 키가 맞지 않습니다.")
+    db = get_supabase_client()
+    background.add_task(run_weekly_recommendations, db, datetime.now(wevity_collector.KST))
+    return {"status": "started"}
 
 
 @router.post("/{contest_id}/feedback", response_model=ContestFeedbackResponse)
@@ -220,10 +272,17 @@ def estimate_contest_preparation(
     if contest is None:
         raise HTTPException(status_code=404, detail="공모전을 찾을 수 없습니다")
 
-    if contest.deadline is None:
-        raise HTTPException(status_code=422, detail="마감일 정보가 없어 준비 기간을 계산할 수 없습니다. 원문을 확인해 주세요.")
+    if contest.source == "wevity":
+        if request.deadline is None:
+            raise HTTPException(status_code=422, detail="위비티 원문에서 마감일을 확인한 뒤 직접 입력해 주세요.")
+        contest = contest.model_copy(update={"deadline": request.deadline})
+        fields = [request.field.strip()] if request.field and request.field.strip() else []
+    else:
+        if contest.deadline is None:
+            raise HTTPException(status_code=422, detail="마감일 정보가 없어 준비 기간을 계산할 수 없습니다. 원문을 확인해 주세요.")
+        fields = contest.fields
 
-    standard = repository.get_preparation_hours(contest.fields)
+    standard = repository.get_preparation_hours(fields)
     if standard is None:
         raise HTTPException(
             status_code=503,

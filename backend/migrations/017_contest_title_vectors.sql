@@ -1,4 +1,4 @@
--- 위비티 원문 없이 제목 임베딩만 검색한다. 서비스 키로만 호출한다.
+-- 과거 OpenAI 임베딩 설계 기록. 현재 Claude 제목 추천에는 사용하지 않으며 새 배포에 적용할 필요가 없다.
 create or replace function public.match_contest_titles(
   query_embedding vector(1536), match_count integer default 20,
   min_similarity double precision default 0.62

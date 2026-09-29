@@ -18,6 +18,7 @@ from db import get_db
 from services.aggregator import MIN_RECORDED_MINUTES, summarize
 from services import replan
 from services.plan_store import KST, active_plan_rows, plan_blocks, record_session, session_events, study_notes
+from services.study_memory import refresh_study_memories
 from utils.auth import get_current_user
 
 router = APIRouter(prefix="/study", tags=["study"])
@@ -85,6 +86,10 @@ def record(req: SessionRequest, user=Depends(get_current_user), db=Depends(get_d
         expected_minutes=req.expected_minutes,
         note=req.note,
     )
+    try:
+        refresh_study_memories(db, str(user.id))
+    except Exception:  # noqa: BLE001 - 메모리 집계 장애가 이미 저장한 학습 기록을 무효화하지 않는다
+        pass
 
     return SessionResponse(
         recorded=True,

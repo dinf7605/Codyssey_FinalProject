@@ -40,7 +40,10 @@ export default function SignupPage() {
       });
       loadExploration(); // 30분 내 목표 탐색 정보는 로그인 뒤에도 유지된다.
       setMessage('가입 요청이 완료되었습니다. 인증 메일이 왔다면 확인한 뒤 로그인해 주세요.');
-      setTimeout(() => router.push('/login'), 1500);
+      const next = new URLSearchParams(window.location.search).get('next');
+      const login = next && /^\/(?![/\\])/.test(next)
+        ? `/login?next=${encodeURIComponent(next)}` : '/login';
+      setTimeout(() => router.push(login), 1500);
     } catch (error) {
       setMessage(error.status ? '가입하지 못했습니다. 입력한 정보를 확인하고 다시 시도해 주세요.' : '서버에 연결할 수 없습니다. 백엔드 실행 상태를 확인해 주세요.');
     } finally {

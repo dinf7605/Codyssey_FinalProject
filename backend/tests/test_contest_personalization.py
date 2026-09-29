@@ -8,10 +8,11 @@ from fastapi.testclient import TestClient
 
 from db import get_db
 from main import app
+from routers import contests as contest_routes
 from routers.contests import _repository_or_503
 from schemas.contest import Contest
 from services.contest_recommender import rank_contests, rejection_weight
-from services import contest_vector
+from services import contest_claude
 from services.contest_repository import ContestSearch, SupabaseContestRepository
 from tests.fake_supabase import FakeSupabase
 from utils.auth import get_current_user, get_optional_user
@@ -97,37 +98,66 @@ def test_거절_기억은_4주마다_절반으로_줄어든다():
     assert rejection_weight((now - timedelta(days=56)).isoformat(), now) == 0.25
 
 
-def test_제목만_색인하고_변경없으면_다시_호출하지_않는다():
+def test_지난주_공고는_최대_3건만_반복하고_다음_순위로_채운다():
+    contests = [CONTEST.model_copy(update={"id": str(i), "title": f"AI 공모전 {i}"}) for i in range(6)]
+    rows = rank_contests(contests, ["AI"], set(), date(2026, 9, 29),
+                         previous_ids={str(i) for i in range(4)})
+    assert [row["contest"].id for row in rows] == ["0", "1", "2", "4", "5"]
+
+
+def test_주간_추천_배치는_사용자별_실패를_분리하고_기록한다(monkeypatch):
     db = FakeSupabase()
-    db.table("contests").insert({
-        "source": "wevity", "title": "AI 공모전", "content_hash": "hash-1",
-        "source_url": "https://www.wevity.com/?ix=1", "raw_text": "색인 금지 원문",
-        "collected_at": "2026-09-29T00:00:00+00:00",
-    }).execute()
-    calls = []
+    db.table("users").insert([{"auth_id": "u1"}, {"auth_id": "u2"}]).execute()
+    called = []
 
-    def embed(text):
-        calls.append(text)
-        return [0.1] * 1536
+    def recommend(_repository, *, tags, user, db):
+        called.append(user.id)
+        if user.id == "u2":
+            raise RuntimeError("한 사용자의 추천 실패")
 
-    assert contest_vector.index_titles(db, embed=embed) == (1, 0)
-    assert calls == ["AI 공모전"]
-    assert contest_vector.index_titles(db, embed=embed) == (0, 0)
-    assert calls == ["AI 공모전"]
+    monkeypatch.setattr(contest_routes, "recommend_contests", recommend)
+    contest_routes.run_weekly_recommendations(db, datetime(2026, 9, 28, 9, tzinfo=timezone.utc))
+    assert called == ["u1", "u2"]
+    run = db.rows("batch_runs")[0]
+    assert (run["status"], run["collected_count"], run["failed_count"]) == ("partial", 1, 1)
 
 
-def test_벡터_검색은_제목_부분문자열이_없어도_근거있는_공고만_반환한다(monkeypatch):
+def test_클로드_추천은_제목_부분문자열이_없어도_검증한_공고만_반환한다(monkeypatch):
     db = FakeSupabase()
-    monkeypatch.setattr(contest_vector, "enabled", lambda: True)
-    monkeypatch.setattr(contest_vector, "vector_candidates", lambda _db, _tags: [
-        {"contest_id": CONTEST.id, "similarity": 0.8},
-    ])
+    monkeypatch.setattr(contest_claude, "score_titles", lambda _candidates, _tags: {CONTEST.id: 0.8})
     client = client_for(db)
     try:
         response = client.get("/contests/recommendations", params={"tags": "로봇"})
         assert response.status_code == 200
-        assert response.json()["method"] == "title_vectors"
+        assert response.json()["method"] == "title_claude"
         assert response.json()["items"][0]["contest"]["id"] == CONTEST.id
+        assert response.json()["items"][0]["ai_generated"] is True
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_클로드가_빈_결과를_주면_키워드_추천으로_우회하지_않는다(monkeypatch):
+    db = FakeSupabase()
+    monkeypatch.setattr(contest_claude, "score_titles", lambda _candidates, _tags: {})
+    client = client_for(db)
+    try:
+        result = client.get("/contests/recommendations", params={"tags": "AI"})
+        assert result.status_code == 200
+        assert result.json()["method"] == "title_claude"
+        assert result.json()["items"] == []
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_클로드_장애면_제목_키워드로_복구한다(monkeypatch):
+    db = FakeSupabase()
+    monkeypatch.setattr(contest_claude, "score_titles", lambda _candidates, _tags: None)
+    client = client_for(db)
+    try:
+        result = client.get("/contests/recommendations", params={"tags": "AI"})
+        assert result.status_code == 200
+        assert result.json()["method"] == "title_keywords"
+        assert result.json()["items"][0]["ai_generated"] is False
     finally:
         app.dependency_overrides.clear()
 

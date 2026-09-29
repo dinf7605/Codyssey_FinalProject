@@ -19,6 +19,7 @@ export default function ContestCard({ contest }) {
             </>
           )}
           {contest.aiGenerated && <AiBadge />}
+          {contest.recommended && !contest.aiGenerated && <span className="pill">키워드 추천</span>}
         </div>
         <h3 className="ct-title">{contest.title}</h3>
         <p className="ct-host">

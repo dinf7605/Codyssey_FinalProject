@@ -49,7 +49,7 @@ class ContestRecommendation(BaseModel):
 
 class ContestRecommendationResponse(BaseModel):
     items: list[ContestRecommendation]
-    method: Literal["title_keywords", "title_vectors"] = "title_keywords"
+    method: Literal["title_keywords", "title_claude"] = "title_keywords"
     message: str | None = None
 
 
@@ -68,6 +68,9 @@ class ContestFeedbackResponse(BaseModel):
 
 class PreparationEstimateRequest(BaseModel):
     weekly_hours: float = Field(gt=0, le=168)
+    # 링크 전용 공고는 출처에서 날짜·분야를 수집하지 않는다. 입력값은 저장하지 않는다.
+    deadline: date | None = None
+    field: str | None = Field(default=None, max_length=50)
 
 
 class PreparationEstimateResponse(BaseModel):
