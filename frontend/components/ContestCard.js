@@ -12,7 +12,7 @@ export default function ContestCard({ contest }) {
     <li>
       <Link href={'/contests/' + contest.id} className="ct">
         <div className="ct-top">
-          {contest.source === 'wevity' ? <span className="micro dim">출처: 위비티</span> : (
+          {!contest.deadline ? <span className="micro dim">출처: 위비티</span> : (
             <>
               {contest.dDay !== null && <span className={urgent ? 'tag tag-late' : 'tag tag-accent'}>{dday(contest.dDay)}</span>}
               <span className="micro dim">{contest.field}</span>
@@ -23,7 +23,7 @@ export default function ContestCard({ contest }) {
         </div>
         <h3 className="ct-title">{contest.title}</h3>
         <p className="ct-host">
-          {contest.source === 'wevity' ? '위비티에서 공고 확인하기 ↗' : `${contest.host} · 마감 ${contest.deadline}`}
+          {!contest.deadline ? '위비티에서 공고 확인하기 ↗' : `${contest.host} · 마감 ${contest.deadline}`}
         </p>
         {contest.reason && <p className="ct-reason">{contest.reason}</p>}
       </Link>

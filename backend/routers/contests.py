@@ -281,15 +281,14 @@ def estimate_contest_preparation(
     if contest is None:
         raise HTTPException(status_code=404, detail="공모전을 찾을 수 없습니다")
 
-    if contest.source == "wevity":
+    # 수집한 마감일·분야를 쓴다. 마감일이 비어 있는 옛 링크 전용 행만 사용자가 원문에서 확인한 값을 받는다
+    if contest.deadline is None:
         if request.deadline is None:
-            raise HTTPException(status_code=422, detail="위비티 원문에서 마감일을 확인한 뒤 직접 입력해 주세요.")
+            raise HTTPException(status_code=422, detail="마감일 정보가 없어 준비 기간을 계산할 수 없습니다. 원문에서 마감일을 확인해 입력해 주세요.")
         contest = contest.model_copy(update={"deadline": request.deadline})
-        fields = [request.field.strip()] if request.field and request.field.strip() else []
-    else:
-        if contest.deadline is None:
-            raise HTTPException(status_code=422, detail="마감일 정보가 없어 준비 기간을 계산할 수 없습니다. 원문을 확인해 주세요.")
-        fields = contest.fields
+    fields = contest.fields
+    if not fields and request.field and request.field.strip():
+        fields = [request.field.strip()]
 
     standard = repository.get_preparation_hours(fields)
     if standard is None:

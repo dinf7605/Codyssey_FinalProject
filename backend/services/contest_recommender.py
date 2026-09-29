@@ -1,5 +1,6 @@
-"""공고 제목과 직접 입력한 관심 태그를 비교하는 검증 가능한 기본 추천.
+"""공고 제목·분야와 직접 입력한 관심 태그를 비교하는 검증 가능한 기본 추천.
 
+마감일은 수집한 값으로 마감 점수·목표 기한 필터를 계산한다.
 위비티 원문·포스터·세부 자격을 추측하지 않는다. Claude가 제목 관련성을 판단해도
 근거 없는 자격 적합 판정과 생성된 공고를 반환하지 않도록 이 경계를 유지한다.
 """
@@ -15,10 +16,8 @@ MIN_CLAUDE_SIMILARITY = 0.62
 
 
 def matching_tags(contest: Contest, tags: list[str]) -> list[str]:
-    # 위비티에는 제목과 링크만 수집하기로 한 사용자 범위를 적용한다.
-    haystack = contest.title.casefold()
-    if contest.source != "wevity":
-        haystack += " " + " ".join(contest.fields).casefold()
+    # 제목과 수집한 분야에서 찾는다 (분야가 비어 있는 옛 링크 전용 행은 제목만).
+    haystack = (contest.title + " " + " ".join(contest.fields)).casefold()
     return [tag for tag in tags if tag.casefold() in haystack]
 
 

@@ -47,17 +47,18 @@ export default function ContestDetailPage() {
   // 슬라이더를 움직이는 동안 매번 부르지 않게 잠깐 기다렸다 계산한다
   useEffect(() => {
     if (state.status !== 'ready') return;
-    const wevity = state.contest?.source === 'wevity';
-    if (!(wevity ? manualDeadline : state.contest?.deadline)) return;
+    // 수집한 마감일이 없는 옛 링크 전용 행만 사용자가 원문에서 확인한 마감일을 넣는다
+    const manual = !state.contest?.deadline;
+    if (manual && !manualDeadline) return;
     let alive = true;
     const timer = setTimeout(() => {
-      api.contests.estimate(id, hours, wevity ? { deadline: manualDeadline, field: manualField } : {}).then(
+      api.contests.estimate(id, hours, manual ? { deadline: manualDeadline, field: manualField } : {}).then(
         (res) => { if (alive) { setEstimate(res); setEstimateError(''); } },
         (err) => alive && setEstimateError(err.message || '준비 기간을 계산하지 못했습니다.'),
       );
     }, 250);
     return () => { alive = false; clearTimeout(timer); };
-  }, [id, hours, manualDeadline, manualField, state.status, state.contest?.deadline, state.contest?.source]);
+  }, [id, hours, manualDeadline, manualField, state.status, state.contest?.deadline]);
 
   if (state.status === 'loading') return <p className="hint">공고를 불러오는 중…</p>;
   if (state.status !== 'ready') {
@@ -76,8 +77,8 @@ export default function ContestDetailPage() {
     try {
       saveContestPlanning({
         contestId: c.id, title: c.title,
-        deadline: c.source === 'wevity' ? manualDeadline : c.deadline,
-        field: c.source === 'wevity' ? manualField : (c.fields[0] || ''),
+        deadline: c.deadline || manualDeadline,
+        field: c.fields[0] || manualField,
         weeklyHours: hours, weeksNeeded: estimate.weeks_needed,
       });
       const destination = '/schedule#plan-builder';
@@ -86,7 +87,7 @@ export default function ContestDetailPage() {
       setEstimateError(error.message || '계산값을 이 탭에 저장하지 못했습니다.');
     }
   }
-  if (c.source === 'wevity') {
+  if (!c.deadline) {
     const url = safeUrl(c.source_url);
     return (
       <>

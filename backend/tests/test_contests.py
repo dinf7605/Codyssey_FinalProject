@@ -106,32 +106,47 @@ def test_estimate_returns_404_for_unknown_contest():
     assert response.status_code == 404
 
 
-def test_wevity_estimate_requires_user_supplied_deadline_and_uses_no_scraped_metadata():
-    class LinkRepository(FakeContestRepository):
-        def __init__(self):
-            super().__init__()
-            self.fields = None
+class RecordingRepository(FakeContestRepository):
+    """get 이 돌려줄 공고를 바꾸고, 준비시간 조회에 쓴 분야를 기록한다."""
 
-        def get(self, contest_id):
-            return SAMPLE_CONTEST.model_copy(update={
-                "source": "wevity", "deadline": None, "fields": ["저장되어 있던 분야"],
-            }) if contest_id == "contest-1" else None
+    def __init__(self, **update):
+        super().__init__()
+        self.contest = SAMPLE_CONTEST.model_copy(update=update)
+        self.fields = None
 
-        def get_preparation_hours(self, fields):
-            self.fields = fields
-            return PreparationHours(40.0, "global_median")
+    def get(self, contest_id):
+        return self.contest if contest_id == "contest-1" else None
 
-    repository = LinkRepository()
+    def get_preparation_hours(self, fields):
+        self.fields = fields
+        return PreparationHours(40.0, "global_median")
+
+
+def _estimate(repository, body):
     app.dependency_overrides[_repository_or_503] = lambda: repository
     try:
-        client = TestClient(app)
-        missing = client.post("/contests/contest-1/estimate", json={"weekly_hours": 8})
-        supplied = client.post("/contests/contest-1/estimate", json={
-            "weekly_hours": 8, "deadline": "2026-12-31", "field": "과학/공학",
-        })
+        return TestClient(app).post("/contests/contest-1/estimate", json=body)
     finally:
         app.dependency_overrides.clear()
-    assert missing.status_code == 422
+
+
+def test_wevity_estimate_uses_collected_deadline_and_fields():
+    repository = RecordingRepository(source="wevity", fields=["웹/모바일/IT"])
+
+    # 수집한 마감일이 있으면 사용자가 보낸 값은 쓰지 않는다
+    response = _estimate(repository, {"weekly_hours": 8, "deadline": "2026-10-01", "field": "다른 분야"})
+
+    assert response.status_code == 200
+    assert response.json()["weeks_needed"] == 5
+    assert repository.fields == ["웹/모바일/IT"]
+
+
+def test_link_only_row_without_deadline_needs_user_deadline():
+    repository = RecordingRepository(source="wevity", deadline=None, fields=[])
+
+    assert _estimate(repository, {"weekly_hours": 8}).status_code == 422
+    supplied = _estimate(repository, {"weekly_hours": 8, "deadline": "2026-12-31", "field": "과학/공학"})
+
     assert supplied.status_code == 200
     assert supplied.json()["weeks_needed"] == 5
-    assert repository.fields == ["과학/공학"]
+    assert repository.fields == ["과학/공학"], "분야가 비어 있을 때만 사용자가 적은 분야를 쓴다"

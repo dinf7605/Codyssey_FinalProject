@@ -1,4 +1,4 @@
-"""위비티 목록 상위 20건의 제목·링크·출처만 수집한다. 기본값은 비활성화."""
+"""위비티 공고를 지금 한 번 수집한다 (FR-CONT-01) — 제목·주최·분야·접수기간·응모대상·링크. WEVITY_CRAWLING_ENABLED=true 필요."""
 
 from __future__ import annotations
 
@@ -27,7 +27,7 @@ def main() -> None:
     )
     print(
         f"목록 {result.listed}건 · 저장 {result.saved}건 · 이미 있음 {result.skipped_known}건 · "
-        f"마감 {result.skipped_closed}건 · 실패 {result.failed}건"
+        f"마감 {result.skipped_closed}건 · 다음 실행으로 미룸 {result.skipped_limit}건 · 실패 {result.failed}건"
     )
     for error in result.errors:
         print("  -", error)

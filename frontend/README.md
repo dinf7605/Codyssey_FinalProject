@@ -165,7 +165,7 @@ PC에서는 사이드바 하단에도 목표와 D-Day가 함께 보인다.
 
 ## 지금 상태
 
-- `/contests`·`/contests/[id]`·대시보드 카드는 `GET /contests`를 쓴다. 위비티 공고는 제목·출처·원문 링크만 표시한다. 제목 기반 추천은 `GET /contests/recommendations`를 쓰고, 로그인 사용자는 평가를 저장한다. 마감일이 없는 위비티 공고는 준비 기간을 계산하지 않는다.
+- `/contests`·`/contests/[id]`·대시보드 카드는 `GET /contests`를 쓴다. 위비티 공고는 수집한 마감일·주최·분야와 원문 링크를 표시한다. 제목 기반 추천은 `GET /contests/recommendations`를 쓰고, 로그인 사용자는 평가를 저장한다. 마감일이 빈 옛 링크 전용 행만 사용자가 원문에서 확인한 마감일을 넣어 준비 기간을 계산한다.
 - `/schedule`·`/study`는 실제 API 를 쓴다 (담당 C). 진행 중 목표는 최대 2개 — 달력에 ①·② 로 함께 보이고 목표별로 걸러 보거나 끝낼 수 있다 — 계획 만들기·공부량 점검·확정, 주·월 달력(`/plan/current`), 블록 옮기기·지우기·끌어다 놓기, 최근 바뀐 일정·되돌리기(`/plan/changes`), 미배치 단원 표시·빈 시간에 넣어 보기(`/plan/{id}/place-unplaced`), 학습 타이머·메모(`/study/sessions`), 메모 목표별 모아보기(`/study/notes`), 완료 취소, 집계·주간 달성률(`/study/stats`).
   로그인 전에는 "로그인" 안내가 나온다. 로그인 화면은 성공 시 `localStorage['sp_access_token']` 에 토큰을 넣고 `?next=` 주소로 돌려보내면 된다.
 - 나머지 화면은 아직 `lib/mock.js`의 예시값을 사용한다.

@@ -232,7 +232,7 @@ export default function ContestsPage() {
                 {result.items.map((contest) => {
                   const url = safeUrl(contest.source_url);
                   const source = SOURCE_LABEL[contest.source] || contest.source;
-                  const limited = contest.source === 'wevity';
+                  const limited = !contest.deadline; // 마감일이 비어 있는 옛 링크 전용 행
                   const left = contest.deadline ? daysLeft(contest.deadline) : null;
                   return (
                     <li className={styles.card} key={contest.id}>
