@@ -60,7 +60,7 @@ pytest -q                     # 테스트
 | `007_goal_feedback.sql` | B | `goal_feedback` — 목표 추천 피드백 (FR-GOAL-08). 09-28 적용, 정책을 `(select auth.uid())` 로 고쳐서 |
 | `014_notification_settings.sql` | E | `user_notification_settings`(알림 켜기·방해금지·강도) + `notification_logs.block_id`·중복 방지 인덱스. 개인 DB 기준이던 005·006 을 공용 기준으로 다시 쓴 것 (005·006 파일은 삭제) |
 | `015_ai_request_logs.sql` | E | `ai_request_logs` — 학습 분해의 Claude 요청 한 번에 한 행 (성공·실패, 오류 종류, 토큰). 사용자 식별자·본문 없음. 09-29 적용 · 저장은 `AI_REQUEST_METRICS_ENABLED=1` 일 때만 |
-| `016_wevity_link_only.sql` | D | 위비티 제목·링크 전용 공고의 빈 마감일 허용 |
+| `016_wevity_link_only.sql` | D | 위비티 제목·링크 전용 공고의 빈 마감일 허용. 09-29 적용 — SQL Editor 로 적용해 Migrations 목록에는 없다 |
 | `017_contest_title_vectors.sql` | D | 이전 OpenAI 임베딩 설계의 선택적 RPC. Claude 제목 추천에는 필요하지 않음 |
 
 공용 DB 에 무엇이 적용됐는지는 Supabase 대시보드 → Database → Migrations 에서 본다 (적용한 이름이 이 표의 파일 이름과 같다).
