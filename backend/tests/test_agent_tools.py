@@ -132,6 +132,23 @@ def test_공모전_검색이_실패해도_오류만_돌려준다():
     assert "error" in out and out["note"] == DB_UNAVAILABLE
 
 
+def test_마감일_없는_공고도_에이전트_검색에서_반환한다(monkeypatch):
+    from services import contest_repository
+
+    contest = SimpleNamespace(
+        title="데이터 아이디어 공모전", host="", deadline=None,
+        official_url=None, source_url="https://www.wevity.com/?c=find&gbn=view&ix=123",
+    )
+    repository = SimpleNamespace(search=lambda filters: ([contest], 1))
+    monkeypatch.setattr(contest_repository, "get_contest_repository", lambda: repository)
+
+    out = run_tool("search_contests", {"query": "데이터", "k": 3})
+
+    assert out == {"contests": [{
+        "title": contest.title, "host": "", "deadline": None, "url": contest.source_url,
+    }]}
+
+
 def test_에이전트는_사용자_가용시간을_도구로_받는다():
     seen = []
 
