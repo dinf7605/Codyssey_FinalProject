@@ -170,7 +170,8 @@ def _contests(args: dict) -> dict:
         limit=max(1, min(int(args.get("k", 5)), 20)),
     ))
     return {"contests": [
-        {"title": c.title, "host": c.host, "deadline": c.deadline.isoformat(), "url": c.official_url or c.source_url}
+        {"title": c.title, "host": c.host, "deadline": c.deadline.isoformat() if c.deadline else None,
+         "url": c.official_url or c.source_url}
         for c in items
     ]}
 
