@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from db import DatabaseNotConfigured
-from routers import admin, auth, batch, contests, goal, memories, notifications, plan, settings, study
+from routers import admin, auth, auth_google, batch, contests, goal, memories, notifications, plan, settings, study
 
 # ── FastAPI 앱 생성 ──
 app = FastAPI(title="StudyPace API")
@@ -18,6 +18,7 @@ def database_not_configured(_: Request, exc: DatabaseNotConfigured):
     return JSONResponse(status_code=503, content={"detail": str(exc)})
 
 app.include_router(auth.router)
+app.include_router(auth_google.router)  # FR-AUTH-02 구글 로그인
 app.include_router(notifications.router)
 app.include_router(settings.router)
 app.include_router(admin.router)

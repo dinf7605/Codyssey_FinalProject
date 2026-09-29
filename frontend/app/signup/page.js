@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import GoogleLoginButton from '@/components/GoogleLoginButton';
 import { api } from '@/lib/api';
 import { loadExploration } from '@/lib/goalSession';
 
@@ -116,6 +117,8 @@ export default function SignupPage() {
           필수 항목에 동의하면 버튼이 활성화됩니다
         </p>
       </form>
+
+      <GoogleLoginButton label="구글 계정으로 가입하기" />
 
       <p style={{ textAlign: 'center', fontSize: 13 }}>
         이미 계정이 있나요? <Link href="/login" className="accent-text">로그인</Link>

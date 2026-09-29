@@ -339,6 +339,34 @@ pytest -q       # 전체 237개 (C 담당 124개)
 - 계정별 관심 태그는 `PUT /memories/interest-tags`, 조회는 `GET /memories`, 항목/전체 즉시 삭제는 `DELETE /memories/{id}` / `DELETE /memories`다. 학습 기록을 새로 저장하면 최근 4주 기록으로 선호 학습 시간대·노력 편차·완료율을 갱신한다. 삭제한 학습 통계도 이후 새 기록이 생기면 다시 계산될 수 있다. `POST /contests/{id}/feedback`은 당시 점수를 함께 저장하고 '안 맞음' 기억의 영향은 4주마다 절반으로 줄인다. 모든 계정 데이터는 서버에서 토큰 사용자 ID로 제한한다.
 - 예전 92건의 저장 자료를 삭제하거나 배포 DB 마이그레이션을 실행하지 않았다. 팀이 자료 보관·정리와 운영 정책을 결정해야 한다.
 
+---
+
+## 구글 로그인 (FR-AUTH-02)
+
+Supabase Auth 의 Google 공급자를 쓴다. 코드는 `routers/auth_google.py` · 화면은 `frontend/components/GoogleLoginButton.js`(로그인·가입 화면 버튼) · `frontend/app/auth/callback/page.js`(돌아오는 곳).
+
+| 순서 | 무엇 |
+|---|---|
+| 1 | 로그인·가입 화면의 **구글 계정으로 계속하기** → `GET /auth/google/start?redirect_to=<FRONTEND_ORIGIN>/auth/callback` 이 Supabase 인증 주소를 준다 |
+| 2 | 구글 계정 선택 → Supabase → `/auth/callback#access_token=…` 로 돌아온다. 화면이 토큰을 저장하고 주소창에서 지운다 |
+| 3 | `GET /auth/google/profile` — 우리 `users` 프로필이 있으면 바로 원래 가려던 화면(`?next=`, 기본 `/schedule`)으로 |
+| 4 | 처음 온 계정이면 닉네임 + 필수 동의 2개(개인정보·AI 고지) + 선택(알림 메일)을 받고 `POST /auth/google/complete` 로 프로필을 만든다 |
+
+- 로그인에서 **캘린더 권한은 요구하지 않는다** (기본 email·profile). 캘린더 연동은 나중에 따로 권한을 받는다
+- `redirect_to` 는 `FRONTEND_ORIGIN` 의 `/auth/callback` 하나만 받는다. 배포하면 `FRONTEND_ORIGIN` 을 배포 주소로 바꾼다
+- 공급자가 꺼져 있으면 버튼을 눌렀을 때 "구글 로그인이 아직 설정되지 않았습니다" 로 안내한다 (503)
+
+### 켜는 법 (한 번, 키를 가진 사람이 직접)
+
+1. **Google Cloud Console** → API 및 서비스 → **OAuth 동의 화면**: 외부(External) · 게시 상태 **테스트** · 앱 이름 StudyPace · 범위는 기본(email·profile·openid)만 · **테스트 사용자**에 팀원·시연 계정 추가 (최대 100명)
+2. 같은 곳 → **사용자 인증 정보 → OAuth 클라이언트 ID 만들기** → 웹 애플리케이션
+   - 승인된 리디렉션 URI: `https://spgrerxkdavykunujipn.supabase.co/auth/v1/callback`
+3. **Supabase 대시보드** → Authentication → Sign In / Providers → **Google** 켜기 → 2에서 받은 Client ID · Client Secret 입력 → 저장
+4. Supabase → Authentication → **URL Configuration** → Redirect URLs 에 `http://localhost:3000/auth/callback` 추가 (배포하면 배포 주소의 `/auth/callback` 도)
+5. 확인: 로그인 화면에서 버튼을 눌러 구글 계정 선택 화면이 뜨면 된다
+
+Client Secret 은 Supabase 대시보드에만 넣는다. 우리 `.env`·코드·깃에는 넣지 않는다 (`.env.example` 의 `GOOGLE_CLIENT_*` 는 나중의 캘린더 연동용).
+
 ## 남은 작업
 
 - [x] `services/agent_tools.py` 의 목업 데이터를 DB·팀 서비스 조회로 교체 (커리큘럼 `curriculum_units`, 카탈로그 B, 공모전 D, 가용시간은 요청 값)

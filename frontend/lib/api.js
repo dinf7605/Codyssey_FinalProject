@@ -227,6 +227,20 @@ export const api = {
       }),
 
     me: () => request('/auth/me'),
+
+    // FR-AUTH-02 구글 로그인 — backend/routers/auth_google.py
+    google: {
+      start: (redirectTo) =>
+        request(`/auth/google/start?redirect_to=${encodeURIComponent(redirectTo)}`),
+      profile: () => request('/auth/google/profile', { cache: 'no-store' }),
+      complete: ({ nickname, agreePrivacy, agreeAiNotice, agreeMarketing = false }) =>
+        post('/auth/google/complete', {
+          nickname,
+          agree_privacy: agreePrivacy,
+          agree_ai_notice: agreeAiNotice,
+          agree_marketing: agreeMarketing,
+        }),
+    },
   },
 
   settings: {
