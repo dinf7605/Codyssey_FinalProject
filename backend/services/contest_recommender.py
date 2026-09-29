@@ -42,6 +42,10 @@ def rank_contests(
             similarity = similarities.get(contest.id, 0)
             if similarity < MIN_CLAUDE_SIMILARITY:
                 continue
+            # 의미 관련성만 있고 문자열 일치가 없다면 AI에 실제로 입력한 태그를
+            # 근거로 노출하되, 제목에 포함됐다고 주장하지 않는다.
+            if not matched:
+                matched = tags[:10]
         else:
             # 키워드 경로는 태그 하나만 제목에 있어도 근거가 된다.
             # 비율(일치 수 / 태그 수)에 0.62 를 걸면 관심 태그가 2개만 돼도 대부분 0건이 된다.
@@ -58,7 +62,8 @@ def rank_contests(
             "contest": contest, "matching_tags": matched,
             "similarity": round(similarity, 5), "deadline_score": deadline_score,
             "eligibility_score": eligibility_score, "rerank_score": rerank_score,
-            "reason": _reason(matched, similarities is not None),
+            "reason": _reason(matched, similarities is not None,
+                              matched[0].casefold() in contest.title.casefold()),
             "ai_generated": similarities is not None,
         })
     ordered = sorted(ranked, key=lambda row: (-row["rerank_score"], row["contest"].deadline or date.max))
@@ -76,14 +81,17 @@ def rank_contests(
     return selected
 
 
-def _reason(matched: list[str], by_claude: bool) -> str:
+def _reason(matched: list[str], by_claude: bool, in_title: bool) -> str:
     """이유 문장은 규칙으로 만든다. 화면의 'AI 추천' 표시는 순위를 Claude 가 매겼다는 뜻이므로,
     Claude 가 판단한 경우에는 문장에서도 그렇게 밝힌다 — 규칙 문장이 AI 가 쓴 것처럼 읽히지 않게."""
     if by_claude:
         head = "Claude가 공고 제목과 관심 분야의 관련성을 높게 판단했습니다"
-        head += f"(제목에 ‘{matched[0]}’ 포함). " if matched else ". "
+        head += f"(제목에 ‘{matched[0]}’ 포함). " if in_title else (
+            f"(입력한 관심 태그 {', '.join(matched)} 기준). "
+        )
     elif matched:
-        head = f"공고 제목에 관심 키워드 ‘{matched[0]}’가 포함되어 있습니다. "
+        where = "제목" if in_title else "분야"
+        head = f"공고 {where}에 관심 키워드 ‘{matched[0]}’가 포함되어 있습니다. "
     else:
         head = ""
     return head + "응모 자격은 원문에서 확인해 주세요."

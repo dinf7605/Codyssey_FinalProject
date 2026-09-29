@@ -242,7 +242,7 @@ export default function ContestsPage() {
                           {contest.status === 'upcoming' ? '접수 예정' : dday(left)}
                         </span>}
                         {contest.matched.length > 0 && (
-                          <span className="tiny muted">근거 태그: {contest.matched.join(', ')}</span>
+                          <span className="tiny muted">{contest.aiGenerated ? 'AI가 검토한 관심 태그' : '근거 태그'}: {contest.matched.join(', ')}</span>
                         )}
                       </div>
                       <h3 className={styles.cardTitle}>

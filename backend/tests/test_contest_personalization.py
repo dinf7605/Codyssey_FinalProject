@@ -109,7 +109,29 @@ def test_키워드_추천은_더_많이_겹친_공고가_앞에_온다():
 def test_클로드_추천의_이유_문장은_클로드_판단임을_밝힌다():
     rows = rank_contests([CONTEST], ["로봇"], set(), date(2026, 9, 29), similarities={CONTEST.id: 0.8})
     assert rows[0]["reason"].startswith("Claude가")
+    assert rows[0]["matching_tags"] == ["로봇"]
+    assert "입력한 관심 태그 로봇 기준" in rows[0]["reason"]
+    assert "제목에 ‘로봇’ 포함" not in rows[0]["reason"]
     assert rank_contests([CONTEST], ["로봇"], set(), date(2026, 9, 29), similarities={CONTEST.id: 0.5}) == []
+
+
+def test_분야_키워드_추천은_제목에_있다고_잘못_설명하지_않는다():
+    contest = CONTEST.model_copy(update={"fields": ["과학/공학"]})
+    row = rank_contests([contest], ["과학"], set(), date(2026, 9, 29))[0]
+    assert "공고 분야에" in row["reason"]
+
+
+def test_등록되지_않은_분야는_같은_분류군_중앙값을_쓴다():
+    db = FakeSupabase()
+    db.table("preparation_time_standards").insert([
+        {"field": "웹/모바일/IT", "category_group": "tech", "standard_hours": 80, "active": True},
+        {"field": "과학/공학", "category_group": "tech", "standard_hours": 60, "active": True},
+        {"field": "영상/UCC/사진", "category_group": "media", "standard_hours": 40, "active": True},
+    ]).execute()
+    repository = SupabaseContestRepository(db)
+    result = repository.get_preparation_hours(["앱/모바일"])
+    assert (result.hours, result.source) == (70, "group_median")
+    assert repository.get_preparation_hours(["인공지능"]).source == "global_median"
 
 
 def test_클로드_호출은_관리자_AI_기록에_남는다(monkeypatch):

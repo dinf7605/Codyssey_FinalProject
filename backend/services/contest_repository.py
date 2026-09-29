@@ -124,12 +124,31 @@ class SupabaseContestRepository:
         # 아직 분류군을 알 수 없는 신규 분야는 전체 중앙값으로 폴백한다.
         standards = (
             self.client.table("preparation_time_standards")
-            .select("category_group,standard_hours")
+            .select("field,category_group,standard_hours")
             .eq("active", True)
             .execute()
         )
         if not standards.data:
             return None
+
+        # 직접 등록되지 않은 분야는 이름 일부가 겹치는 분야의 분류군을 먼저 쓴다.
+        # 분류군도 알 수 없는 경우에만 전체 중앙값으로 폴백한다.
+        def parts(value: str) -> set[str]:
+            return {part.casefold() for part in re.split(r"[/·,\s]+", value) if len(part) >= 2}
+
+        requested = set().union(*(parts(field) for field in fields)) if fields else set()
+        group_scores: dict[str, int] = {}
+        for row in standards.data:
+            group = row.get("category_group")
+            if group:
+                group_scores[group] = max(
+                    group_scores.get(group, 0), len(requested & parts(row.get("field") or ""))
+                )
+        if group_scores and max(group_scores.values()) > 0:
+            group = max(group_scores, key=group_scores.get)
+            values = [float(row["standard_hours"]) for row in standards.data
+                      if row.get("category_group") == group]
+            return PreparationHours(float(median(values)), "group_median")
 
         values = [float(row["standard_hours"]) for row in standards.data]
         return PreparationHours(float(median(values)), "global_median")
