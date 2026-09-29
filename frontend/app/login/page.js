@@ -83,7 +83,7 @@ export default function LoginPage() {
 
       <div style={{ display: 'flex', justifyContent: 'center', gap: 'var(--gap-4)', fontSize: 13 }}>
         <Link href="/signup" className="accent-text">회원가입</Link>
-        <span className="muted">비밀번호 재설정</span>
+        <Link href="/forgot-password" className="accent-text">비밀번호 재설정</Link>
       </div>
     </main>
     </div>

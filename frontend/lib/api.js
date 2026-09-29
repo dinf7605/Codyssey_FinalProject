@@ -2,7 +2,7 @@
 // 화면 코드가 fetch를 직접 쓰지 않게 해서, 주소가 바뀌어도 이 파일만 고치면 된다.
 //
 // 로컬:  NEXT_PUBLIC_API_BASE=http://localhost:8000
-// 배포:  Railway 주소를 Vercel 환경변수에 등록
+// 배포: Vercel 프론트에서 접근할 API 주소를 환경변수에 등록
 
 const BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8000';
 
@@ -94,6 +94,7 @@ async function request(path, options = {}) {
 
   if (!res.ok) {
     let detail = `요청이 실패했습니다 (${res.status})`;
+    let validationErrors = [];
 
     try {
       const body = await res.json();
@@ -101,6 +102,7 @@ async function request(path, options = {}) {
       if (typeof body?.detail === 'string') {
         detail = body.detail;
       } else if (Array.isArray(body?.detail)) {
+        validationErrors = body.detail;
         detail = body.detail.map((item) => item.msg || JSON.stringify(item)).join('\n');
       }
     } catch {
@@ -109,6 +111,7 @@ async function request(path, options = {}) {
 
     const err = new Error(detail);
     err.status = res.status;
+    err.validationErrors = validationErrors;
     throw err;
   }
 
@@ -226,6 +229,11 @@ export const api = {
         password,
       }),
 
+    forgotPassword: ({ email }) => post('/auth/forgot-password', { email }),
+    resetPassword: ({ accessToken, refreshToken, newPassword }) =>
+      post('/auth/reset-password', {
+        access_token: accessToken, refresh_token: refreshToken, new_password: newPassword,
+      }),
     me: () => request('/auth/me'),
   },
 
