@@ -58,3 +58,29 @@ def test_같은_제목과_관심사_요청은_짧게_재사용한다(monkeypatch
     assert contest_claude.score_titles([CONTEST], ["반도체 설계"]) == {"contest-1": 0.9}
     assert contest_claude.score_titles([CONTEST], ["반도체 설계"]) == {"contest-1": 0.9}
     assert client.messages.create.call_count == 1
+
+
+def test_실제_호출만_기록하고_캐시_재사용은_기록하지_않는다(monkeypatch):
+    client = MagicMock()
+    client.messages.create.return_value = response('{"matches":[{"id":"contest-1","score":0.7}]}')
+    monkeypatch.setattr(llm, "get_client", lambda timeout: client)
+    calls = []
+    log = lambda source, latency_ms, message: calls.append((source, message))  # noqa: E731
+
+    contest_claude.score_titles([CONTEST], ["기록 확인"], on_call=log)
+    contest_claude.score_titles([CONTEST], ["기록 확인"], on_call=log)
+    assert calls == [("claude", "")]
+
+
+def test_게이트웨이_장애도_사유와_함께_기록한다(monkeypatch):
+    client = MagicMock()
+    client.messages.create.side_effect = TimeoutError("secret-looking detail")
+    monkeypatch.setattr(llm, "get_client", lambda timeout: client)
+    calls = []
+
+    assert contest_claude.score_titles(
+        [CONTEST], ["장애 확인"], on_call=lambda *args: calls.append(args)
+    ) is None
+    assert [(source, message) for source, _ms, message in calls] == [
+        ("fallback", "게이트웨이 오류 (TimeoutError)")
+    ]

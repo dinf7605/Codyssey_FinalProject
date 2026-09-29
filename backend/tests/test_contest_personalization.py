@@ -91,6 +91,46 @@ def test_위비티는_제목만_비교하고_날짜가_없어도_추천한다():
     assert rank_contests([CONTEST], ["주최"], set(), date(2026, 9, 29)) == []
 
 
+def test_키워드_추천은_관심_태그가_여러_개여도_하나만_겹치면_나온다():
+    # 비율에 0.62 를 걸던 때는 태그 2개부터 0건이었다
+    for tags in (["AI", "데이터"], ["AI", "데이터", "디자인"]):
+        rows = rank_contests([CONTEST], tags, set(), date(2026, 9, 29))
+        assert len(rows) == 1
+        assert rows[0]["matching_tags"] == ["AI"]
+        assert rows[0]["ai_generated"] is False
+
+
+def test_키워드_추천은_더_많이_겹친_공고가_앞에_온다():
+    both = CONTEST.model_copy(update={"id": "both", "title": "AI 데이터 분석 공모전"})
+    rows = rank_contests([CONTEST, both], ["AI", "데이터"], set(), date(2026, 9, 29))
+    assert [row["contest"].id for row in rows] == ["both", CONTEST.id]
+
+
+def test_클로드_추천의_이유_문장은_클로드_판단임을_밝힌다():
+    rows = rank_contests([CONTEST], ["로봇"], set(), date(2026, 9, 29), similarities={CONTEST.id: 0.8})
+    assert rows[0]["reason"].startswith("Claude가")
+    assert rank_contests([CONTEST], ["로봇"], set(), date(2026, 9, 29), similarities={CONTEST.id: 0.5}) == []
+
+
+def test_클로드_호출은_관리자_AI_기록에_남는다(monkeypatch):
+    db = FakeSupabase()
+
+    def fake_score(_candidates, _tags, on_call=None):
+        on_call("claude", 120, "")
+        return {CONTEST.id: 0.8}
+
+    monkeypatch.setattr(contest_claude, "score_titles", fake_score)
+    client = client_for(db)
+    try:
+        assert client.get("/contests/recommendations", params={"tags": "로봇"}).status_code == 200
+    finally:
+        app.dependency_overrides.clear()
+    logs = db.rows("ai_call_logs")
+    assert [(row["feature"], row["source"], row["user_id"]) for row in logs] == [
+        ("contest.recommend", "claude", "user-a")
+    ]
+
+
 def test_거절_기억은_4주마다_절반으로_줄어든다():
     now = datetime(2026, 9, 29, tzinfo=timezone.utc)
     assert rejection_weight(now.isoformat(), now) == 1
@@ -107,7 +147,7 @@ def test_지난주_공고는_최대_3건만_반복하고_다음_순위로_채운
 
 def test_주간_추천_배치는_사용자별_실패를_분리하고_기록한다(monkeypatch):
     db = FakeSupabase()
-    db.table("users").insert([{"auth_id": "u1"}, {"auth_id": "u2"}]).execute()
+    db.table("users").insert([{"user_id": "u1"}, {"user_id": "u2"}]).execute()
     called = []
 
     def recommend(_repository, *, tags, user, db):
@@ -124,7 +164,7 @@ def test_주간_추천_배치는_사용자별_실패를_분리하고_기록한�
 
 def test_클로드_추천은_제목_부분문자열이_없어도_검증한_공고만_반환한다(monkeypatch):
     db = FakeSupabase()
-    monkeypatch.setattr(contest_claude, "score_titles", lambda _candidates, _tags: {CONTEST.id: 0.8})
+    monkeypatch.setattr(contest_claude, "score_titles", lambda _candidates, _tags, **_: {CONTEST.id: 0.8})
     client = client_for(db)
     try:
         response = client.get("/contests/recommendations", params={"tags": "로봇"})
@@ -138,7 +178,7 @@ def test_클로드_추천은_제목_부분문자열이_없어도_검증한_공�
 
 def test_클로드가_빈_결과를_주면_키워드_추천으로_우회하지_않는다(monkeypatch):
     db = FakeSupabase()
-    monkeypatch.setattr(contest_claude, "score_titles", lambda _candidates, _tags: {})
+    monkeypatch.setattr(contest_claude, "score_titles", lambda _candidates, _tags, **_: {})
     client = client_for(db)
     try:
         result = client.get("/contests/recommendations", params={"tags": "AI"})
@@ -151,7 +191,7 @@ def test_클로드가_빈_결과를_주면_키워드_추천으로_우회하지_�
 
 def test_클로드_장애면_제목_키워드로_복구한다(monkeypatch):
     db = FakeSupabase()
-    monkeypatch.setattr(contest_claude, "score_titles", lambda _candidates, _tags: None)
+    monkeypatch.setattr(contest_claude, "score_titles", lambda _candidates, _tags, **_: None)
     client = client_for(db)
     try:
         result = client.get("/contests/recommendations", params={"tags": "AI"})

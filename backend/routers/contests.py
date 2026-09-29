@@ -35,7 +35,8 @@ from services.contest_repository import (
 )
 from services.contest_service import estimate_preparation
 from services.contest_recommender import rank_contests, recommendation_week, rejection_weight
-from services import contest_claude
+from services import contest_claude, llm
+from services.plan_store import log_ai_call
 from utils.auth import get_current_user, get_optional_user
 
 
@@ -145,7 +146,14 @@ def recommend_contests(
         dates = [date.fromisoformat(row["deadline"]) for row in plans if row.get("deadline")]
         goal_deadline = max(dates) if dates else None
     candidates, _ = repository.search(ContestSearch(sort="latest", limit=20))
-    scores = contest_claude.score_titles(candidates, interests)
+    def log_call(source: str, latency_ms: int, message: str) -> None:
+        # 관리자 AI 통계(FR-ADMIN-02)에 공고 추천 호출도 보이게 한다. 게스트는 user_id 없이 남긴다.
+        log_ai_call(
+            db, user_id=user_id, feature="contest.recommend", model=llm.model("fast"),
+            source=source, tool_calls=0, latency_ms=latency_ms, message=message,
+        )
+
+    scores = contest_claude.score_titles(candidates, interests, on_call=log_call)
     method = "title_claude" if scores is not None else "title_keywords"
     ranked = rank_contests(
         candidates, interests, rejected, today,
@@ -178,10 +186,11 @@ def run_weekly_recommendations(db, at: datetime) -> None:
     try:
         offset = 0
         while True:
-            users = db.table("users").select("auth_id").range(offset, offset + 99).execute().data
+            # 공용 DB 의 users 는 user_id 로 가리킨다 (004 에서 auth_id -> user_id)
+            users = db.table("users").select("user_id").range(offset, offset + 99).execute().data
             for row in users:
                 try:
-                    recommend_contests(repository, tags=None, user=SimpleNamespace(id=row["auth_id"]), db=db)
+                    recommend_contests(repository, tags=None, user=SimpleNamespace(id=row["user_id"]), db=db)
                     completed += 1
                 except Exception:  # noqa: BLE001 - 한 계정의 추천 장애는 나머지 계정과 분리
                     failed += 1
