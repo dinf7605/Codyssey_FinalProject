@@ -25,6 +25,13 @@ class WevityListItem:
 
 
 @dataclass(frozen=True)
+class WevityLink:
+    source_id: str
+    title: str
+    source_url: str
+
+
+@dataclass(frozen=True)
 class WevityDetail:
     source_id: str
     title: str
@@ -48,6 +55,28 @@ def _source_id(url: str) -> str | None:
 def _title_without_badges(link) -> str:
     direct_text = " ".join(str(value) for value in link.find_all(string=True, recursive=False))
     return _clean_text(direct_text) or _clean_text(link.get_text(" ", strip=True))
+
+
+def parse_wevity_links(html: str, *, base_url: str = "https://www.wevity.com") -> list[WevityLink]:
+    """허용한 3개 항목만 읽는다: 공고 ID, 제목, 위비티 원문 링크."""
+    soup = BeautifulSoup(html, "html.parser")
+    items: list[WevityLink] = []
+    seen: set[str] = set()
+    for row in soup.find_all("li"):
+        link = row.select_one('.tit a[href*="gbn=view"][href*="ix="]')
+        if link is None:
+            continue
+        url = urljoin(base_url.rstrip("/") + "/", link.get("href", ""))
+        parsed = urlsplit(url)
+        if parsed.scheme != "https" or parsed.hostname not in ("www.wevity.com", "wevity.com"):
+            continue
+        source_id = _source_id(url)
+        title = _title_without_badges(link)
+        if not source_id or not title or source_id in seen:
+            continue
+        seen.add(source_id)
+        items.append(WevityLink(source_id, title, url))
+    return items
 
 
 def parse_wevity_list(

@@ -105,9 +105,9 @@ export default function AdminContestInspection() {
                 <div className="row" key={item.id}>
                   <div className="row-main">
                     <b>{item.title}</b>
-                    <span>주최: {item.host} · 수집처: {item.source}</span>
+                    <span>{item.host ? `주최: ${item.host} · ` : ''}수집처: {item.source}</span>
                     <span>
-                      마감일: {item.deadline} · {STATUS_LABELS[item.status] || '상태 미확인'}
+                      마감일: {item.deadline || '원문 확인'} · {STATUS_LABELS[item.status] || '상태 미확인'}
                     </span>
                     <span>수집: {formatTime(item.collected_at)}</span>
                     <span>

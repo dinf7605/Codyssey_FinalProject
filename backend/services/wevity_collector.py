@@ -1,19 +1,13 @@
-"""위비티 공모전 수집기 (FR-CONT-01) — 파서(services/wevity_parser.py, 담당 D)를 실제 요청과 DB 저장에 잇는다.
+"""위비티 목록에서 최대 20개 제목·공고 링크·출처만 저장한다.
 
-사용 조건 (2026-09-28 확인 · 같은 날 위비티에 비영리 사용 안내 메일 발송)
-  - robots.txt 가 모든 수집을 허용한다 (User-agent: * / Allow: /)
-  - 이용약관 제9조: 게시 자료의 권리는 위비티에 있고, 얻은 정보를 가공·판매하는 등 상업적 이용은 금지된다
-    → 비영리 학습 프로젝트로만 쓰고, 공고 원문(raw_text)은 저장하지 않는다.
-      제목·주최·분야·접수기간·응모대상·링크 같은 사실 정보만 남기고, 화면에서 위비티 원문으로 연결한다
-  - 요청 사이에 3초 이상 쉰다 (robots.txt 가 AI 수집기에 요구하는 간격을 우리도 지킨다)
-  - 한 번에 분야별 목록 1쪽만 본다. 이미 저장한 공고는 상세를 다시 받지 않는다
-
-실행: `python -m scripts.collect_contests` (수동) 또는 POST /contests/collect (매일 05:00 스케줄러, X-Batch-Key)
+수신 확인은 이용 허락이 아니다. 실행은 WEVITY_CRAWLING_ENABLED=true일 때만
+가능하며, 운영자는 출처 정책을 직접 확인해야 한다. 상세 페이지는 요청하지 않는다.
 """
 
 from __future__ import annotations
 
 import hashlib
+import os
 import time
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
@@ -21,26 +15,22 @@ from typing import Callable
 
 import httpx
 
-from services.wevity_parser import WevityDetail, WevityListItem, parse_wevity_detail, parse_wevity_list
+from services.wevity_parser import WevityLink, parse_wevity_links
 
 SOURCE = "wevity"
 JOB_NAME = "contest.collect"
 BASE_URL = "https://www.wevity.com"
 USER_AGENT = "StudyPace/0.1 (non-commercial student project; codyssey final project)"
 REQUEST_GAP_SECONDS = 3.0
+MAX_ITEMS = 20
 KST = timezone(timedelta(hours=9))
 
 # 학습 목표와 이어지기 쉬운 분야만 본다 (위비티 분야 번호 → 이름)
-CATEGORIES: dict[int, str] = {
-    1: "기획/아이디어",
-    2: "광고/마케팅",
-    10: "영상/UCC/사진",
-    19: "디자인/캐릭터/웹툰",
-    20: "웹/모바일/IT",
-    21: "게임/소프트웨어",
-    22: "과학/공학",
-    88: "취업/창업",
-}
+CATEGORIES: dict[int, str] = {22: "과학/공학"}
+
+
+def crawling_enabled() -> bool:
+    return os.getenv("WEVITY_CRAWLING_ENABLED", "false").lower() == "true"
 
 
 def list_url(category: int, page: int = 1) -> str:
@@ -57,34 +47,28 @@ def today_kst() -> date:
     return datetime.now(KST).date()
 
 
-def _content_hash(detail: WevityDetail) -> str:
-    key = "|".join([
-        detail.title, detail.host, str(detail.start_date), str(detail.deadline),
-        ",".join(detail.fields), detail.eligibility or "", detail.official_url or "",
-    ])
+def _content_hash(item: WevityLink) -> str:
+    key = "|".join([item.title, item.source_url])
     return hashlib.sha256(key.encode("utf-8")).hexdigest()
 
 
-def to_row(item: WevityListItem, detail: WevityDetail, today: date, now: datetime) -> dict | None:
-    """저장할 행. 마감일을 모르거나 이미 지난 공고는 None — 목록에 보여 줄 수 없다."""
-    if detail.deadline is None or detail.deadline < today:
-        return None
-    status = "upcoming" if detail.start_date and detail.start_date > today else "open"
+def to_row(item: WevityLink, now: datetime) -> dict:
+    """저장 대상은 목록 제목·링크·출처뿐이다. 나머지는 비어 있는 호환 필드."""
     return {
         "source": SOURCE,
-        "source_id": detail.source_id,
-        "title": detail.title or item.title,
-        "host": detail.host or item.host or "주최 미상",
-        "fields": detail.fields or item.fields,
-        "eligibility_text": detail.eligibility,
-        "start_date": detail.start_date.isoformat() if detail.start_date else None,
-        "deadline": detail.deadline.isoformat(),
-        "status": status,
+        "source_id": item.source_id,
+        "title": item.title,
+        "host": "",
+        "fields": [],
+        "eligibility_text": None,
+        "start_date": None,
+        "deadline": None,
+        "status": "unknown",
         "source_url": item.source_url,
-        "official_url": detail.official_url,
+        "official_url": None,
         "summary": None,
-        "raw_text": None,  # 원문은 저장하지 않는다 (위 사용 조건)
-        "content_hash": _content_hash(detail),
+        "raw_text": None,
+        "content_hash": _content_hash(item),
         "collected_at": now.isoformat(),
     }
 
@@ -96,6 +80,8 @@ class CollectResult:
     skipped_closed: int = 0
     saved: int = 0
     failed: int = 0
+    indexed: int = 0
+    run_id: str | None = None
     errors: list[str] = field(default_factory=list)
 
 
@@ -110,19 +96,17 @@ def collect(
     sleep: Callable[[float], None] = time.sleep,
     now: datetime | None = None,
 ) -> CollectResult:
-    """분야별 목록 → 새 공고 상세 → contests 에 저장(upsert). 결과는 batch_runs 에 남긴다.
-
-    한 건이 실패해도 나머지는 계속한다. 이미 저장한 공고는 refresh=True 일 때만 상세를 다시 받는다.
-    dry_run 이면 DB 에 쓰지 않고 결과만 센다.
-    """
+    """목록 상위 20건까지만 조회·저장한다. 상세 페이지는 열지 않는다."""
+    if fetch is fetch_html and not crawling_enabled():
+        raise RuntimeError("WEVITY_CRAWLING_ENABLED=true일 때만 수집할 수 있습니다")
     now = now or datetime.now(KST)
-    today = now.astimezone(KST).date() if now.tzinfo else now.date()
     result = CollectResult()
     run_id = None
     if not dry_run:
         run_id = db.table("batch_runs").insert({
             "job_name": JOB_NAME, "source": SOURCE, "status": "running", "started_at": now.isoformat(),
         }).execute().data[0]["id"]
+        result.run_id = run_id
 
     known = set() if (refresh or dry_run) else {
         r["source_id"] for r in db.table("contests").select("source_id").eq("source", SOURCE).execute().data
@@ -140,34 +124,25 @@ def collect(
 
     for category in categories or list(CATEGORIES):
         for page in range(1, pages + 1):
+            if result.listed >= MAX_ITEMS:
+                break
             try:
-                items = parse_wevity_list(polite_fetch(list_url(category, page)), base_url=BASE_URL)
+                items = parse_wevity_links(polite_fetch(list_url(category, page)), base_url=BASE_URL)
             except Exception as exc:  # noqa: BLE001 - 한 분야가 실패해도 다른 분야는 계속한다
                 result.failed += 1
                 result.errors.append(f"목록 {category}-{page}: {type(exc).__name__}")
                 continue
             for item in items:
+                if result.listed >= MAX_ITEMS:
+                    break
                 if item.source_id in seen:
                     continue
                 seen.add(item.source_id)
                 result.listed += 1
-                if item.d_day is not None and item.d_day < 0:
-                    result.skipped_closed += 1
-                    continue
                 if item.source_id in known:
                     result.skipped_known += 1
                     continue
-                try:
-                    detail = parse_wevity_detail(polite_fetch(item.source_url), source_url=item.source_url)
-                except Exception as exc:  # noqa: BLE001
-                    result.failed += 1
-                    result.errors.append(f"상세 {item.source_id}: {type(exc).__name__}")
-                    continue
-                row = to_row(item, detail, today, now)
-                if row is None:
-                    result.skipped_closed += 1
-                    continue
-                rows.append(row)
+                rows.append(to_row(item, now))
 
     if rows and not dry_run:
         try:
@@ -206,10 +181,33 @@ def running(db, now: datetime) -> bool:
 
 
 def run_daily(db, now: datetime | None = None) -> CollectResult:
-    """매일 05:00 — 마감 지난 공고를 닫고 새 공고를 모은다."""
+    """배치 호출: 허용 설정을 확인하고 목록 수집 후 제목 색인을 시도한다."""
+    if not crawling_enabled():
+        raise RuntimeError("위비티 수집이 비활성화되어 있습니다")
     now = now or datetime.now(KST)
-    close_expired(db, now.date())
-    return collect(db, now=now)
+    result = collect(db, now=now)
+    from services import contest_vector
+
+    if contest_vector.enabled():
+        try:
+            indexed, failed = contest_vector.index_titles(db)
+            result.indexed = indexed
+            result.failed += failed
+            if result.run_id:
+                db.table("batch_runs").update({
+                    "indexed_count": indexed, "failed_count": result.failed,
+                    "status": "partial" if result.failed else "success",
+                }).eq("id", result.run_id).execute()
+        except Exception as exc:  # noqa: BLE001 - 수집 성공분은 유지하고 다음 실행에서 재시도
+            result.failed += 1
+            result.errors.append(f"색인: {type(exc).__name__}")
+            if result.run_id:
+                db.table("batch_runs").update({
+                    "status": "partial" if result.saved else "failed",
+                    "failed_count": result.failed,
+                    "error_message": "; ".join(result.errors)[:500],
+                }).eq("id", result.run_id).execute()
+    return result
 
 
 def close_expired(db, today: date) -> None:

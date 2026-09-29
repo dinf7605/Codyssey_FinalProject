@@ -23,7 +23,7 @@ class Contest(BaseModel):
     fields: list[str] = Field(default_factory=list)
     eligibility_text: str | None = None
     start_date: date | None = None
-    deadline: date
+    deadline: date | None = None
     status: ContestStatus
     source_url: str
     official_url: str | None = None
@@ -34,6 +34,36 @@ class Contest(BaseModel):
 class ContestListResponse(BaseModel):
     items: list[Contest]
     total: int
+
+
+class ContestRecommendation(BaseModel):
+    contest: Contest
+    matching_tags: list[str]
+    similarity: float
+    deadline_score: float
+    eligibility_score: float
+    rerank_score: float
+    reason: str
+    ai_generated: bool = False
+
+
+class ContestRecommendationResponse(BaseModel):
+    items: list[ContestRecommendation]
+    method: Literal["title_keywords", "title_vectors"] = "title_keywords"
+    message: str | None = None
+
+
+class ContestFeedbackInput(BaseModel):
+    rating: Literal["helpful", "not_relevant"]
+    reason: Literal["field", "difficulty", "deadline"] | None = None
+
+
+class ContestFeedbackResponse(BaseModel):
+    contest_id: str
+    rating: Literal["helpful", "not_relevant"]
+    reason: str | None
+    similarity: float | None
+    rerank_score: float | None
 
 
 class PreparationEstimateRequest(BaseModel):

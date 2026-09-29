@@ -18,7 +18,7 @@ class ContestInspectionItem(BaseModel):
     title: str
     host: str
     source: str
-    deadline: date
+    deadline: date | None
     status: Literal["upcoming", "open", "closed", "unknown"]
     collected_at: datetime
     index_status: Literal["pending", "indexed", "failed", "missing"]

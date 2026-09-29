@@ -176,9 +176,25 @@ export const api = {
       return request(`/contests?${params}`, options);
     },
     get: (id) => request(`/contests/${encodeURIComponent(id)}`),
+    recommend: (tags = '') => {
+      const params = new URLSearchParams();
+      if (tags) params.set('tags', tags);
+      return request(`/contests/recommendations?${params}`, { cache: 'no-store' });
+    },
+    feedback: (id, rating, reason = null) =>
+      post(`/contests/${encodeURIComponent(id)}/feedback`, { rating, reason }),
     // FR-CONT-10 준비 기간 산정 (LLM 미사용)
     estimate: (id, weeklyHours) =>
       post(`/contests/${encodeURIComponent(id)}/estimate`, { weekly_hours: weeklyHours }),
+  },
+
+  memories: {
+    list: () => request('/memories', { cache: 'no-store' }),
+    saveInterests: (tags) => request('/memories/interest-tags', {
+      method: 'PUT', body: JSON.stringify({ tags }),
+    }),
+    remove: (id) => del(`/memories/${encodeURIComponent(id)}`),
+    clear: () => del('/memories'),
   },
 
   // 인증

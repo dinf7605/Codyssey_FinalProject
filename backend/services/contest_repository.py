@@ -52,39 +52,47 @@ class SupabaseContestRepository:
         self.client = client
 
     def search(self, filters: ContestSearch) -> tuple[list[Contest], int]:
-        request = self.client.table("contests").select(CONTEST_COLUMNS, count="exact")
+        def fetch(scope: str) -> tuple[list[Contest], int]:
+            request = self.client.table("contests").select(CONTEST_COLUMNS, count="exact")
+            if scope == "dated":
+                request = request.in_("status", ["upcoming", "open"])
+                request = request.gte("deadline", date.today().isoformat())
+            elif scope == "links":
+                request = request.eq("source", "wevity").eq("status", "unknown")
+                request = request.is_("deadline", "null")
 
-        if not filters.include_closed:
-            request = request.in_("status", ["upcoming", "open"])
-            request = request.gte("deadline", date.today().isoformat())
+            if filters.deadline_before:
+                request = request.lte("deadline", filters.deadline_before.isoformat())
+            if filters.field:
+                request = request.contains("fields", [filters.field])
+            if filters.eligibility:
+                request = request.ilike("eligibility_text", f"%{filters.eligibility}%")
+            if filters.query:
+                # 한 요청에 OR은 제목/주최/요약 검색 하나만 둔다.
+                safe_query = re.sub(r"[(),]", " ", filters.query).strip()
+                if safe_query:
+                    pattern = f"%{safe_query}%"
+                    request = request.or_(
+                        f"title.ilike.{pattern},host.ilike.{pattern},summary.ilike.{pattern}"
+                    )
+            request = request.order("collected_at", desc=True) if filters.sort == "latest" else request.order("deadline")
+            response = request.limit(filters.limit).execute()
+            items = [Contest.model_validate(row) for row in response.data]
+            return items, response.count if response.count is not None else len(items)
 
-        if filters.deadline_before:
-            request = request.lte("deadline", filters.deadline_before.isoformat())
-
-        if filters.field:
-            request = request.contains("fields", [filters.field])
-
-        if filters.eligibility:
-            request = request.ilike("eligibility_text", f"%{filters.eligibility}%")
-
-        if filters.query:
-            # PostgREST or_ 식을 깨는 구분자를 제거한다. 더 복잡한 검색은 추후
-            # PostgreSQL 전문검색 RPC로 교체한다.
-            safe_query = re.sub(r"[(),]", " ", filters.query).strip()
-            if safe_query:
-                pattern = f"%{safe_query}%"
-                request = request.or_(
-                    f"title.ilike.{pattern},host.ilike.{pattern},summary.ilike.{pattern}"
-                )
-
+        if filters.include_closed:
+            return fetch("all")
+        dated, dated_total = fetch("dated")
+        # 날짜/분야/자격 조건을 건 검색에는 세부 정보가 없는 링크 전용 행을 넣지 않는다.
+        if filters.deadline_before or filters.field or filters.eligibility:
+            return dated, dated_total
+        links, links_total = fetch("links")
+        items = dated + links
         if filters.sort == "latest":
-            request = request.order("collected_at", desc=True)
+            items.sort(key=lambda contest: contest.collected_at.isoformat() if contest.collected_at else "", reverse=True)
         else:
-            request = request.order("deadline")
-
-        response = request.limit(filters.limit).execute()
-        items = [Contest.model_validate(row) for row in response.data]
-        return items, response.count if response.count is not None else len(items)
+            items.sort(key=lambda contest: (contest.deadline is None, contest.deadline or date.max))
+        return items[:filters.limit], dated_total + links_total
 
     def get(self, contest_id: str) -> Contest | None:
         response = (

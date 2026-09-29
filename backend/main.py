@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from db import DatabaseNotConfigured
-from routers import admin, auth, batch, contests, goal, notifications, plan, settings, study
+from routers import admin, auth, batch, contests, goal, memories, notifications, plan, settings, study
 
 # ── FastAPI 앱 생성 ──
 app = FastAPI(title="StudyPace API")
@@ -23,6 +23,7 @@ app.include_router(settings.router)
 app.include_router(admin.router)
 app.include_router(batch.router)
 app.include_router(contests.router)  # FR-CONT-03/10 (담당 D)
+app.include_router(memories.router)  # FR-MEM-01/02 (담당 D)
 app.include_router(plan.router)    # FR-PLAN-* (담당 C)
 app.include_router(study.router)   # FR-STUDY-* (담당 C)
 app.include_router(goal.router)    # FR-GOAL-* (담당 B)

@@ -42,7 +42,7 @@ export default function ContestDetailPage() {
 
   // 슬라이더를 움직이는 동안 매번 부르지 않게 잠깐 기다렸다 계산한다
   useEffect(() => {
-    if (state.status !== 'ready') return;
+    if (state.status !== 'ready' || !state.contest?.deadline) return;
     let alive = true;
     const timer = setTimeout(() => {
       api.contests.estimate(id, hours).then(
@@ -51,7 +51,7 @@ export default function ContestDetailPage() {
       );
     }, 250);
     return () => { alive = false; clearTimeout(timer); };
-  }, [id, hours, state.status]);
+  }, [id, hours, state.status, state.contest?.deadline]);
 
   if (state.status === 'loading') return <p className="hint">공고를 불러오는 중…</p>;
   if (state.status !== 'ready') {
@@ -65,6 +65,18 @@ export default function ContestDetailPage() {
   }
 
   const c = state.contest;
+  if (c.source === 'wevity') {
+    const url = safeUrl(c.source_url);
+    return (
+      <>
+        <p className="hint"><Link href="/contests">← 공모전 목록</Link></p>
+        <h1 style={{ fontSize: 21, overflowWrap: 'anywhere' }}>{c.title}</h1>
+        <p className="muted">출처: 위비티</p>
+        <p className="hint">지원 자격, 접수 기간, 제출 방법은 위비티의 공고 원문에서 확인해 주세요.</p>
+        {url && <a className="btn btn-primary" href={url} target="_blank" rel="noopener noreferrer">위비티에서 공고 확인하기 ↗</a>}
+      </>
+    );
+  }
   const left = daysLeft(c.deadline);
   const source = SOURCE_LABEL[c.source] || c.source;
   const sourceUrl = safeUrl(c.source_url);

@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import EmptyState from '@/components/EmptyState';
 import ContestInterestMemory from '@/components/ContestInterestMemory';
+import ContestFeedback from '@/components/ContestFeedback';
+import { api, getToken } from '@/lib/api';
 import { useContestInterestMemory } from '@/lib/contest-interest-memory';
 import { SOURCE_LABEL, daysLeft, safeUrl, searchByKeywords } from '@/lib/contests';
 import { dday } from '@/lib/ui';
@@ -26,6 +28,17 @@ export default function ContestsPage() {
   const savedKeywords = memory?.keywords.join(', ') || '';
   const inputValue = input ?? savedKeywords;
   const activeKeywords = request?.keywords ?? savedKeywords;
+
+  useEffect(() => {
+    if (!getToken()) return;
+    let alive = true;
+    api.memories.list().then((rows) => {
+      const interests = rows.find((row) => row.memory_type === 'interest_tags');
+      const tags = interests?.value?.tags;
+      if (alive && Array.isArray(tags) && tags.length) load(tags.join(', '));
+    }).catch(() => {});
+    return () => { alive = false; };
+  }, []);
 
   useEffect(() => {
     if (!ready) return;
@@ -71,8 +84,7 @@ export default function ContestsPage() {
       <aside className={styles.notice} aria-label="공고 출처 안내">
         <strong>공고 출처: 위비티</strong>
         <p>
-          위비티에 올라온 공모전 중 접수 중인 공고의 제목·주최·기간만 모아 보여 줍니다. 매일 새벽에 새로 모아요.
-          지원 자격과 자세한 내용은 반드시 공고 원문에서 확인해 주세요.
+          위비티 공고의 제목과 링크를 보여 줍니다. 출처를 확인하고 자세한 내용은 공고 원문에서 확인해 주세요.
         </p>
       </aside>
 
@@ -97,7 +109,7 @@ export default function ContestsPage() {
               </button>
             </div>
             <p id="contest-interest-help" className="hint">
-              여러 키워드는 쉼표로 구분하세요. 제목·주최에 키워드가 많이 들어간 공고부터, 같으면 마감 임박순으로 보여 줍니다.
+              여러 키워드는 쉼표로 구분하세요. 공고 제목에 일치하는 키워드로 추천합니다.
             </p>
           </div>
         </form>
@@ -151,7 +163,7 @@ export default function ContestsPage() {
           <>
             {recommended && (
               <p className="muted tiny">
-                적용한 키워드: {result.keywords.join(', ')} · 제목·주최 기준
+                적용한 키워드: {result.keywords.join(', ')} · 제목 기준
               </p>
             )}
             {result.items.length === 0 ? (
@@ -169,13 +181,14 @@ export default function ContestsPage() {
                 {result.items.map((contest) => {
                   const url = safeUrl(contest.source_url);
                   const source = SOURCE_LABEL[contest.source] || contest.source;
-                  const left = daysLeft(contest.deadline);
+                  const limited = contest.source === 'wevity';
+                  const left = contest.deadline ? daysLeft(contest.deadline) : null;
                   return (
                     <li className={styles.card} key={contest.id}>
                       <div className={styles.cardTop}>
-                        <span className={left <= 7 ? 'tag tag-late' : 'tag'}>
+                        {!limited && left !== null && <span className={left <= 7 ? 'tag tag-late' : 'tag'}>
                           {contest.status === 'upcoming' ? '접수 예정' : dday(left)}
-                        </span>
+                        </span>}
                         {contest.matched.length > 0 && (
                           <span className="tiny muted">키워드 {contest.matched.length}개 일치</span>
                         )}
@@ -183,21 +196,26 @@ export default function ContestsPage() {
                       <h3 className={styles.cardTitle}>
                         <Link href={`/contests/${contest.id}`}>{contest.title}</Link>
                       </h3>
-                      <p className="tiny muted">
+                      <p className="tiny muted">출처: {source}</p>
+                      {!limited && <p className="tiny muted">
                         {contest.host} · 마감 {contest.deadline}
                         {contest.eligibility_text ? ` · ${contest.eligibility_text}` : ''}
-                      </p>
-                      {contest.fields.length > 0 && (
+                      </p>}
+                      {!limited && contest.fields.length > 0 && (
                         <p className="tiny dim">{contest.fields.slice(0, 3).join(' · ')}</p>
                       )}
                       <div className={styles.cardAction} style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                        <Link className="btn btn-sm" href={`/contests/${contest.id}`}>준비 기간 계산</Link>
+                        {!limited && <Link className="btn btn-sm" href={`/contests/${contest.id}`}>준비 기간 계산</Link>}
                         {url && (
                           <a className="btn btn-sm btn-quiet" href={url} target="_blank" rel="noopener noreferrer">
-                            {source} 원문 ↗
+                            {limited ? '위비티에서 공고 확인하기 ↗' : `${source} 원문 ↗`}
                           </a>
                         )}
                       </div>
+                      {recommended && contest.reason && <p className="tiny muted">
+                        {contest.aiGenerated && <strong>AI 추천 · </strong>}{contest.reason}
+                      </p>}
+                      {recommended && <ContestFeedback contestId={contest.id} />}
                     </li>
                   );
                 })}
@@ -208,7 +226,7 @@ export default function ContestsPage() {
       </section>
 
       <p className="hint">
-        제목·주최의 키워드를 비교하는 기초 검색입니다. 응모 자격을 충족하는지는 판단하지 않습니다.
+        제목 키워드 또는 제목 임베딩으로 찾은 추천입니다. AI 추천은 부정확할 수 있으며 응모 자격 충족 여부는 판단하지 않습니다.
       </p>
     </>
   );
