@@ -1,0 +1,645 @@
+{
+  "round": 3,
+  "measured_at": "2026-10-01T22:22:37",
+  "goldset": "2026-10-01",
+  "note": "09-29 Claude 관련성 검색 전환 후 첫 정답셋 측정 (태그 겹침 → Claude)",
+  "goal_fit_tags": {
+    "rate": 0.4,
+    "passed": 8,
+    "total": 20,
+    "cases": [
+      {
+        "id": "g01",
+        "interests": [
+          "엑셀",
+          "사무"
+        ],
+        "top3": [
+          "cert-comp1"
+        ],
+        "pass": true
+      },
+      {
+        "id": "g02",
+        "interests": [
+          "회사 서류 작업을 빨리 하고 싶어요"
+        ],
+        "top3": [],
+        "pass": false
+      },
+      {
+        "id": "g03",
+        "interests": [
+          "SQL",
+          "데이터베이스"
+        ],
+        "top3": [],
+        "pass": false
+      },
+      {
+        "id": "g04",
+        "interests": [
+          "데이터 분석가 취업"
+        ],
+        "top3": [],
+        "pass": false
+      },
+      {
+        "id": "g05",
+        "interests": [
+          "통계"
+        ],
+        "top3": [
+          "cert-adsp"
+        ],
+        "pass": true
+      },
+      {
+        "id": "g06",
+        "interests": [
+          "백엔드 개발자"
+        ],
+        "top3": [],
+        "pass": false
+      },
+      {
+        "id": "g07",
+        "interests": [
+          "웹 서비스를 만들고 싶어요"
+        ],
+        "top3": [],
+        "pass": false
+      },
+      {
+        "id": "g08",
+        "interests": [
+          "영어 점수"
+        ],
+        "top3": [],
+        "pass": false
+      },
+      {
+        "id": "g09",
+        "interests": [
+          "해외 취업 준비"
+        ],
+        "top3": [],
+        "pass": false
+      },
+      {
+        "id": "g10",
+        "interests": [
+          "한국사"
+        ],
+        "top3": [
+          "cert-hist"
+        ],
+        "pass": true
+      },
+      {
+        "id": "g11",
+        "interests": [
+          "역사 공부",
+          "공무원 시험"
+        ],
+        "top3": [],
+        "pass": false
+      },
+      {
+        "id": "g12",
+        "interests": [
+          "전기"
+        ],
+        "top3": [
+          "cert-elec"
+        ],
+        "pass": true
+      },
+      {
+        "id": "g13",
+        "interests": [
+          "전력 설비 엔지니어"
+        ],
+        "top3": [],
+        "pass": false
+      },
+      {
+        "id": "g14",
+        "interests": [
+          "UX",
+          "디자인"
+        ],
+        "top3": [
+          "contest-ux"
+        ],
+        "pass": true
+      },
+      {
+        "id": "g15",
+        "interests": [
+          "사용자 경험을 개선하는 서비스 기획"
+        ],
+        "top3": [],
+        "pass": false
+      },
+      {
+        "id": "g16",
+        "interests": [
+          "광고",
+          "브랜드 홍보"
+        ],
+        "top3": [],
+        "pass": false
+      },
+      {
+        "id": "g17",
+        "interests": [
+          "공공데이터"
+        ],
+        "top3": [
+          "contest-publicdata"
+        ],
+        "pass": true
+      },
+      {
+        "id": "g18",
+        "interests": [
+          "사회 문제를 데이터로 해결하는 아이디어"
+        ],
+        "top3": [],
+        "pass": false
+      },
+      {
+        "id": "g19",
+        "interests": [
+          "요리"
+        ],
+        "top3": [],
+        "pass": true
+      },
+      {
+        "id": "g20",
+        "interests": [
+          "피아노 연주"
+        ],
+        "top3": [],
+        "pass": true
+      }
+    ]
+  },
+  "goal_fit_claude": {
+    "rate": 1.0,
+    "passed": 20,
+    "total": 20,
+    "cases": [
+      {
+        "id": "g01",
+        "interests": [
+          "엑셀",
+          "사무"
+        ],
+        "top3": [
+          "cert-comp1"
+        ],
+        "pass": true
+      },
+      {
+        "id": "g02",
+        "interests": [
+          "회사 서류 작업을 빨리 하고 싶어요"
+        ],
+        "top3": [
+          "cert-comp1"
+        ],
+        "pass": true
+      },
+      {
+        "id": "g03",
+        "interests": [
+          "SQL",
+          "데이터베이스"
+        ],
+        "top3": [
+          "cert-sqld",
+          "cert-info-eng",
+          "cert-adsp"
+        ],
+        "pass": true
+      },
+      {
+        "id": "g04",
+        "interests": [
+          "데이터 분석가 취업"
+        ],
+        "top3": [
+          "cert-adsp",
+          "cert-sqld",
+          "contest-publicdata"
+        ],
+        "pass": true
+      },
+      {
+        "id": "g05",
+        "interests": [
+          "통계"
+        ],
+        "top3": [
+          "cert-adsp",
+          "cert-sqld"
+        ],
+        "pass": true
+      },
+      {
+        "id": "g06",
+        "interests": [
+          "백엔드 개발자"
+        ],
+        "top3": [
+          "cert-info-eng",
+          "cert-sqld",
+          "contest-publicdata"
+        ],
+        "pass": true
+      },
+      {
+        "id": "g07",
+        "interests": [
+          "웹 서비스를 만들고 싶어요"
+        ],
+        "top3": [
+          "cert-info-eng",
+          "contest-publicdata",
+          "cert-sqld"
+        ],
+        "pass": true
+      },
+      {
+        "id": "g08",
+        "interests": [
+          "영어 점수"
+        ],
+        "top3": [
+          "cert-toeic"
+        ],
+        "pass": true
+      },
+      {
+        "id": "g09",
+        "interests": [
+          "해외 취업 준비"
+        ],
+        "top3": [
+          "cert-toeic"
+        ],
+        "pass": true
+      },
+      {
+        "id": "g10",
+        "interests": [
+          "한국사"
+        ],
+        "top3": [
+          "cert-hist"
+        ],
+        "pass": true
+      },
+      {
+        "id": "g11",
+        "interests": [
+          "역사 공부",
+          "공무원 시험"
+        ],
+        "top3": [
+          "cert-hist",
+          "cert-comp1"
+        ],
+        "pass": true
+      },
+      {
+        "id": "g12",
+        "interests": [
+          "전기"
+        ],
+        "top3": [
+          "cert-elec"
+        ],
+        "pass": true
+      },
+      {
+        "id": "g13",
+        "interests": [
+          "전력 설비 엔지니어"
+        ],
+        "top3": [
+          "cert-elec"
+        ],
+        "pass": true
+      },
+      {
+        "id": "g14",
+        "interests": [
+          "UX",
+          "디자인"
+        ],
+        "top3": [
+          "contest-ux",
+          "contest-marketing"
+        ],
+        "pass": true
+      },
+      {
+        "id": "g15",
+        "interests": [
+          "사용자 경험을 개선하는 서비스 기획"
+        ],
+        "top3": [
+          "contest-ux",
+          "contest-marketing"
+        ],
+        "pass": true
+      },
+      {
+        "id": "g16",
+        "interests": [
+          "광고",
+          "브랜드 홍보"
+        ],
+        "top3": [
+          "contest-marketing",
+          "contest-ux"
+        ],
+        "pass": true
+      },
+      {
+        "id": "g17",
+        "interests": [
+          "공공데이터"
+        ],
+        "top3": [
+          "contest-publicdata",
+          "cert-adsp",
+          "cert-sqld"
+        ],
+        "pass": true
+      },
+      {
+        "id": "g18",
+        "interests": [
+          "사회 문제를 데이터로 해결하는 아이디어"
+        ],
+        "top3": [
+          "contest-publicdata",
+          "cert-adsp",
+          "cert-sqld"
+        ],
+        "pass": true
+      },
+      {
+        "id": "g19",
+        "interests": [
+          "요리"
+        ],
+        "top3": [],
+        "pass": true
+      },
+      {
+        "id": "g20",
+        "interests": [
+          "피아노 연주"
+        ],
+        "top3": [],
+        "pass": true
+      }
+    ]
+  },
+  "schedule_feasible": {
+    "rate": 1.0,
+    "passed": 10,
+    "total": 10,
+    "cases": [
+      {
+        "goal_id": "cert-info-eng",
+        "blocks": 12,
+        "unplaced": 0,
+        "violations": [],
+        "pass": true
+      },
+      {
+        "goal_id": "cert-sqld",
+        "blocks": 10,
+        "unplaced": 0,
+        "violations": [],
+        "pass": true
+      },
+      {
+        "goal_id": "cert-adsp",
+        "blocks": 8,
+        "unplaced": 0,
+        "violations": [],
+        "pass": true
+      },
+      {
+        "goal_id": "cert-comp1",
+        "blocks": 8,
+        "unplaced": 0,
+        "violations": [],
+        "pass": true
+      },
+      {
+        "goal_id": "cert-toeic",
+        "blocks": 8,
+        "unplaced": 0,
+        "violations": [],
+        "pass": true
+      },
+      {
+        "goal_id": "cert-hist",
+        "blocks": 8,
+        "unplaced": 0,
+        "violations": [],
+        "pass": true
+      },
+      {
+        "goal_id": "cert-elec",
+        "blocks": 8,
+        "unplaced": 0,
+        "violations": [],
+        "pass": true
+      },
+      {
+        "goal_id": "contest-ux",
+        "blocks": 8,
+        "unplaced": 0,
+        "violations": [],
+        "pass": true
+      },
+      {
+        "goal_id": "contest-publicdata",
+        "blocks": 8,
+        "unplaced": 0,
+        "violations": [],
+        "pass": true
+      },
+      {
+        "goal_id": "contest-marketing",
+        "blocks": 8,
+        "unplaced": 0,
+        "violations": [],
+        "pass": true
+      }
+    ]
+  },
+  "contest": {
+    "precision": 1.0,
+    "reason_factual": 1.0,
+    "recommended": 32,
+    "candidates": 20,
+    "cases": [
+      {
+        "id": "c01",
+        "interests": [
+          "AI",
+          "소프트웨어"
+        ],
+        "method": "claude",
+        "titles": [
+          "[서울대학교 창업지원단·H1R AI] 2026 SNU X Croche A",
+          "2026 CWNU SW-DNA² 챌린지 대학생 AI·SW 경진대회",
+          "2026년 제천시 AI 활용 데이터 분석 아이디어 공모전"
+        ],
+        "valid": 3,
+        "factual": 3
+      },
+      {
+        "id": "c02",
+        "interests": [
+          "디자인"
+        ],
+        "method": "claude",
+        "titles": [
+          "2026 디자인 크리에이션 챌린지(DCC) 3D프린팅 제품디자인 공모전",
+          "CREPET AWARDS 2026 반려용품 디자인 공모전",
+          "2026 Insta360 Luna Ultra 필름메이커 공모전 제1기",
+          "2026 팬트리픽 마스코트 일러스트 공모전",
+          "LG 대국민 미소 사진 공모전 - 스마일 모먼트"
+        ],
+        "valid": 5,
+        "factual": 5
+      },
+      {
+        "id": "c03",
+        "interests": [
+          "영상",
+          "유튜브"
+        ],
+        "method": "claude",
+        "titles": [
+          "고속철도 통합 기념 영상 공모전",
+          "2026 Insta360 Luna Ultra 필름메이커 공모전 제1기",
+          "시민의 시선으로 기록하는 노들글로벌예술섬 사진·짧은 영상(숏폼) 공모전",
+          "[드론플레이x곰랩] 드론 영상•사진 공모전",
+          "제8회 한국어교육 크리에이터 공모전"
+        ],
+        "valid": 5,
+        "factual": 5
+      },
+      {
+        "id": "c04",
+        "interests": [
+          "마케팅",
+          "광고"
+        ],
+        "method": "claude",
+        "titles": [
+          "2026 Insta360 Luna Ultra 필름메이커 공모전 제1기",
+          "LG 대국민 미소 사진 공모전 - 스마일 모먼트",
+          "고속철도 통합 기념 영상 공모전",
+          "시민의 시선으로 기록하는 노들글로벌예술섬 사진·짧은 영상(숏폼) 공모전",
+          "제5회 청소년창작영상제 숏폼 공모전"
+        ],
+        "valid": 5,
+        "factual": 5
+      },
+      {
+        "id": "c05",
+        "interests": [
+          "창업"
+        ],
+        "method": "keywords",
+        "titles": [
+          "[서울대학교 창업지원단·H1R AI] 2026 SNU X Croche A"
+        ],
+        "valid": 1,
+        "factual": 1
+      },
+      {
+        "id": "c06",
+        "interests": [
+          "데이터"
+        ],
+        "method": "claude",
+        "titles": [
+          "2026년 제천시 AI 활용 데이터 분석 아이디어 공모전"
+        ],
+        "valid": 1,
+        "factual": 1
+      },
+      {
+        "id": "c07",
+        "interests": [
+          "환경",
+          "에너지"
+        ],
+        "method": "claude",
+        "titles": [
+          "[기후에너지환경부] 제13회 대학생 물환경 정책·기술 공모전",
+          "해양바이오뱅크 산업·연구 활용 아이디어 발굴 공모전"
+        ],
+        "valid": 2,
+        "factual": 2
+      },
+      {
+        "id": "c08",
+        "interests": [
+          "아이디어"
+        ],
+        "method": "claude",
+        "titles": [
+          "2026 모바일신분증 아이디어 공모전",
+          "해양바이오뱅크 산업·연구 활용 아이디어 발굴 공모전",
+          "2026년 인천광역시의회 정책아이디어 공모전",
+          "[국가철도공단] 철도산업 규제ㆍ애로 개선제안 공모",
+          "[행정안전부] 제7차 열린정부 실행계획 국민제안공모"
+        ],
+        "valid": 5,
+        "factual": 5
+      },
+      {
+        "id": "c09",
+        "interests": [
+          "게임"
+        ],
+        "method": "claude",
+        "titles": [],
+        "valid": 0,
+        "factual": 0
+      },
+      {
+        "id": "c10",
+        "interests": [
+          "사진"
+        ],
+        "method": "claude",
+        "titles": [
+          "LG 대국민 미소 사진 공모전 - 스마일 모먼트",
+          "시민의 시선으로 기록하는 노들글로벌예술섬 사진·짧은 영상(숏폼) 공모전",
+          "2026 Insta360 Luna Ultra 필름메이커 공모전 제1기",
+          "[드론플레이x곰랩] 드론 영상•사진 공모전",
+          "제5회 청소년창작영상제 숏폼 공모전"
+        ],
+        "valid": 5,
+        "factual": 5
+      }
+    ]
+  }
+}

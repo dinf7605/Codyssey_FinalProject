@@ -1,0 +1,38 @@
+{
+  "version": "2026-10-01",
+  "note": "AI 품질 평가 정답셋 (기획서 4-9 · AI기능명세 ⑦). goal_cases 의 acceptable 은 카탈로그(services/goal_catalog.py)에서 적합하다고 본 목표 — 팀원 2명이 교차 확인해 고친다. acceptable 이 비어 있으면 '추천하지 않아야 맞는' 무관 관심사.",
+  "goal_cases": [
+    {"id": "g01", "interests": ["엑셀", "사무"], "acceptable": ["cert-comp1"]},
+    {"id": "g02", "interests": ["회사 서류 작업을 빨리 하고 싶어요"], "acceptable": ["cert-comp1"]},
+    {"id": "g03", "interests": ["SQL", "데이터베이스"], "acceptable": ["cert-sqld", "cert-info-eng"]},
+    {"id": "g04", "interests": ["데이터 분석가 취업"], "acceptable": ["cert-adsp", "cert-sqld", "contest-publicdata"]},
+    {"id": "g05", "interests": ["통계"], "acceptable": ["cert-adsp"]},
+    {"id": "g06", "interests": ["백엔드 개발자"], "acceptable": ["cert-info-eng", "cert-sqld"]},
+    {"id": "g07", "interests": ["웹 서비스를 만들고 싶어요"], "acceptable": ["cert-info-eng"]},
+    {"id": "g08", "interests": ["영어 점수"], "acceptable": ["cert-toeic"]},
+    {"id": "g09", "interests": ["해외 취업 준비"], "acceptable": ["cert-toeic"]},
+    {"id": "g10", "interests": ["한국사"], "acceptable": ["cert-hist"]},
+    {"id": "g11", "interests": ["역사 공부", "공무원 시험"], "acceptable": ["cert-hist"]},
+    {"id": "g12", "interests": ["전기"], "acceptable": ["cert-elec"]},
+    {"id": "g13", "interests": ["전력 설비 엔지니어"], "acceptable": ["cert-elec"]},
+    {"id": "g14", "interests": ["UX", "디자인"], "acceptable": ["contest-ux"]},
+    {"id": "g15", "interests": ["사용자 경험을 개선하는 서비스 기획"], "acceptable": ["contest-ux", "contest-marketing"]},
+    {"id": "g16", "interests": ["광고", "브랜드 홍보"], "acceptable": ["contest-marketing", "contest-ux"]},
+    {"id": "g17", "interests": ["공공데이터"], "acceptable": ["contest-publicdata"]},
+    {"id": "g18", "interests": ["사회 문제를 데이터로 해결하는 아이디어"], "acceptable": ["contest-publicdata", "cert-adsp"]},
+    {"id": "g19", "interests": ["요리"], "acceptable": []},
+    {"id": "g20", "interests": ["피아노 연주"], "acceptable": []}
+  ],
+  "contest_cases": [
+    {"id": "c01", "interests": ["AI", "소프트웨어"]},
+    {"id": "c02", "interests": ["디자인"]},
+    {"id": "c03", "interests": ["영상", "유튜브"]},
+    {"id": "c04", "interests": ["마케팅", "광고"]},
+    {"id": "c05", "interests": ["창업"]},
+    {"id": "c06", "interests": ["데이터"]},
+    {"id": "c07", "interests": ["환경", "에너지"]},
+    {"id": "c08", "interests": ["아이디어"]},
+    {"id": "c09", "interests": ["게임"]},
+    {"id": "c10", "interests": ["사진"]}
+  ]
+}

@@ -415,6 +415,26 @@ Supabase Auth 의 Google 공급자를 쓴다. 코드는 `routers/auth_google.py`
 
 ---
 
+## AI 품질 평가 (기획서 4-9 · 담당 A)
+
+정답셋 `evals/goldset.json` (목표 추천 20 · 공모전 10) 으로 잰다. 결과는 `evals/RESULTS.md` 표와 `evals/results/*.json`.
+
+```
+python -m evals.run_eval --round 4 --note "이번 회차에 바꾼 것"     # Claude·공용 DB (Haiku 약 30회)
+python -m evals.run_eval --round 4 --no-ai                          # 규칙 경로만
+```
+
+| 항목 | 자동 측정 | 3차 (10-01) |
+|---|---|---|
+| 목표 추천 적합도 | 같은 정답셋을 태그 겹침 → Claude 로 나란히 | 40% → **100%** |
+| 일정 실현 가능성 | 카탈로그 10개 배치 → 규칙 검증 위반 0건 | 100% |
+| 공모전 Precision@5 | 추천 공고가 접수 중·마감 전인가 (자격은 판정하지 않음) | 100% (추천 32건) |
+| 추천 이유 사실성 | 이유가 말한 근거가 제목·분야·입력 태그와 맞는가 | 100% |
+
+관심사와의 관련성·학습 분해 누락률·실사용자 지표는 사람이 채점한다 (`evals/RESULTS.md` "읽는 법").
+
+---
+
 ## 남은 작업
 
 - [x] `services/agent_tools.py` 의 목업 데이터를 DB·팀 서비스 조회로 교체 (커리큘럼 `curriculum_units`, 카탈로그 B, 공모전 D, 가용시간은 요청 값)
