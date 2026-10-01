@@ -25,7 +25,7 @@ const PROCESSORS = [
   ['Supabase', '회원 인증, 데이터 저장', '회원 정보와 위 학습 데이터 전체'],
   ['Anthropic (Codyssey 교육용 Claude 게이트웨이 경유)', '학습 계획 분해, 목표·공모전 관련성 판단, 일정 변경 요약 문장',
     '목표 이름·기한·가용 시간, 관심 분야, 공모전 제목, 학습 블록 이름. 이메일·닉네임은 보내지 않습니다.'],
-  ['Google', '구글 로그인 (선택한 경우만)', '구글 계정 이메일·이름'],
+  ['Google', '구글 로그인 · 구글 캘린더 바쁜 시간 읽기 (선택한 경우만)', '구글 계정 이메일·이름 / 읽을 기간'],
 ];
 
 export default function PrivacyPage() {
@@ -50,7 +50,10 @@ export default function PrivacyPage() {
               </tbody>
             </table>
           </div>
-          <p className="hint">구글 캘린더 연동은 아직 제공하지 않습니다. 제공하게 되면 바쁜 시간대만 읽고 일정 제목·참석자는 저장하지 않습니다.</p>
+          <p className="hint">
+            구글 캘린더 연동(선택)은 계획을 만들 때 &lsquo;바쁜 시간대&rsquo;(시작·끝)만 한 번 읽습니다. 일정 제목·참석자·장소는 읽을 수 없는 권한이며,
+            읽은 바쁜 시간과 구글 권한(토큰)은 서버에 저장하지 않고 읽은 직후 권한을 돌려줍니다. 바쁜 시간은 이 브라우저 탭에 30분만 둡니다.
+          </p>
         </section>
 
         <section className="stack" style={{ gap: 8 }}>

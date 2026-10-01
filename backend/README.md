@@ -365,13 +365,61 @@ Supabase Auth 의 Google 공급자를 쓴다. 코드는 `routers/auth_google.py`
 4. Supabase → Authentication → **URL Configuration** → Redirect URLs 에 `http://localhost:3000/auth/callback` 추가 (배포하면 배포 주소의 `/auth/callback` 도)
 5. 확인: 로그인 화면에서 버튼을 눌러 구글 계정 선택 화면이 뜨면 된다
 
-Client Secret 은 Supabase 대시보드에만 넣는다. 우리 `.env`·코드·깃에는 넣지 않는다 (`.env.example` 의 `GOOGLE_CLIENT_*` 는 나중의 캘린더 연동용).
+로그인용 Client Secret 은 Supabase 대시보드에만 넣는다. (`.env` 의 `GOOGLE_CLIENT_*` 는 아래 캘린더 연동용 — 서버만 읽고 깃에는 올리지 않는다.)
+
+---
+
+## 구글 캘린더 연동 (FR-PLAN-01) · 내 캘린더로 내보내기 (FR-PLAN-08)
+
+**가져오기** — 계획 만들기 화면의 **구글 캘린더에서 바쁜 시간 가져오기** (`routers/google_calendar.py`)
+
+| 순서 | 무엇 |
+|---|---|
+| 1 | `GET /calendar/connect?state=…` → 구글 동의 주소 (권한은 `calendar.freebusy` 하나 · `access_type=online`) |
+| 2 | 구글에서 허락하면 `FRONTEND_ORIGIN/calendar/callback?code=…&state=…` 로 돌아온다. 화면이 state 를 확인한다 |
+| 3 | `POST /calendar/busy` — code 를 토큰으로 바꿔 **FreeBusy 를 한 번 읽고 토큰을 바로 폐기(revoke)**. 결과는 저장하지 않고 화면에만 준다 |
+| 4 | 화면이 바쁜 시간을 탭 세션에 30분 두고 `POST /plan/schedule` 의 `busy` 로 넘긴다 → `scheduler.subtract_busy` 가 빈 시간에서 잘라 낸다 |
+
+- 일정 **제목·참석자·장소는 이 권한으로 받을 수도 없다** — 바쁜 시작·끝만 (NFR-PRIV-01)
+- 토큰·바쁜 시간을 저장하지 않으므로 **야간 재조정·가용시간 변경은 캘린더를 다시 보지 않는다** (계획을 다시 만들 때 다시 가져온다)
+- 바쁜 시간은 블록이 아니다 — 하루 3블록 상한에 세지 않고, 저장되는 계획에도 들어가지 않는다
+
+켜는 법 (한 번)
+1. Google Cloud Console → API 및 서비스 → **라이브러리 → Google Calendar API 사용 설정**
+2. OAuth 동의 화면 → 범위 추가 → `.../auth/calendar.freebusy` (테스트 상태 · 테스트 사용자만 사용 가능)
+3. 사용자 인증 정보 → (구글 로그인에 쓰는 것과 같은) OAuth 클라이언트 → **승인된 리디렉션 URI** 에 `http://localhost:3000/calendar/callback` 추가 (배포하면 배포 주소도)
+4. 루트 `.env` 에 `GOOGLE_CLIENT_ID` · `GOOGLE_CLIENT_SECRET` 을 넣고 백엔드 재시작 (비밀값은 깃에 올리지 않는다)
+5. 없으면 버튼을 눌렀을 때 "구글 캘린더 연동이 아직 설정되지 않았습니다" 로 안내한다 (503) — 직접 고른 가용 시간으로는 그대로 만들 수 있다
+
+**내보내기** — 마이페이지 목표 관리의 **내 캘린더에 넣기 (.ics)** → `GET /plan/{id}/calendar.ics`.
+오늘 이후의 안 한 블록을 표준 iCalendar 로 내려준다 (`services/calendar_export.py`). 구글·애플·아웃룩 캘린더의 '가져오기'로 넣는다.
+캘린더 쓰기 권한(민감 권한·구글 심사)이 필요 없다. UID 가 블록 id 라 다시 가져오면 같은 일정으로 갱신된다.
+
+---
+
+## 알림 (FR-ALARM-01~04 · FR-MY-03/05)
+
+앱 안 알림이다 (메일·푸시 없음). 머리글·사이드바의 알림 링크(안 읽은 수)와 `/notifications` 화면. 일은 `services/alarms.py`.
+
+| 종류 | 언제 | 알림 강도 |
+|---|---|---|
+| 시작 전 | 블록 시작 N분 전 (마이페이지에서 5~60분, 기본 10분) | 낮음·보통·높음 |
+| 미완료 | 블록이 끝나고 30분이 지나도 완료하지 않음 (3시간 넘게 지난 것은 야간 재조정 몫) | 보통·높음 |
+| 하루 마감 | 21:00, 오늘 못 끝낸 블록이 있으면 하루 한 번 | 높음 |
+| 주간 요약 | 일요일 20:00, 블록 완료 수와 공부 시간 | 낮음·보통·높음 |
+
+- 알림 끄기·방해금지(한국 시각)·강도는 `GET/PUT /settings/notifications` (마이페이지 알림 설정)
+- 블록 알림에서 **지금 시작**(`/study?block=`) · **미루기**(`POST /plan/blocks/{id}/postpone` — 다음 날 이후 빈 시간으로, 뒤 단원도 순서대로)
+- 실행: `python workers/notification_worker.py` (1분·5분·21시·일 20시) 또는 `POST /batch/alarm/{before-block|after-block|daily-nightly|weekly-summary}` + `X-Batch-Key`
+- 같은 블록·같은 종류는 한 번만 (DB 고유 인덱스도 막는다)
+
+---
 
 ## 남은 작업
 
 - [x] `services/agent_tools.py` 의 목업 데이터를 DB·팀 서비스 조회로 교체 (커리큘럼 `curriculum_units`, 카탈로그 B, 공모전 D, 가용시간은 요청 값)
 - [ ] 커리큘럼 공식 원문 대조 후 `verified=true` · 다른 목표(컴활·토익 등) 커리큘럼 추가
-- [ ] 구글 캘린더 연동 (`FR-PLAN-01`) — `get_available_slots` 도구 안쪽
+- [x] 구글 캘린더 연동 (`FR-PLAN-01`) — 10-01 계획 만들기에서 바쁜 시간 가져오기 (위 "구글 캘린더 연동"). 에이전트 `get_available_slots` 도구는 여전히 요청 가용시간을 쓴다
 - [x] AI 호출 로그 저장 (`FR-ADMIN-02` 대시보드 근거) — `ai_call_logs`
 - [x] 프론트 `/schedule` 에서 계획 만들기(분해 → 배치 → 검증)를 실제 API로 호출
 - [x] 프론트 `/schedule` 주·월 달력과 날짜별 블록, `/study` 타이머·메모·집계를 목업에서 API 로 전환

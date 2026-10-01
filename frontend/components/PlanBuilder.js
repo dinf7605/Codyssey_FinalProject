@@ -7,6 +7,7 @@ import { loadExploration } from '@/lib/goalSession';
 import { clearContestPlanning, loadContestPlanning } from '@/lib/contest-planning';
 import { planInput, slotsHours, weeksBetween } from '@/lib/planInput';
 import { clearDraft, draftKey, loadDraft, saveDraft } from '@/lib/planDraft';
+import { clearBusy, loadBusy, startCalendarConnect } from '@/lib/calendarBusy';
 import { notifyPlanChanged } from '@/lib/usePlan';
 import { AiBadge, AiNotice } from './AiNotice';
 import EmptyState from './EmptyState';
@@ -111,6 +112,9 @@ export default function PlanBuilder() {
   const [scope, setScope] = useState(draft?.scope ?? null);
   const [used, setUsed] = useState(draft?.used ?? null); // { mode: 'as-is' | 'trim' | 'extend', units, deadline }
   const [placing, setPlacing] = useState(false);
+  // FR-PLAN-01 구글 캘린더에서 가져온 바쁜 시간 (이 탭에 30분) — lib/calendarBusy.js
+  const [calendar, setCalendar] = useState(loadBusy);
+  const [calendarState, setCalendarState] = useState({ pending: false, error: '' });
   const abortRef = useRef(null);
 
   // 보관본이 지금 입력(목표·시작일·기한·가용시간)과 다르면 되살리지 않고 처음 화면을 보여준다
@@ -200,6 +204,7 @@ export default function PlanBuilder() {
       startDay: current.startDay,
       deadline,
       goalTitle: current.goalTitle,
+      busy: calendar?.busy || [], // FR-PLAN-01 가져온 구글 캘린더 일정 시간은 비켜 간다
     });
     const check = await api.plan.validate({ blocks: placed.blocks, units, deadline });
     setPlan(placed);
@@ -343,6 +348,34 @@ export default function PlanBuilder() {
                 : '날짜가 다르면 바꿔 주세요. 이 날짜까지 끝나도록 배치합니다.'}{' '}
             <Link href="/onboarding">목표 바꾸기</Link>
           </p>
+        </div>
+      )}
+
+      {editable && (
+        <div className="stack" style={{ gap: 6 }}>
+          {calendar ? (
+            <p className="hint" style={{ margin: 0 }}>
+              구글 캘린더 일정 {calendar.busy.length}개를 피해서 놓아요.{' '}
+              <button type="button" className="btn-link" disabled={placing}
+                onClick={() => { clearBusy(); setCalendar(null); }}>빼기</button>
+            </p>
+          ) : (
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <button type="button" className="btn btn-sm" disabled={calendarState.pending || !deadlineValid}
+                onClick={async () => {
+                  setCalendarState({ pending: true, error: '' });
+                  try {
+                    await startCalendarConnect({ startDay: input.startDay, deadline: input.deadline });
+                  } catch (err) {
+                    setCalendarState({ pending: false, error: err.message || '구글 캘린더에 연결하지 못했어요.' });
+                  }
+                }}>
+                {calendarState.pending ? '구글로 이동하는 중…' : '구글 캘린더에서 바쁜 시간 가져오기'}
+              </button>
+              <span className="micro dim">일정 제목은 읽지 않고, 한 번 읽은 뒤 권한을 바로 돌려드려요</span>
+            </div>
+          )}
+          {calendarState.error && <p className="hint hint-error" role="alert" style={{ margin: 0 }}>{calendarState.error}</p>}
         </div>
       )}
 

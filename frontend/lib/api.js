@@ -253,6 +253,12 @@ export const api = {
     },
   },
 
+  // FR-PLAN-01 구글 캘린더 바쁜 시간 (backend/routers/google_calendar.py) — 토큰·결과를 서버에 저장하지 않는다
+  calendar: {
+    connect: (state) => request(`/calendar/connect?state=${encodeURIComponent(state)}`),
+    busy: ({ code, startDay, endDay }) => post('/calendar/busy', { code, start_day: startDay, end_day: endDay }),
+  },
+
   // FR-ALARM-01~04 앱 안 알림 (backend/routers/notifications.py)
   notifications: {
     list: () => request('/notifications', { cache: 'no-store' }),
@@ -415,13 +421,14 @@ export const api = {
     },
 
     // 로그인 상태면 서버가 진행 중인 다른 목표의 블록을 피해서 놓는다. goalTitle 은 다시 만드는 같은 목표를 빼려고
-    schedule: ({ units, availability, startDay, deadline, goalTitle = null }) =>
+    schedule: ({ units, availability, startDay, deadline, goalTitle = null, busy = [] }) =>
       post('/plan/schedule', {
         units,
         availability,
         start_day: startDay,
         deadline,
         goal_title: goalTitle,
+        busy, // FR-PLAN-01 구글 캘린더의 바쁜 시간 — 이 시간에는 놓지 않는다
       }),
 
     validate: ({ blocks, units, deadline }) =>
