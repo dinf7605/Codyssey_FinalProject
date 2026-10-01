@@ -194,8 +194,9 @@ def _already(db, user_id: str, type_: str, *, block_id: str | None = None, since
 
 
 def _insert(db, user_id: str, type_: str, message: str, now: datetime, block_id: str | None = None,
-            contest_id: str | None = None) -> bool:
-    row = {"user_id": user_id, "block_id": block_id, "type": type_, "message": message, "sent_at": to_db_time(now)}
+            contest_id: str | None = None, is_read: bool = False) -> bool:
+    row = {"user_id": user_id, "block_id": block_id, "type": type_, "message": message, "sent_at": to_db_time(now),
+           "is_read": is_read}
     if contest_id is not None:
         row["contest_id"] = contest_id
     for _ in range(2):  # 실패하면 한 번 더 (FR-ALARM-01). 고유 인덱스에 걸린 경우는 둘 다 실패 — 이미 보낸 것
@@ -354,7 +355,9 @@ def rest_today(db, user_id: str, now: datetime | None = None) -> bool:
     now = now or now_kst()
     if resting_today(db, user_id, now):
         return False
-    return _insert(db, user_id, REST_TODAY, "오늘은 쉬기로 했어요. 남은 블록은 밤사이 다른 날로 옮겨 드려요.", now)
+    # 본인이 누른 기록이라 읽음으로 남긴다 — 안 읽은 알림 수를 늘리지 않는다
+    return _insert(db, user_id, REST_TODAY, "오늘은 쉬기로 했어요. 남은 블록은 밤사이 다른 날로 옮겨 드려요.", now,
+                   is_read=True)
 
 
 # ── 재조정 결과 (FR-MY-03) ────────────────────────────

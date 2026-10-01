@@ -3,11 +3,15 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { api, getToken } from '@/lib/api';
+import { ddayOf, kstToday } from '@/lib/planView';
 import { notifyPlanChanged } from '@/lib/usePlan';
 
 // FR-CONT-07 관심 공모전 등록 — 마감 D-7 · D-3 준비 블록을 진행 중인 목표에 넣는다 (backend/services/contest_interest.py)
 // 일정이 바뀌므로 넣기 전에 놓일 자리를 먼저 보여 주고 확인을 받는다. 빈 시간이 모자라면 넣지 않고 그날 일정을 보여 준다.
 // 관심을 해제하면 아직 안 한 준비 블록도 함께 지운다.
+// 마감이 3일 안이면 준비 블록을 놓을 날이 없으므로 버튼 대신 이유를 보여 준다 (서버도 같은 기준으로 거절한다).
+
+const LAST_PREP_DAYS = 3; // backend services/contest_interest.py PREP_DAYS 의 가장 가까운 날
 
 function when(iso) {
   return new Date(`${iso}+09:00`).toLocaleString('ko-KR', {
@@ -15,7 +19,8 @@ function when(iso) {
   });
 }
 
-export default function ContestInterestButton({ contestId }) {
+export default function ContestInterestButton({ contestId, deadline }) {
+  const tooLate = !deadline || ddayOf(deadline, kstToday()) < LAST_PREP_DAYS;
   const [token] = useState(() => getToken());
   const [state, setState] = useState({ status: token ? 'loading' : 'anon', interest: null });
   const [preview, setPreview] = useState(null);
@@ -93,7 +98,12 @@ export default function ContestInterestButton({ contestId }) {
           </button>
         </>
       )}
-      {state.status === 'ready' && !state.interest && !preview && (
+      {state.status === 'ready' && !state.interest && !preview && tooLate && (
+        <p className="muted tiny" style={{ margin: 0 }}>
+          마감이 3일 안이라 준비 블록을 넣을 날이 없어요. 관심 등록은 마감 3일 전까지 할 수 있어요.
+        </p>
+      )}
+      {state.status === 'ready' && !state.interest && !preview && !tooLate && (
         <>
           <p className="muted tiny" style={{ margin: 0 }}>마감 7일 전·3일 전에 1시간짜리 준비 블록을 진행 중인 목표 일정에 넣어요. 넣기 전에 자리를 먼저 보여 드려요.</p>
           <button type="button" className="btn btn-sm" disabled={busy} onClick={look} style={{ alignSelf: 'flex-start' }}>
@@ -105,7 +115,12 @@ export default function ContestInterestButton({ contestId }) {
         <div className="stack" style={{ gap: 6 }}>
           <p className="tiny" style={{ margin: 0 }}>&lsquo;{preview.goal_title}&rsquo; 일정에 이렇게 넣어요.</p>
           <ul className="tiny" style={{ margin: 0, paddingLeft: 18 }}>
-            {preview.blocks.map((b) => <li key={b.unit_key}>{when(b.start)} · 1시간 · {b.title}</li>)}
+            {preview.blocks.map((b) => (
+              <li key={b.unit_key}>
+                {when(b.start)} · 1시간 · {b.title}
+                {b.shifted_days > 0 && <span className="muted"> (그날 자리가 없어 {b.shifted_days}일 앞당김)</span>}
+              </li>
+            ))}
           </ul>
           {preview.conflicts.length > 0 && (
             <div className="stack" style={{ gap: 4 }} role="alert">

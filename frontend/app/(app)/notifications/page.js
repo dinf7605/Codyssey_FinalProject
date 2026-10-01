@@ -148,6 +148,7 @@ export default function NotificationsPage() {
                   </div>
                 )}
                 {result && <p className={result.ok ? 'hint' : 'hint hint-error'} role="status" style={{ margin: 0 }}>{result.text}</p>}
+                {!result && row.handled && <p className="hint" style={{ margin: 0 }}>{row.handled}</p>}
                 {!row.is_read && !row.actions?.length && (
                   <button type="button" className="btn btn-sm btn-quiet" onClick={() => markRead(row.id)} style={{ alignSelf: 'flex-start' }}>
                     읽음으로 표시

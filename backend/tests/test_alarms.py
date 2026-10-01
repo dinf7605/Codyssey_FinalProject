@@ -144,6 +144,7 @@ def test_오늘_쉬기를_누르면_그날_학습_알림이_멈춘다(db):
     ]).execute()
     assert alarms.rest_today(db, USER, NOW) is True
     assert alarms.rest_today(db, USER, NOW) is False  # 두 번 눌러도 기록은 하나
+    assert logs(db, alarms.REST_TODAY)[0]["is_read"] is True  # 본인이 누른 기록 — 안 읽은 수에 넣지 않는다
     assert alarms.run_before_block(db, NOW)["sent"] == 0
     assert alarms.run_after_block(db, NOW)["sent"] == 0
     # 다음 날은 다시 보낸다
@@ -303,6 +304,28 @@ def test_블록_알림에만_시작_미루기_버튼이_붙는다(client, db):
     ]).execute()
     rows = {r["id"]: r for r in client.get("/notifications").json()}
     assert rows[1]["actions"] == ["start", "rest"]
+
+
+def test_끝냈거나_알림_뒤에_옮긴_블록의_알림은_버튼을_뺀다(client, db):
+    db.table("plan_blocks").insert([
+        block("b1", datetime(2026, 10, 5, 19, 0), datetime(2026, 10, 5, 20, 0), done=True),
+        block("b2", datetime(2026, 10, 6, 19, 0), datetime(2026, 10, 6, 20, 0)),
+        block("b3", datetime(2026, 10, 7, 19, 0), datetime(2026, 10, 7, 20, 0)),
+    ]).execute()
+    db.table("notification_logs").insert([
+        {"id": i, "user_id": USER, "type": alarms.BEFORE_BLOCK, "message": "m", "is_read": False,
+         "sent_at": to_db_time(NOW), "block_id": b} for i, b in ((1, "b1"), (2, "b2"), (3, "b3"))
+    ]).execute()
+    db.table("plan_changes").insert([
+        {"user_id": USER, "plan_id": "p1", "block_id": "b2", "reason": "직접 옮겼어요.",
+         "created_at": to_db_time(NOW.replace(hour=20))},          # 알림 뒤에 옮김
+        {"user_id": USER, "plan_id": "p1", "block_id": "b3", "reason": "직접 옮겼어요.",
+         "created_at": to_db_time(NOW.replace(hour=9))},           # 알림 전에 옮김 — 상관없다
+    ]).execute()
+    rows = {r["id"]: r for r in client.get("/notifications").json()}
+    assert rows[1]["actions"] == [] and "완료" in rows[1]["handled"]
+    assert rows[2]["actions"] == [] and "옮겨졌어요" in rows[2]["handled"]
+    assert rows[3]["actions"] == ["start", "postpone", "rest"] and "handled" not in rows[3]
 
 
 def test_테스트용_알림_API는_없다(client):

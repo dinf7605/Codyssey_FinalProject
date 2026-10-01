@@ -423,7 +423,7 @@ Supabase Auth 의 Google 공급자를 쓴다. 코드는 `routers/auth_google.py`
 
 공모전 상세에서 **관심 등록하기** → `POST /contest-interests/preview` 로 마감 D-7·D-3 준비 블록(1시간)이 놓일 자리를 먼저 보여 주고,
 확인하면 `POST /contest-interests` 가 진행 중인 목표(준비일이 기한 안에 드는 것)에 학습 단위·고정 블록으로 넣는다.
-그날 빈 시간이 없으면 넣지 않고(409) 그날 일정을 보여 준다. `DELETE /contest-interests/{id}` 는 아직 안 한 준비 블록도 지운다 (`services/contest_interest.py`).
+그날 빈 시간이 없으면 하루·이틀 앞당겨 보고, 그래도 없으면 넣지 않고(409) 그날 일정을 보여 준다. `DELETE /contest-interests/{id}` 는 아직 안 한 준비 블록도 지운다 (`services/contest_interest.py`).
 
 ## AI 하루 비용 한도 (FR-ADMIN-02 · FR-GOAL-12)
 

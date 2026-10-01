@@ -1,7 +1,8 @@
 """관심 공모전 등록 (FR-CONT-07) — 마감 D-7 · D-3 준비 블록을 진행 중인 목표에 넣는다.
 
   - 넣기 전에 어디에 놓일지 먼저 보여 주고(preview), 사용자가 확인하면 저장한다(register)
-  - 그날 빈 시간이 모자라면(하루 3블록·빈 시간대) 넣지 않고 그날 이미 있는 블록을 알려 준다
+  - 그날 빈 시간이 모자라면(하루 3블록·빈 시간대·쉬는 날) 하루·이틀 앞당겨 본다. 그래도 없으면 넣지 않고
+    그날 이미 있는 블록을 알려 준다 — 실사용 테스트에서 공부를 촘촘히 놓은 계정은 절반쯤 정확한 날에 자리가 없었다
   - 준비 블록은 계획의 학습 단위로 더하고 고정(locked)한다 — 야간 재조정이 옮기지 않는다
   - 관심을 해제하면 아직 안 한 준비 블록과 그 단위를 지운다. 이미 끝낸 블록은 학습 기록이라 남긴다
   - 공모전 마감 24시간 전 알림(services/alarms.run_contest_deadlines)은 이 목록을 본다
@@ -20,6 +21,7 @@ from services.scheduler import build_schedule
 
 PREP_DAYS = (7, 3)       # 마감 며칠 전에 준비 블록을 놓는가
 PREP_MINUTES = 60
+SHIFT_DAYS = 2           # 정한 날에 자리가 없으면 며칠까지 앞당겨 보는가 (늦추면 마감에 더 가까워진다)
 TITLE_LIMIT = 30
 
 
@@ -86,13 +88,22 @@ def preview(db, user_id: str, contest_id: str, now: datetime) -> dict:
     for d, day in days:
         unit = StudyUnit(id=_unit_key(contest["id"], d), title=f"[공모전 준비] {title} · D-{d}",
                          estimated_minutes=PREP_MINUTES)
-        result = build_schedule([unit], availability, day, day, fixed_blocks=fixed + [b for _, b in placed])
-        new = next((b for b in result.blocks if b.unit_id == unit.id), None)
+        new = None
+        for shift in range(SHIFT_DAYS + 1):
+            candidate = day - timedelta(days=shift)
+            if candidate < today:
+                break
+            result = build_schedule([unit], availability, candidate, candidate,
+                                    fixed_blocks=fixed + [b for _, b in placed])
+            new = next((b for b in result.blocks if b.unit_id == unit.id), None)
+            if new is not None:
+                break
         if new is None:
             same_day = sorted((b for b in fixed if b.start.date() == day), key=lambda b: b.start)
             conflicts.append({
                 "day": day.isoformat(), "label": f"D-{d} {_label(day)}",
-                "reason": "그날 빈 시간이 없거나 이미 블록이 3개 있어요." if same_day else "그날은 공부 가능 시간이 없어요.",
+                "reason": ("그날과 앞 이틀 모두 빈 시간이 없거나 이미 블록이 3개 있어요." if same_day
+                           else "그날과 앞 이틀 모두 공부 가능 시간이 없어요."),
                 "blocks": [{"title": b.title, "start": b.start.isoformat(), "end": b.end.isoformat()} for b in same_day],
             })
             continue
@@ -101,7 +112,8 @@ def preview(db, user_id: str, contest_id: str, now: datetime) -> dict:
     return {
         "contest": {"id": str(contest["id"]), "title": contest["title"], "deadline": deadline.isoformat()},
         "plan_id": plan["id"], "goal_title": plan["goal_title"],
-        "blocks": [{"unit_key": u.id, "title": b.title, "start": b.start.isoformat(), "end": b.end.isoformat()}
+        "blocks": [{"unit_key": u.id, "title": b.title, "start": b.start.isoformat(), "end": b.end.isoformat(),
+                    "shifted_days": (deadline - timedelta(days=int(u.id.rsplit("-d", 1)[1])) - b.start.date()).days}
                    for u, b in placed],
         "conflicts": conflicts,
         "_placed": placed,

@@ -36,6 +36,7 @@ export default function ContestDetailPage() {
   const [manualField, setManualField] = useState('');
   const [estimate, setEstimate] = useState(null);
   const [estimateError, setEstimateError] = useState('');
+  const [signedIn] = useState(() => Boolean(getToken()));
 
   useEffect(() => {
     let alive = true;
@@ -163,7 +164,7 @@ export default function ContestDetailPage() {
         </div>
       </section>
 
-      <ContestInterestButton contestId={c.id} />
+      <ContestInterestButton contestId={c.id} deadline={c.deadline} />
 
       <section className="panel" style={{ padding: 'var(--gap-4)' }}>
         <h2 style={{ fontSize: '14px' }}>얼마나 준비해야 할까요</h2>
@@ -217,7 +218,7 @@ export default function ContestDetailPage() {
           이 공모전 준비 일정 만들기
         </button>
         <p className="hint" style={{ marginTop: 6, textAlign: 'center' }}>
-          일정 저장에는 가입이 필요합니다 · 계획 만들기에서 공모전 이름을 목표로 넣어 주세요
+          {signedIn ? '계획 만들기에서 공모전 이름을 목표로 넣어 주세요' : '일정 저장에는 가입이 필요합니다 · 계획 만들기에서 공모전 이름을 목표로 넣어 주세요'}
         </p>
       </section>
     </>

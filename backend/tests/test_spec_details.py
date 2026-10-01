@@ -97,15 +97,28 @@ def test_해제해도_끝낸_준비_블록은_학습_기록이라_남긴다(clie
     assert [b.unit_id for b in plan_blocks(db, pid) if b.unit_id.startswith("contest-")] == [first["unit_key"]]
 
 
-def test_빈_시간이_없으면_넣지_않고_그날_일정을_알려준다(client, db):
-    pid = plan_id(db)
-    # 10/23(금) 19~22시를 다른 블록으로 채운다
+def fill_evening(db, pid, day):
     for hour in (19, 20, 21):
         db.table("plan_blocks").insert({
-            "plan_id": pid, "unit_key": f"busy-{hour}", "title": f"채운 블록 {hour}",
-            "start_at": f"2026-10-23T{hour}:00:00+09:00", "end_at": f"2026-10-23T{hour}:50:00+09:00",
+            "plan_id": pid, "unit_key": f"busy-{day}-{hour}", "title": f"채운 블록 {hour}",
+            "start_at": f"{day}T{hour}:00:00+09:00", "end_at": f"{day}T{hour}:50:00+09:00",
             "minutes": 50, "locked": True, "done": False,
         }).execute()
+
+
+def test_정한_날이_꽉_차면_하루_이틀_앞당긴다(client, db):
+    fill_evening(db, plan_id(db), "2026-10-23")  # D-7(금)
+    body = client.post("/contest-interests/preview", json={"contest_id": "11111111-aaaa"}).json()
+    assert body["conflicts"] == []
+    first = body["blocks"][0]
+    assert first["start"][:10] == "2026-10-22" and first["shifted_days"] == 1
+    assert body["blocks"][1]["shifted_days"] == 0
+
+
+def test_앞당겨도_자리가_없으면_넣지_않고_그날_일정을_알려준다(client, db):
+    pid = plan_id(db)
+    for day in ("2026-10-21", "2026-10-22", "2026-10-23"):  # D-7 과 그 앞 이틀
+        fill_evening(db, pid, day)
     body = client.post("/contest-interests/preview", json={"contest_id": "11111111-aaaa"}).json()
     [conflict] = body["conflicts"]
     assert conflict["day"] == "2026-10-23" and conflict["blocks"]
