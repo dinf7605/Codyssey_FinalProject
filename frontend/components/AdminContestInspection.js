@@ -68,7 +68,7 @@ export default function AdminContestInspection() {
   return (
     <div>
       <p className="hint">
-        마감 공고를 포함한 저장된 공고입니다. 수집 시각은 한국 시간 기준입니다.
+        마감 공고를 포함한 저장된 공고입니다. 수집 시각은 한국 시간 기준입니다. 기존 벡터 색인 기록은 현재 Claude 제목 추천에 사용하지 않습니다.
       </p>
 
       <button
@@ -91,6 +91,9 @@ export default function AdminContestInspection() {
 
       {data && (
         <>
+          {data.collection_failure_streak >= 3 && <p role="alert" className="hint hint-error">
+            위비티 수집이 3회 연속 실패하거나 일부 실패했습니다. 수집 로그와 출처 상태를 확인해 주세요.
+          </p>}
           <p className="hint">전체 저장 공고 {data.total}건</p>
 
           {data.items.length === 0 ? (
@@ -105,9 +108,9 @@ export default function AdminContestInspection() {
                 <div className="row" key={item.id}>
                   <div className="row-main">
                     <b>{item.title}</b>
-                    <span>주최: {item.host} · 수집처: {item.source}</span>
+                    <span>{item.host ? `주최: ${item.host} · ` : ''}수집처: {item.source}</span>
                     <span>
-                      마감일: {item.deadline} · {STATUS_LABELS[item.status] || '상태 미확인'}
+                      마감일: {item.deadline || '원문 확인'} · {STATUS_LABELS[item.status] || '상태 미확인'}
                     </span>
                     <span>수집: {formatTime(item.collected_at)}</span>
                     <span>

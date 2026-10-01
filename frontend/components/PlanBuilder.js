@@ -3,7 +3,9 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { api, getToken } from '@/lib/api';
 import { loadExploration } from '@/lib/goalSession';
+import { clearContestPlanning, loadContestPlanning } from '@/lib/contest-planning';
 import { planInput } from '@/lib/planInput';
+import { clearDraft, draftKey, loadDraft, saveDraft } from '@/lib/planDraft';
 import { notifyPlanChanged } from '@/lib/usePlan';
 import { AiBadge, AiNotice } from './AiNotice';
 
@@ -42,7 +44,7 @@ function subscribeStorage(onChange) {
   window.addEventListener('storage', onChange);
   return () => window.removeEventListener('storage', onChange);
 }
-const readSaved = () => JSON.stringify(loadExploration());
+const readSaved = () => JSON.stringify({ exploration: loadExploration(), contest: loadContestPlanning() });
 const readSavedOnServer = () => 'server';
 
 function blockWhen(iso) {
@@ -53,26 +55,46 @@ function blockWhen(iso) {
 }
 
 export default function PlanBuilder() {
-  const [phase, setPhase] = useState('idle'); // idle | running | done | error
+  // 로그인하러 다녀오기 전에 만든 계획 — 있으면 그 상태로 이어서 보여준다 (lib/planDraft.js)
+  // 서버 렌더에서는 null 이고, 브라우저 첫 렌더는 input 이 없어 어차피 아무것도 그리지 않는다
+  const [draft] = useState(loadDraft);
+  const [restoredKey, setRestoredKey] = useState(draft?.key ?? null);
+  const [phase, setPhase] = useState(draft ? 'done' : 'idle'); // idle | running | done | error
   const saved = useSyncExternalStore(subscribeStorage, readSaved, readSavedOnServer);
-  const input = useMemo(() => (saved === 'server' ? null : planInput(JSON.parse(saved))), [saved]);
+  const input = useMemo(() => {
+    if (saved === 'server') return null;
+    const state = JSON.parse(saved);
+    return planInput(state.exploration, new Date(), state.contest);
+  }, [saved]);
   const [last, setLast] = useState(null);
   const [tools, setTools] = useState([]); // [{name, count}] 처음 부른 순서대로
   const [elapsed, setElapsed] = useState(0);
-  const [result, setResult] = useState(null);
-  const [plan, setPlan] = useState(null);
-  const [violations, setViolations] = useState(null);
+  const [result, setResult] = useState(draft?.result ?? null);
+  const [plan, setPlan] = useState(draft?.plan ?? null);
+  const [violations, setViolations] = useState(draft?.violations ?? null);
   const [error, setError] = useState('');
   const [showAll, setShowAll] = useState(false);
   // 확정 — idle | saving | saved | login | error
   const [saveState, setSaveState] = useState({ state: 'idle', message: '' });
   // FR-PLAN-02 — 공부량이 가용시간의 1.5배를 넘으면 범위 축소안. used 는 지금 배치에 쓴 단위·기한
-  const [scope, setScope] = useState(null);
-  const [used, setUsed] = useState(null); // { mode: 'as-is' | 'trim' | 'extend', units, deadline }
+  const [scope, setScope] = useState(draft?.scope ?? null);
+  const [used, setUsed] = useState(draft?.used ?? null); // { mode: 'as-is' | 'trim' | 'extend', units, deadline }
   const [placing, setPlacing] = useState(false);
   const abortRef = useRef(null);
 
+  // 보관본이 지금 입력(목표·시작일·기한·가용시간)과 다르면 되살리지 않고 처음 화면을 보여준다
+  const key = input ? draftKey(input) : null;
+  const stale = restoredKey !== null && key !== null && restoredKey !== key;
+  const view = stale ? 'idle' : phase;
+
   useEffect(() => () => abortRef.current?.abort(), []);
+
+  // 비회원이 만든 계획을 보관한다 — 확정하려고 로그인하러 다녀와도 다시 만들 필요가 없게.
+  // 범위 줄이기·기한 늘리기로 다시 놓으면 그 결과로 덮어쓴다.
+  useEffect(() => {
+    if (view !== 'done' || !key || !result || !plan || getToken()) return;
+    saveDraft(key, { result, plan, violations, scope, used });
+  }, [view, key, result, plan, violations, scope, used]);
 
   useEffect(() => {
     if (phase !== 'running') return undefined;
@@ -97,6 +119,8 @@ export default function PlanBuilder() {
     abortRef.current = controller;
 
     const current = input;
+    clearDraft();
+    setRestoredKey(null);
     setPhase('running');
     setLast(null);
     setTools([]);
@@ -196,6 +220,9 @@ export default function PlanBuilder() {
         availability: input.availability,
       });
       setSaveState({ state: 'saved', message: '' });
+      clearDraft(); // 저장했으니 보관본은 필요 없다
+      setRestoredKey(null);
+      if (input.fromContest) clearContestPlanning();
       notifyPlanChanged(); // 같은 화면의 일정 달력이 새 계획을 다시 읽는다
     } catch (err) {
       if (err.status === 401 || err.status === 403) {
@@ -220,14 +247,14 @@ export default function PlanBuilder() {
             {input.fromOnboarding ? '온보딩에서 고른 시간' : '기본값: 평일 저녁'}
           </span>
         </div>
-        {phase === 'done' && (
+        {view === 'done' && (
           <button type="button" className="btn btn-quiet btn-sm" onClick={run}>
             다시 만들기
           </button>
         )}
       </div>
 
-      {phase === 'idle' && (
+      {view === 'idle' && (
         <>
           <button type="button" className="btn btn-primary" onClick={run}>
             AI로 학습 계획 만들기
@@ -239,7 +266,7 @@ export default function PlanBuilder() {
         </>
       )}
 
-      {phase === 'running' && (
+      {view === 'running' && (
         <div className="progress" role="status" aria-live="polite">
           <div className="progress-head">
             <b>{statusText(last)}</b>
@@ -266,7 +293,7 @@ export default function PlanBuilder() {
         </div>
       )}
 
-      {phase === 'error' && (
+      {view === 'error' && (
         <div className="stack" style={{ gap: 'var(--gap-2)' }}>
           <p className="hint hint-error">{error}</p>
           <button type="button" className="btn" onClick={run}>
@@ -275,7 +302,7 @@ export default function PlanBuilder() {
         </div>
       )}
 
-      {phase === 'done' && result && (
+      {view === 'done' && result && (
         <>
           <div className="stack" style={{ gap: 'var(--gap-2)' }}>
             <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -287,6 +314,9 @@ export default function PlanBuilder() {
               </span>
             </div>
             {result.message && <p className="hint">{result.message}</p>}
+            {restoredKey && (
+              <p className="hint">앞서 만든 계획을 이어서 보여 드려요. 확인하고 확정해 주세요.</p>
+            )}
           </div>
 
           <ol className="rows">

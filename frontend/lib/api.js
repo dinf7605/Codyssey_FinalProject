@@ -2,7 +2,7 @@
 // 화면 코드가 fetch를 직접 쓰지 않게 해서, 주소가 바뀌어도 이 파일만 고치면 된다.
 //
 // 로컬:  NEXT_PUBLIC_API_BASE=http://localhost:8000
-// 배포:  Railway 주소를 Vercel 환경변수에 등록
+// 배포: Vercel 프론트에서 접근할 API 주소를 환경변수에 등록
 
 const BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8000';
 
@@ -94,6 +94,7 @@ async function request(path, options = {}) {
 
   if (!res.ok) {
     let detail = `요청이 실패했습니다 (${res.status})`;
+    let validationErrors = [];
 
     try {
       const body = await res.json();
@@ -101,6 +102,7 @@ async function request(path, options = {}) {
       if (typeof body?.detail === 'string') {
         detail = body.detail;
       } else if (Array.isArray(body?.detail)) {
+        validationErrors = body.detail;
         detail = body.detail.map((item) => item.msg || JSON.stringify(item)).join('\n');
       }
     } catch {
@@ -109,6 +111,7 @@ async function request(path, options = {}) {
 
     const err = new Error(detail);
     err.status = res.status;
+    err.validationErrors = validationErrors;
     throw err;
   }
 
@@ -169,16 +172,34 @@ export const api = {
   // 공모전 (담당 D) — 위비티에서 모은 공고. 비회원도 볼 수 있다
   contests: {
     // FR-CONT-03 검색 — query 는 제목·주최에서 찾는다. 기본은 마감 임박순, 마감 지난 공고는 빠진다
-    search: ({ query = '', field = '', sort = 'deadline', limit = 20 } = {}, options = {}) => {
+    search: ({ query = '', field = '', eligibility = '', deadlineBefore = '', sort = 'deadline', limit = 20 } = {}, options = {}) => {
       const params = new URLSearchParams({ sort, limit: String(limit) });
       if (query) params.set('query', query);
       if (field) params.set('field', field);
+      if (eligibility) params.set('eligibility', eligibility);
+      if (deadlineBefore) params.set('deadline_before', deadlineBefore);
       return request(`/contests?${params}`, options);
     },
     get: (id) => request(`/contests/${encodeURIComponent(id)}`),
+    recommend: (tags = '') => {
+      const params = new URLSearchParams();
+      if (tags) params.set('tags', tags);
+      return request(`/contests/recommendations?${params}`, { cache: 'no-store' });
+    },
+    feedback: (id, rating, reason = null) =>
+      post(`/contests/${encodeURIComponent(id)}/feedback`, { rating, reason }),
     // FR-CONT-10 준비 기간 산정 (LLM 미사용)
-    estimate: (id, weeklyHours) =>
-      post(`/contests/${encodeURIComponent(id)}/estimate`, { weekly_hours: weeklyHours }),
+    estimate: (id, weeklyHours, details = {}) =>
+      post(`/contests/${encodeURIComponent(id)}/estimate`, { weekly_hours: weeklyHours, ...details }),
+  },
+
+  memories: {
+    list: () => request('/memories', { cache: 'no-store' }),
+    saveInterests: (tags) => request('/memories/interest-tags', {
+      method: 'PUT', body: JSON.stringify({ tags }),
+    }),
+    remove: (id) => del(`/memories/${encodeURIComponent(id)}`),
+    clear: () => del('/memories'),
   },
 
   // 인증
@@ -208,7 +229,26 @@ export const api = {
         password,
       }),
 
+    forgotPassword: ({ email }) => post('/auth/forgot-password', { email }),
+    resetPassword: ({ accessToken, refreshToken, newPassword }) =>
+      post('/auth/reset-password', {
+        access_token: accessToken, refresh_token: refreshToken, new_password: newPassword,
+      }),
     me: () => request('/auth/me'),
+
+    // FR-AUTH-02 구글 로그인 — backend/routers/auth_google.py
+    google: {
+      start: (redirectTo) =>
+        request(`/auth/google/start?redirect_to=${encodeURIComponent(redirectTo)}`),
+      profile: () => request('/auth/google/profile', { cache: 'no-store' }),
+      complete: ({ nickname, agreePrivacy, agreeAiNotice, agreeMarketing = false }) =>
+        post('/auth/google/complete', {
+          nickname,
+          agree_privacy: agreePrivacy,
+          agree_ai_notice: agreeAiNotice,
+          agree_marketing: agreeMarketing,
+        }),
+    },
   },
 
   settings: {

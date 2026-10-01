@@ -1,6 +1,6 @@
 from datetime import date
 
-from services.wevity_parser import parse_wevity_detail, parse_wevity_list
+from services.wevity_parser import parse_wevity_detail, parse_wevity_links, parse_wevity_list
 
 
 LIST_HTML = """
@@ -59,6 +59,17 @@ def test_parse_wevity_list_extracts_and_deduplicates_items():
     assert items[0].d_day == 11
     assert items[0].status == "접수중"
     assert items[1].d_day == -4
+
+
+def test_link_only_parser_ignores_other_metadata_and_external_link():
+    html = LIST_HTML.replace(
+        '</ul>', '<li><div class="tit"><a href="https://evil.example/?gbn=view&ix=999">외부</a></div></li></ul>'
+    )
+    items = parse_wevity_links(html)
+    assert len(items) == 2
+    assert items[0].title == "N.O.V.A. 2026 대회"
+    assert items[0].source_url.startswith("https://www.wevity.com/?")
+    assert not hasattr(items[0], "host") and not hasattr(items[0], "fields")
 
 
 def test_parse_wevity_detail_extracts_allowed_metadata():

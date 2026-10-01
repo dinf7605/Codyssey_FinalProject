@@ -97,7 +97,8 @@ def test_signup_empty_identities_does_not_write_or_delete(signup_env):
     client, db, auth_client = signup_env
     auth_client.auth.sign_up.return_value.user.identities = []
     response = client.post("/auth/signup", json=payload())
-    assert response.status_code == 400
+    assert response.status_code == 409
+    assert response.json()["detail"] == auth.DUPLICATE_EMAIL
     db.table.assert_not_called()
     db.auth.admin.delete_user.assert_not_called()
 

@@ -33,7 +33,7 @@ pytest -q                     # 테스트
 | 자동 재시도 | 끔 (`max_retries=0`) | SDK 가 타임아웃마다 2번 더 기다려 사용자 대기가 3배 |
 | 시간 제한 | 기능마다 `get_client(timeout=…)` 로 준다 — 학습 분해 전체 60초, 짧은 문장 20초 | |
 | 키 없음·실패 | `get_client()` 가 `None` → 규칙·템플릿으로 대체. 결과에 AI 여부를 남긴다 (`source`, `ai_generated`) | AI 가 조용히 실패해도 모른다 — B 의 추천 이유가 실제로 그랬다 |
-| OpenAI 형식 | 이 키로는 `/v1/chat/completions` 가 **403**. 임베딩 API 도 없다 | 임베딩은 별도 수단이 필요 (D·B 과제) |
+| OpenAI 형식 | 이 키로는 `/v1/chat/completions` 가 **403**. 임베딩 API 도 없다 | 09-29 결정: 임베딩 없이 Claude 관련성 판단으로 검색 (`goal_claude.py` · `contest_claude.py`). JSON 뒤에 설명이 붙어 오면 `llm.json_object_of()` 로 첫 객체만 읽는다 |
 
 쓸 수 있는 모델: `claude-sonnet-4` · `claude-haiku-4` · `claude-opus-4-8`. 바꿀 때는 `.env` 의 `ANTHROPIC_MODEL` / `ANTHROPIC_HAIKU_MODEL`.
 테스트는 `conftest.py` 가 키를 지워서 실제 Claude 를 부르지 않는다 (느리고 비용이 든다).
@@ -60,6 +60,8 @@ pytest -q                     # 테스트
 | `007_goal_feedback.sql` | B | `goal_feedback` — 목표 추천 피드백 (FR-GOAL-08). 09-28 적용, 정책을 `(select auth.uid())` 로 고쳐서 |
 | `014_notification_settings.sql` | E | `user_notification_settings`(알림 켜기·방해금지·강도) + `notification_logs.block_id`·중복 방지 인덱스. 개인 DB 기준이던 005·006 을 공용 기준으로 다시 쓴 것 (005·006 파일은 삭제) |
 | `015_ai_request_logs.sql` | E | `ai_request_logs` — 학습 분해의 Claude 요청 한 번에 한 행 (성공·실패, 오류 종류, 토큰). 사용자 식별자·본문 없음. 09-29 적용 · 저장은 `AI_REQUEST_METRICS_ENABLED=1` 일 때만 |
+| `016_wevity_link_only.sql` | D | 위비티 제목·링크 전용 공고의 빈 마감일 허용. 09-29 적용 — SQL Editor 로 적용해 Migrations 목록에는 없다 |
+| `017_contest_title_vectors.sql` | D | 이전 OpenAI 임베딩 설계의 선택적 RPC. Claude 제목 추천에는 필요하지 않음 |
 
 공용 DB 에 무엇이 적용됐는지는 Supabase 대시보드 → Database → Migrations 에서 본다 (적용한 이름이 이 표의 파일 이름과 같다).
 
@@ -315,23 +317,55 @@ pytest -q       # 전체 237개 (C 담당 124개)
 
 ---
 
-## 공모전 수집 (담당 D 테이블 · 09-28 리더 점검에서 대신 연결)
+## 공모전·개인화 (담당 D)
 
-D 의 위비티 파서(`services/wevity_parser.py`)를 실제 요청·저장에 이었다 — `services/wevity_collector.py`.
+09-29 팀장 결정으로 위비티 수집은 다시 **마감일·주최·분야까지** 가져온다. 마감 필터·마감 임박순, 준비 기간 계산(FR-CONT-10), 추천의 마감 점수·목표 기한 필터가 이 값으로 돈다. 공고 원문(`raw_text`)은 여전히 저장하지 않고, 자격·세부 내용은 원문 링크로 보낸다. 비영리 학습 프로젝트로만 쓴다 (09-28 위비티에 비영리 사용 안내 메일 발송). 수집은 기본 비활성화(`WEVITY_CRAWLING_ENABLED=false`)이며, 켜기 전에 출처 정책을 운영자가 확인한다.
 
 | 항목 | 내용 |
 |---|---|
-| 수집 범위 | 분야 8개(기획·광고·영상·디자인·웹/IT·게임/SW·과학/공학·취업/창업) 목록 1쪽씩, 접수 중·예정 공고만 |
-| 저장하는 것 | 제목·주최·분야·접수기간·응모대상·위비티 링크·공식 홈페이지 링크. **공고 본문(`raw_text`)은 저장하지 않는다** |
-| 사용 조건 | robots.txt 는 전체 허용. 이용약관 제9조 — 게시 자료의 권리는 위비티, 상업적 이용(가공·판매) 금지 → 비영리 학습 프로젝트로만, 화면에서 출처 표시 + 원문 링크 |
-| 예의 | 요청 사이 3초. 이미 저장한 공고는 상세를 다시 받지 않는다 (`--refresh` 로만) |
+| 수집 범위 | 분야 8개(`CATEGORIES`: 기획/아이디어·광고/마케팅·영상·디자인·웹/모바일/IT·게임/SW·과학/공학·취업/창업) 목록 1쪽 → 새 공고 상세. 한 번에 상세는 최대 **100건**(`MAX_DETAILS`), 남은 것은 다음 실행에서 |
+| 저장하는 것 | 제목·주최·분야·접수 시작일·마감일·응모대상·공식 홈페이지·위비티 링크. 마감일을 모르거나 지난 공고는 넣지 않음. 포스터·원문은 저장하지 않음 |
+| 이미 있는 공고 | 상세까지 저장한 공고는 다시 받지 않는다(`--refresh` 때만). 마감일이 빈 옛 링크 전용 행은 상세를 받아 채운다 |
+| 실행 조건 | 기본 비활성화. `WEVITY_CRAWLING_ENABLED=true`와 API의 `BATCH_SECRET`가 둘 다 필요. robots.txt 를 한 번 읽어 목록·상세 주소를 모두 확인하고, 못 읽으면 수집하지 않음 |
+| 요청 간격 | 모든 요청 사이에 3초 (상세 100건이면 약 5분) |
 | 기록 | `batch_runs` (`job_name=contest.collect`) — 성공·부분 성공·실패와 건수 |
-| 수동 실행 | `python -m scripts.collect_contests [--dry-run] [--categories 20 21] [--pages 2]` |
-| 매일 실행 | `POST /contests/collect` + `X-Batch-Key`(BATCH_SECRET) — 05:00 에 스케줄러가 부른다(배포 후 E). 마감 지난 공고를 닫고 새 공고를 모은다 |
+| 수동 실행 | `cd backend` 후 `python -m scripts.collect_contests --dry-run` (활성화한 경우만) |
+| 매일 실행 | `POST /contests/collect` + `X-Batch-Key`. GitHub Actions에서 별도 스위치로 관리 |
 
-- 준비 기간 산정(`FR-CONT-10`)의 표준 준비시간은 migration 013 — 위비티 분야 17개, **팀 추정치**(공식 통계 아님, `sample_size` 0).
-- 가상 공모전 API(`/demo/contests`)와 저장소 최상위의 사본은 지웠다 — 화면이 실제 공고를 쓴다.
-- 09-28 첫 수집: 목록 105건 → 저장 92건(마감 13건 제외, 실패 0) · 10-12(사용자 테스트 끝)까지 열려 있는 공고 50건.
+- `migrations/016_wevity_link_only.sql`은 마감일이 빈 옛 링크 전용 행을 위해 남아 있다. 수집기는 이제 그런 행을 만들지 않고, 있으면 상세를 받아 채운다. 마감일이 없는 행만 사용자가 원문에서 마감일을 확인해 직접 입력한 뒤 준비 기간을 계산하고, 수집한 마감일·분야가 있으면 그 값을 쓴다. 입력값은 계산 단계에서 DB에 저장하지 않고, 사용자가 일정을 확정하면 계획 정보로 저장된다.
+- `GET /contests/recommendations?tags=AI`는 저장된 공고 최대 20건의 **제목과 관심 키워드만** Codyssey Claude Haiku 게이트웨이에 보내 관련성을 판단한다. 응답의 공고 ID·점수를 검증한 뒤 최대 5건을 재랭킹한다. Claude 키가 없거나 호출·응답 검증이 실패하면 제목·분야 키워드 일치로 복구한다. 수집한 마감일로 마감 점수를 매기고, 진행 중 목표의 기한보다 늦게 마감하는 공고는 뺀다. Claude가 정상적으로 빈 결과를 주면 관련 공고가 없다고 안내한다. 위비티 추천의 자격 점수는 검증되지 않은 중립값이며 지원 자격을 단정하지 않는다.
+- 이 방식은 **임베딩·pgvector 가 아니라 Claude 관련성 판단으로 하는 RAG** 다. 교육 과정에서 제공하는 Claude Messages 게이트웨이에 임베딩 API가 없어, 09-29 팀 결정으로 `FR-CONT-02`의 색인 요건을 이 방식으로 대체했다 (기획서 4-4). 목표 카탈로그(RAG ①)도 같은 방식이다 — `services/goal_claude.py`. 이전 실험용 `017_contest_title_vectors.sql` 파일은 호환성 기록으로 남겨 두되 적용할 필요가 없다. 관리자 화면의 기존 색인 상태도 과거 데이터 점검용이다.
+- `.github/workflows/contest-jobs.yml`은 기본 비활성화다. 추천만 운영하려면 배포 API의 `BATCH_SECRET`과 GitHub Secrets `BATCH_SECRET`·`STUDYPACE_API_BASE`를 설정하고 Repository variable `CONTEST_RECOMMENDATIONS_ENABLED=true`로 켠다. 수집은 별도 `CONTEST_COLLECTION_ENABLED=true`에 더해 배포 API의 `WEVITY_CRAWLING_ENABLED=true`가 필요하다. 출처 정책 확인 전에는 수집을 켜지 않는다. API는 202로 즉시 응답하므로 완료 여부는 `batch_runs`에서 확인한다.
+- 계정별 관심 태그는 `PUT /memories/interest-tags`, 조회는 `GET /memories`, 항목/전체 즉시 삭제는 `DELETE /memories/{id}` / `DELETE /memories`다. 학습 기록을 새로 저장하면 최근 4주 기록으로 선호 학습 시간대·노력 편차·완료율을 갱신한다. 삭제한 학습 통계도 이후 새 기록이 생기면 다시 계산될 수 있다. `POST /contests/{id}/feedback`은 당시 점수를 함께 저장하고 '안 맞음' 기억의 영향은 4주마다 절반으로 줄인다. 모든 계정 데이터는 서버에서 토큰 사용자 ID로 제한한다.
+- 예전 92건의 저장 자료를 삭제하거나 배포 DB 마이그레이션을 실행하지 않았다. 팀이 자료 보관·정리와 운영 정책을 결정해야 한다.
+
+---
+
+## 구글 로그인 (FR-AUTH-02)
+
+Supabase Auth 의 Google 공급자를 쓴다. 코드는 `routers/auth_google.py` · 화면은 `frontend/components/GoogleLoginButton.js`(로그인·가입 화면 버튼) · `frontend/app/auth/callback/page.js`(돌아오는 곳).
+
+| 순서 | 무엇 |
+|---|---|
+| 1 | 로그인·가입 화면의 **구글 계정으로 계속하기** → `GET /auth/google/start?redirect_to=<FRONTEND_ORIGIN>/auth/callback` 이 Supabase 인증 주소를 준다 |
+| 2 | 구글 계정 선택 → Supabase → `/auth/callback#access_token=…` 로 돌아온다. 화면이 토큰을 저장하고 주소창에서 지운다 |
+| 3 | `GET /auth/google/profile` — 우리 `users` 프로필이 있으면 바로 원래 가려던 화면(`?next=`, 기본 `/schedule`)으로 |
+| 4 | 처음 온 계정이면 닉네임 + 필수 동의 2개(개인정보·AI 고지) + 선택(알림 메일)을 받고 `POST /auth/google/complete` 로 프로필을 만든다 |
+
+- 로그인에서 **캘린더 권한은 요구하지 않는다** (기본 email·profile). 캘린더 연동은 나중에 따로 권한을 받는다
+- `redirect_to` 는 `FRONTEND_ORIGIN` 의 `/auth/callback` 하나만 받는다. 배포하면 `FRONTEND_ORIGIN` 을 배포 주소로 바꾼다
+- 공급자가 꺼져 있으면 버튼을 눌렀을 때 "구글 로그인이 아직 설정되지 않았습니다" 로 안내한다 (503)
+
+### 켜는 법 (한 번, 키를 가진 사람이 직접)
+
+1. **Google Cloud Console** → API 및 서비스 → **OAuth 동의 화면**: 외부(External) · 게시 상태 **테스트** · 앱 이름 StudyPace · 범위는 기본(email·profile·openid)만 · **테스트 사용자**에 팀원·시연 계정 추가 (최대 100명)
+2. 같은 곳 → **사용자 인증 정보 → OAuth 클라이언트 ID 만들기** → 웹 애플리케이션
+   - 승인된 리디렉션 URI: `https://spgrerxkdavykunujipn.supabase.co/auth/v1/callback`
+3. **Supabase 대시보드** → Authentication → Sign In / Providers → **Google** 켜기 → 2에서 받은 Client ID · Client Secret 입력 → 저장
+4. Supabase → Authentication → **URL Configuration** → Redirect URLs 에 `http://localhost:3000/auth/callback` 추가 (배포하면 배포 주소의 `/auth/callback` 도)
+5. 확인: 로그인 화면에서 버튼을 눌러 구글 계정 선택 화면이 뜨면 된다
+
+Client Secret 은 Supabase 대시보드에만 넣는다. 우리 `.env`·코드·깃에는 넣지 않는다 (`.env.example` 의 `GOOGLE_CLIENT_*` 는 나중의 캘린더 연동용).
 
 ## 남은 작업
 

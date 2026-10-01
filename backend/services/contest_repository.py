@@ -52,39 +52,47 @@ class SupabaseContestRepository:
         self.client = client
 
     def search(self, filters: ContestSearch) -> tuple[list[Contest], int]:
-        request = self.client.table("contests").select(CONTEST_COLUMNS, count="exact")
+        def fetch(scope: str) -> tuple[list[Contest], int]:
+            request = self.client.table("contests").select(CONTEST_COLUMNS, count="exact")
+            if scope == "dated":
+                request = request.in_("status", ["upcoming", "open"])
+                request = request.gte("deadline", date.today().isoformat())
+            elif scope == "links":
+                request = request.eq("source", "wevity").eq("status", "unknown")
+                request = request.is_("deadline", "null")
 
-        if not filters.include_closed:
-            request = request.in_("status", ["upcoming", "open"])
-            request = request.gte("deadline", date.today().isoformat())
+            if filters.deadline_before:
+                request = request.lte("deadline", filters.deadline_before.isoformat())
+            if filters.field:
+                request = request.contains("fields", [filters.field])
+            if filters.eligibility:
+                request = request.ilike("eligibility_text", f"%{filters.eligibility}%")
+            if filters.query:
+                # 한 요청에 OR은 제목/주최/요약 검색 하나만 둔다.
+                safe_query = re.sub(r"[(),]", " ", filters.query).strip()
+                if safe_query:
+                    pattern = f"%{safe_query}%"
+                    request = request.or_(
+                        f"title.ilike.{pattern},host.ilike.{pattern},summary.ilike.{pattern}"
+                    )
+            request = request.order("collected_at", desc=True) if filters.sort == "latest" else request.order("deadline")
+            response = request.limit(filters.limit).execute()
+            items = [Contest.model_validate(row) for row in response.data]
+            return items, response.count if response.count is not None else len(items)
 
-        if filters.deadline_before:
-            request = request.lte("deadline", filters.deadline_before.isoformat())
-
-        if filters.field:
-            request = request.contains("fields", [filters.field])
-
-        if filters.eligibility:
-            request = request.ilike("eligibility_text", f"%{filters.eligibility}%")
-
-        if filters.query:
-            # PostgREST or_ 식을 깨는 구분자를 제거한다. 더 복잡한 검색은 추후
-            # PostgreSQL 전문검색 RPC로 교체한다.
-            safe_query = re.sub(r"[(),]", " ", filters.query).strip()
-            if safe_query:
-                pattern = f"%{safe_query}%"
-                request = request.or_(
-                    f"title.ilike.{pattern},host.ilike.{pattern},summary.ilike.{pattern}"
-                )
-
+        if filters.include_closed:
+            return fetch("all")
+        dated, dated_total = fetch("dated")
+        # 날짜/분야/자격 조건을 건 검색에는 세부 정보가 없는 링크 전용 행을 넣지 않는다.
+        if filters.deadline_before or filters.field or filters.eligibility:
+            return dated, dated_total
+        links, links_total = fetch("links")
+        items = dated + links
         if filters.sort == "latest":
-            request = request.order("collected_at", desc=True)
+            items.sort(key=lambda contest: contest.collected_at.isoformat() if contest.collected_at else "", reverse=True)
         else:
-            request = request.order("deadline")
-
-        response = request.limit(filters.limit).execute()
-        items = [Contest.model_validate(row) for row in response.data]
-        return items, response.count if response.count is not None else len(items)
+            items.sort(key=lambda contest: (contest.deadline is None, contest.deadline or date.max))
+        return items[:filters.limit], dated_total + links_total
 
     def get(self, contest_id: str) -> Contest | None:
         response = (
@@ -116,12 +124,31 @@ class SupabaseContestRepository:
         # 아직 분류군을 알 수 없는 신규 분야는 전체 중앙값으로 폴백한다.
         standards = (
             self.client.table("preparation_time_standards")
-            .select("category_group,standard_hours")
+            .select("field,category_group,standard_hours")
             .eq("active", True)
             .execute()
         )
         if not standards.data:
             return None
+
+        # 직접 등록되지 않은 분야는 이름 일부가 겹치는 분야의 분류군을 먼저 쓴다.
+        # 분류군도 알 수 없는 경우에만 전체 중앙값으로 폴백한다.
+        def parts(value: str) -> set[str]:
+            return {part.casefold() for part in re.split(r"[/·,\s]+", value) if len(part) >= 2}
+
+        requested = set().union(*(parts(field) for field in fields)) if fields else set()
+        group_scores: dict[str, int] = {}
+        for row in standards.data:
+            group = row.get("category_group")
+            if group:
+                group_scores[group] = max(
+                    group_scores.get(group, 0), len(requested & parts(row.get("field") or ""))
+                )
+        if group_scores and max(group_scores.values()) > 0:
+            group = max(group_scores, key=group_scores.get)
+            values = [float(row["standard_hours"]) for row in standards.data
+                      if row.get("category_group") == group]
+            return PreparationHours(float(median(values)), "group_median")
 
         values = [float(row["standard_hours"]) for row in standards.data]
         return PreparationHours(float(median(values)), "global_median")

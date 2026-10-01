@@ -39,7 +39,15 @@ from schemas.goal import (
     RecommendResponse,
     SuggestResponse,
 )
-from services.goal_catalog import all_tags, popular_goals, search_catalog, suggest_tags_from_history
+from services import llm
+from services.goal_catalog import (
+    all_tags,
+    popular_goals,
+    search_catalog,
+    search_catalog_ai,
+    suggest_tags_from_history,
+)
+from services.plan_store import log_ai_call
 from services.goal_feasibility import evaluate_all, evaluate_candidates, manual_goal_warning
 from services.goal_feedback import recently_dismissed_goal_ids
 from services.goal_limiter import RateLimitExceeded, consume, usage_for
@@ -97,11 +105,28 @@ def match(req: MatchRequest) -> MatchResponse:
     except RateLimitExceeded as exc:
         raise HTTPException(status_code=429, detail=exc.message) from exc
 
-    candidates = search_catalog(req.tags, k=req.k)
+    candidates, method = search_catalog_ai(req.tags, k=req.k, on_call=_log_search)
     strong = [c for c in candidates if c.similarity >= SIMILARITY_THRESHOLD]
     if strong:
-        return MatchResponse(candidates=strong, query_used="tags", usage=usage)
-    return MatchResponse(candidates=popular_goals(k=5), query_used="fallback_popular", usage=usage)
+        return MatchResponse(candidates=strong, query_used="tags", search_method=method, usage=usage)
+    return MatchResponse(
+        candidates=popular_goals(k=5), query_used="fallback_popular", search_method=method, usage=usage
+    )
+
+
+def _log_search(source: str, latency_ms: int, message: str) -> None:
+    """카탈로그 검색의 Claude 호출을 ai_call_logs 에 남긴다 (FR-ADMIN-02).
+
+    목표 탐색은 비회원도 쓰므로 user_id 없이 남긴다. DB 가 없거나 실패해도 추천은 계속된다.
+    """
+    try:
+        db = get_supabase_client()
+    except Exception:  # noqa: BLE001 - DB 설정 전(로컬 개발)에도 추천은 된다
+        return
+    log_ai_call(
+        db, user_id=None, feature="goal.match", model=llm.model("fast"),
+        source=source, tool_calls=0, latency_ms=latency_ms, message=message,
+    )
 
 
 @router.post("/recommend", response_model=RecommendResponse)
@@ -118,14 +143,15 @@ def recommend(req: RecommendRequest, user=Depends(get_optional_user)) -> Recomme
         raise HTTPException(status_code=429, detail=exc.message) from exc
 
     dismissed = recently_dismissed_goal_ids(req.session_id, user.id if user else None)
-    top, query_used, all_exceeded, excluded = recommend_goals(
-        req.tags, req.weekly_hours, exclude_ids=dismissed
+    top, query_used, all_exceeded, excluded, method = recommend_goals(
+        req.tags, req.weekly_hours, exclude_ids=dismissed, on_call=_log_search
     )
     return RecommendResponse(
         candidates=top,
         query_used=query_used,
         all_exceeded=all_exceeded,
         excluded=excluded,
+        search_method=method,
         usage=usage,
     )
 

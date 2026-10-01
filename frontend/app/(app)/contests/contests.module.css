@@ -6,6 +6,8 @@
 .sectionTitle { font-size: 16px; font-weight: 600; }
 .searchRow { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; }
 .searchRow > button { min-width: 110px; }
+.filterGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-items: end; }
+.filterGrid > button { min-height: 44px; }
 .suggestions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .suggestions > button { min-height: 44px; }
 .suggestions > button:disabled { opacity: .5; cursor: not-allowed; }
@@ -19,4 +21,4 @@
 .cardAction { margin-top: auto; padding-top: 10px; }
 .cardAction > a, .cardAction > button { min-height: 44px; }
 @media (min-width: 760px) { .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 420px) { .searchRow { grid-template-columns: minmax(0, 1fr); } .card { padding: 18px; } }
+@media (max-width: 420px) { .searchRow, .filterGrid { grid-template-columns: minmax(0, 1fr); } .card { padding: 18px; } }

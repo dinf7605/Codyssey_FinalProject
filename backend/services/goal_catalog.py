@@ -1,12 +1,13 @@
 """목표 카탈로그 검색 (FR-GOAL-03 · FR-GOAL-11) — 담당 B.
 
-AI기능명세의 RAG ① "목표 카탈로그" 자리다. 지금은 Supabase + pgvector 임베딩이
-아직 붙지 않았으므로, 태그 겹침 기반의 결정론적 유사도로 자리를 채운다.
-decomposer.py 가 ANTHROPIC_API_KEY 없으면 템플릿으로 도는 것과 같은 이유다 —
-키·인프라가 없어도 로컬에서 온보딩 전체 흐름을 끝까지 눌러볼 수 있어야 한다.
+AI기능명세의 RAG ① "목표 카탈로그" 자리다. 검색은 두 가지다.
 
-실제 임베딩 검색으로 바꿀 때는 이 파일의 search_catalog() 안쪽만 바꾸면 되고,
-라우터·프론트는 건드릴 필요가 없다 (services/agent_tools.py 가 잡아둔 것과 같은 경계).
+  search_catalog_ai()  Claude(Haiku)가 카탈로그 문서와 관심사의 의미 관련성을 매긴다 (09-29 결정:
+                       임베딩 없이 Claude 로만 — 게이트웨이에 임베딩 API 가 없다). services/goal_claude.py
+  search_catalog()     태그 겹침 기반의 결정론적 유사도. 키가 없거나 Claude 가 실패하면 이쪽으로 대신한다.
+                       decomposer.py 가 키 없으면 템플릿으로 도는 것과 같은 이유 —
+                       키 없이도 로컬에서 온보딩 전체 흐름을 끝까지 눌러볼 수 있어야 한다.
+                       직접 입력 목표 대조·에이전트 도구처럼 정확히 같은 이름을 찾을 때도 이쪽을 쓴다.
 """
 
 from __future__ import annotations
@@ -15,8 +16,9 @@ from statistics import median
 
 from schemas.goal import GoalCandidate
 
-# ── 목업 카탈로그 ──────────────────────────────────────────
-# 실제로는 Supabase 의 목표 카탈로그 테이블 + pgvector 로 대체한다.
+# ── 카탈로그 ──────────────────────────────────────────
+# 코드 안 목록이다. 기획서의 50건(자격증 30 + 공모전 20)까지 늘릴 때도
+# Claude 에 한 번에 넣을 수 있는 크기라 DB·벡터 색인 없이 이 목록을 그대로 쓴다.
 _CATALOG: list[dict] = [
     {
         "goal_id": "cert-info-eng",
@@ -174,6 +176,26 @@ def search_catalog(tags: list[str], k: int = 20) -> list[GoalCandidate]:
     return [_to_candidate(item, sim) for sim, item in scored[:k]]
 
 
+def search_catalog_ai(tags: list[str], k: int = 20, on_call=None) -> tuple[list[GoalCandidate], str]:
+    """FR-GOAL-03 — Claude 로 의미 검색. (후보, 'claude' | 'tags').
+
+    카탈로그 전체를 문서로 넘기고 Claude 가 매긴 관련성을 similarity 로 쓴다.
+    Claude 를 못 쓰면(키 없음·장애·형식 오류) 태그 겹침 검색 결과를 'tags' 로 돌려준다.
+    Claude 가 정상적으로 '관련 없음'이라고 하면 태그 검색으로 우회하지 않는다 — 빈 결과가 답이다.
+    """
+    from services.goal_claude import score_catalog  # 순환 import 방지 — goal_claude 는 llm 만 쓴다
+
+    q = [t.strip() for t in tags if t and t.strip()]
+    if not q:
+        return [], "tags"
+    scores = score_catalog(_CATALOG, q, on_call=on_call)
+    if scores is None:
+        return search_catalog(tags, k=k), "tags"
+    by_id = {item["goal_id"]: item for item in _CATALOG}
+    ranked = sorted(scores.items(), key=lambda pair: pair[1], reverse=True)
+    return [_to_candidate(by_id[goal_id], score) for goal_id, score in ranked[:k] if score > 0], "claude"
+
+
 def popular_goals(k: int = 3, exclude_ids: list[str] | None = None) -> list[GoalCandidate]:
     """FR-GOAL-11 / FR-GOAL-03 폴백 — 이력이 없을 때 보여줄 인기 목표 목록."""
     exclude = set(exclude_ids or [])
@@ -185,7 +207,7 @@ def popular_goals(k: int = 3, exclude_ids: list[str] | None = None) -> list[Goal
 def suggest_tags_from_history(recent_tags: list[str], recent_fields: list[str], k: int = 5) -> list[str]:
     """FR-GOAL-11 — 최근 태그·조회 분야에서 유사 분야 태그를 뽑는다.
 
-    실제로는 임베딩 유사도로 카탈로그를 훑지만, 여기서는 이력 자체에 담긴 태그와
+    AI 를 부르지 않는다 (호출 한도가 걸린 자리라 결정론으로 충분하다). 이력 자체에 담긴 태그와
     그 태그를 가진 카탈로그 항목들의 다른 태그를 모아 상위 k개를 반환한다.
     """
     seed = set(_normalize(recent_tags)) | set(_normalize(recent_fields))

@@ -143,10 +143,10 @@ export default function DashboardPage() {
         </section>
       )}
 
-      {/* 레벨 3 — 공모전 (실제 공고, 마감 임박순 · 개인화 추천 FR-CONT-04 가 생기면 교체) */}
+      {/* 레벨 3 — 로그인한 사용자는 관심 분야 추천, 비회원은 공개 목록 */}
       {isOpen(level, 'contests') && (
         <section className="sec">
-          <SectionTitle moreHref="/contests">마감 임박 공모전</SectionTitle>
+          <SectionTitle moreHref="/contests">공모전 추천·목록</SectionTitle>
           <DeadlineContests />
         </section>
       )}

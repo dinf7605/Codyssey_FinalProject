@@ -17,6 +17,7 @@ Codyssey 게이트웨이 규칙 (2026-09-24 실측)
 
 from __future__ import annotations
 
+import json
 import os
 import re
 
@@ -61,3 +62,20 @@ def text_of(response) -> str:
     return "".join(
         getattr(b, "text", "") for b in response.content if getattr(b, "type", "") == "text"
     ).strip()
+
+
+def json_object_of(response) -> dict | None:
+    """응답 텍스트에서 첫 JSON 객체를 꺼낸다. 없거나 깨졌으면 None.
+
+    "JSON 하나만 출력하라"고 해도 Haiku 는 ```json 블록 뒤에 설명 문장을 붙이곤 한다
+    (09-29 실측: 관련 항목이 없을 때). 앞뒤 글은 버리고 처음 나오는 객체만 읽는다.
+    """
+    text = text_of(response)
+    start = text.find("{")
+    if start < 0:
+        return None
+    try:
+        obj, _ = json.JSONDecoder().raw_decode(text[start:])
+    except ValueError:
+        return None
+    return obj if isinstance(obj, dict) else None

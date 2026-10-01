@@ -1,4 +1,7 @@
-"""위비티 수집기 (FR-CONT-01) — 네트워크 없이 가짜 HTML 로 수집·저장 규칙을 확인한다."""
+"""위비티 수집기 (FR-CONT-01) — 네트워크 없이 가짜 HTML 로 수집·저장 규칙을 확인한다.
+
+마감일·주최·분야까지 저장하는 규칙과, 켜기 설정·robots.txt·3초 간격 같은 안전 장치를 함께 본다.
+"""
 
 from datetime import datetime
 
@@ -69,7 +72,7 @@ def db():
     return FakeSupabase()
 
 
-def test_접수중_공고의_사실_정보만_저장하고_원문은_남기지_않는다(db):
+def test_마감일_주최_분야까지_저장하고_원문은_남기지_않는다(db):
     s = site()
 
     result = wc.collect(db, categories=[20], fetch=s.fetch, sleep=s.sleep, now=NOW)
@@ -83,6 +86,10 @@ def test_접수중_공고의_사실_정보만_저장하고_원문은_남기지_�
     assert ai["official_url"] == "https://example.org/c" and "ix=101" in ai["source_url"]
     assert ai["raw_text"] is None and ai["content_hash"]
     assert rows["103"]["status"] == "upcoming", "접수 시작 전이면 예정"
+
+
+def test_기본_분야는_8개다():
+    assert sorted(wc.CATEGORIES) == [1, 2, 10, 19, 20, 21, 22, 88]
 
 
 def test_요청_사이에_3초씩_쉰다(db):
@@ -101,6 +108,21 @@ def test_이미_저장한_공고는_상세를_다시_받지_않는다(db):
 
     assert result.skipped_known == 2 and len(s.requests) == 1
     assert len(db.rows("contests")) == 2, "upsert — 같은 공고가 두 줄이 되지 않는다"
+
+
+def test_제목_링크만_있던_옛_행은_상세를_받아_채운다(db):
+    db.table("contests").insert({
+        "source": "wevity", "source_id": "101", "title": "AI 공모전", "host": "", "fields": [],
+        "deadline": None, "status": "unknown", "content_hash": "link-only",
+    }).execute()
+    s = site()
+
+    result = wc.collect(db, categories=[20], fetch=s.fetch, sleep=lambda _: None, now=NOW)
+
+    assert result.skipped_known == 0 and any("ix=101" in url for url in s.requests)
+    ai = next(r for r in db.rows("contests") if r["source_id"] == "101")
+    assert (ai["deadline"], ai["host"], ai["status"]) == ("2026-10-08", "테스트 기관", "open")
+    assert len([r for r in db.rows("contests") if r["source_id"] == "101"]) == 1
 
 
 def test_새로고침이면_기존_공고를_덮어쓴다(db):
@@ -135,6 +157,16 @@ def test_마감일이_지났거나_없는_공고는_넣지_않는다(db):
     assert result.skipped_closed == 2
 
 
+def test_한_번에_받는_상세_수에는_상한이_있다(db, monkeypatch):
+    monkeypatch.setattr(wc, "MAX_DETAILS", 1)
+    s = site()
+
+    result = wc.collect(db, categories=[20], fetch=s.fetch, sleep=lambda _: None, now=NOW)
+
+    assert (result.saved, result.skipped_limit) == (1, 1)
+    assert len(s.requests) == 2  # 목록 1 + 상세 1
+
+
 def test_미리보기는_DB_에_쓰지_않는다():
     s = site()
     result = wc.collect(None, categories=[20], dry_run=True, fetch=s.fetch, sleep=lambda _: None, now=NOW)
@@ -159,9 +191,34 @@ def test_실행_중이면_겹쳐_돌지_않는다(db):
     assert not wc.running(db, NOW.replace(hour=7))  # 1시간이 지나 멈춘 기록은 무시
 
 
+# ── 안전 장치 ──────────────────────────────────────────
+
+def test_기본_상태에서_실제_네트워크_수집은_시작하지_않는다(monkeypatch):
+    monkeypatch.delenv("WEVITY_CRAWLING_ENABLED", raising=False)
+    with pytest.raises(RuntimeError, match="WEVITY_CRAWLING_ENABLED"):
+        wc.collect(FakeSupabase())
+    with pytest.raises(RuntimeError, match="비활성화"):
+        wc.run_daily(FakeSupabase())
+
+
+def test_robots_금지_경로는_목록도_요청하지_않는다(db):
+    s = site()
+    result = wc.collect(db, categories=[20], fetch=s.fetch, allowed=lambda url: False,
+                        sleep=lambda _: None, now=NOW)
+    assert s.requests == []
+    assert result.saved == 0 and result.failed == 1
+
+
+def test_robots_가_상세를_막으면_상세를_요청하지_않는다(db):
+    s = site()
+    result = wc.collect(db, categories=[20], fetch=s.fetch, allowed=lambda url: "gbn=view" not in url,
+                        sleep=lambda _: None, now=NOW)
+    assert len(s.requests) == 1 and result.saved == 0 and result.failed == 2
+
+
 # ── 수집 API (POST /contests/collect) ──────────────────
 
-def test_수집_API는_배치_키가_있어야_돈다(db, monkeypatch):
+def test_수집_API는_설정과_배치키_모두_필요하다(db, monkeypatch):
     calls = []
     monkeypatch.setattr(contests_router, "get_supabase_client", lambda: db)
     monkeypatch.setattr(wc, "run_daily", lambda d, now: calls.append(now))
@@ -169,7 +226,10 @@ def test_수집_API는_배치_키가_있어야_돈다(db, monkeypatch):
 
     monkeypatch.delenv("BATCH_SECRET", raising=False)
     assert client.post("/contests/collect").status_code == 503
-    monkeypatch.setenv("BATCH_SECRET", "s3cret")
+    monkeypatch.setenv("BATCH_SECRET", "secret")
+    monkeypatch.delenv("WEVITY_CRAWLING_ENABLED", raising=False)
+    assert client.post("/contests/collect", headers={"X-Batch-Key": "secret"}).status_code == 503
+    monkeypatch.setenv("WEVITY_CRAWLING_ENABLED", "true")
     assert client.post("/contests/collect", headers={"X-Batch-Key": "wrong"}).status_code == 401
-    res = client.post("/contests/collect", headers={"X-Batch-Key": "s3cret"})
-    assert res.status_code == 202 and len(calls) == 1
+    assert client.post("/contests/collect", headers={"X-Batch-Key": "secret"}).status_code == 202
+    assert len(calls) == 1

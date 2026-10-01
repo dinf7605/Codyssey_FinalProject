@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from schemas.goal import RECOMMEND_MAX, SIMILARITY_THRESHOLD, FeasibleCandidate
 from services import llm
-from services.goal_catalog import popular_goals, search_catalog
+from services.goal_catalog import popular_goals, search_catalog_ai
 from services.goal_feasibility import evaluate_all
 
 REASON_TIMEOUT_SECONDS = 20  # AI기능명세와 동일한 타임아웃
@@ -59,17 +59,22 @@ def _make_client():
     return client, llm.model("fast")
 
 
-def recommend_goals(tags: list[str], weekly_hours: float, exclude_ids: frozenset[str] = frozenset()):
+def recommend_goals(
+    tags: list[str], weekly_hours: float, exclude_ids: frozenset[str] = frozenset(), on_call=None
+):
     """FR-GOAL-05 — 관심 태그 + 가용시간으로 추천 카드 3~5개를 만든다.
+
+    RAG ① 순서: 카탈로그 검색(Claude 관련성, 실패 시 태그 겹침) → 기간 적합성(결정론)
+    → 검색된 카탈로그 항목을 근거로 이유 문장(Claude, 실패 시 템플릿).
 
     exclude_ids — FR-GOAL-08: 최근(FEEDBACK_DISMISS_COOLDOWN_DAYS일 이내) "관심없음"으로
     남긴 goal_id 집합. 호출부(router)가 goal_feedback 조회 결과를 넘겨준다 — 이 함수
     자체는 DB를 모른다. 기간이 지나 더 이상 넘어오지 않으면 자동으로 다시 섞인다.
 
     반환값: (추천 목록, 실제 검색에 쓴 값 "tags"/"fallback_popular", 전부 기한초과 여부,
-             기한을 못 맞춰 빠진 후보 목록)
+             기한을 못 맞춰 빠진 후보 목록, 검색 방식 "claude"/"tags")
     """
-    candidates = search_catalog(tags, k=20)
+    candidates, search_method = search_catalog_ai(tags, k=20, on_call=on_call)
     candidates = [c for c in candidates if c.similarity >= SIMILARITY_THRESHOLD]
 
     query_used = "tags"
@@ -86,7 +91,7 @@ def recommend_goals(tags: list[str], weekly_hours: float, exclude_ids: frozenset
     all_exceeded = bool(evaluated) and not feasible
 
     if all_exceeded:
-        return [], query_used, True, excluded
+        return [], query_used, True, excluded, search_method
 
     feasible.sort(key=lambda c: (c.similarity, c.popularity), reverse=True)
     top = feasible[:RECOMMEND_MAX]
@@ -103,4 +108,4 @@ def recommend_goals(tags: list[str], weekly_hours: float, exclude_ids: frozenset
             candidate.reason = _template_reason(candidate, tags)
             candidate.ai_generated = False
 
-    return top, query_used, False, excluded
+    return top, query_used, False, excluded, search_method

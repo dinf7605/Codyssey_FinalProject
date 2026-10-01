@@ -1,10 +1,11 @@
 import { AccountName } from '@/components/CurrentAccount';
 import ContestInterestMemory from '@/components/ContestInterestMemory';
+import AccountMemories from '@/components/AccountMemories';
 import SectionTitle from '@/components/SectionTitle';
 import StudyGrass from '@/components/StudyGrass';
 import AccountSettings from '@/components/AccountSettings';
 import { levelOf, nextUnlock, LEVELS, UNLOCK_LABEL } from '@/lib/growth';
-import { user, memories, goal, studyHistory } from '@/lib/mock';
+import { user, goal, studyHistory } from '@/lib/mock';
 
 // FR-MEM-01 메모리 조회 / FR-MEM-02 메모리 삭제 / FR-MY-01~05
 
@@ -18,7 +19,7 @@ export default function MyPage() {
       <header className="stack" style={{ gap: 6 }}>
         <p className="tiny dim">예시 레벨 {current.level} · {current.name}</p>
         <h1 className="title"><AccountName /></h1>
-        <p className="hint">학습 통계·기록·설정·저장된 학습 정보는 예시입니다. 실제 계정 정보는 아래 내 계정에서 확인할 수 있습니다.</p>
+        <p className="hint">학습 통계·기록·설정은 예시입니다. 저장된 학습 정보와 계정 정보는 아래에서 확인할 수 있습니다.</p>
       </header>
 
       <section className="sec">
@@ -107,22 +108,7 @@ export default function MyPage() {
 
       <ContestInterestMemory />
 
-      <section className="sec">
-        <SectionTitle>저장된 학습 정보 (예시)</SectionTitle>
-        <div className="rows">
-          {memories.map((m) => (
-            <div className="row" key={m.id}>
-              <div className="row-main">
-                <b>{m.type}</b>
-                <span>{m.value} · {m.updatedAt} 갱신</span>
-                <span className="dim micro">근거: {m.basis}</span>
-              </div>
-              <button type="button" className="btn btn-sm" disabled>예시 항목</button>
-            </div>
-          ))}
-        </div>
-        <p className="hint">예시 학습 정보입니다. 실제 저장 정보의 조회·삭제는 아직 연결되지 않았습니다.</p>
-      </section>
+      <AccountMemories />
 
       <AccountSettings />
     </>

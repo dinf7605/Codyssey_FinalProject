@@ -59,10 +59,21 @@ def test_empty_list(client, database):
     response = client.get("/admin/contests")
     assert response.status_code == 200
     assert response.json() == {
-        "page": 1, "page_size": 20, "total": 0, "items": []
+        "page": 1, "page_size": 20, "total": 0, "items": [],
+        "collection_failure_streak": 0,
     }
     assert response.headers["cache-control"] == "no-store"
     queries["contest_embeddings"].execute.assert_not_called()
+
+
+def test_link_only_contest_without_deadline_is_visible(client, database):
+    queries, _ = database
+    row = contest_row()
+    row.update({"source": "wevity", "host": "", "deadline": None, "status": "unknown"})
+    queries["contests"].execute.return_value = SimpleNamespace(data=[row], count=1)
+    response = client.get("/admin/contests")
+    assert response.status_code == 200
+    assert response.json()["items"][0]["deadline"] is None
 
 
 @pytest.mark.parametrize("status", ["pending", "indexed", "failed", "missing"])

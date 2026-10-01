@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import GoogleLoginButton from '@/components/GoogleLoginButton';
 import { api, setAuthTokens } from '@/lib/api';
 import { loadExploration } from '@/lib/goalSession';
 
@@ -72,7 +73,7 @@ export default function LoginPage() {
 
         {error && <p role="alert" style={{ color: 'red' }}>{error}</p>}
         <button type="submit" className="btn btn-primary" disabled={pending}>{pending ? '로그인 중...' : '로그인'}</button>
-        <button type="button" className="btn" disabled>구글 계정으로 계속하기 (준비 중)</button>
+        <GoogleLoginButton />
 
         <p className="hint" style={{ textAlign: 'center' }}>
           캘린더 접근 권한은 로그인 단계에서 요구하지 않습니다
@@ -83,7 +84,7 @@ export default function LoginPage() {
 
       <div style={{ display: 'flex', justifyContent: 'center', gap: 'var(--gap-4)', fontSize: 13 }}>
         <Link href="/signup" className="accent-text">회원가입</Link>
-        <span className="muted">비밀번호 재설정</span>
+        <Link href="/forgot-password" className="accent-text">비밀번호 재설정</Link>
       </div>
     </main>
     </div>

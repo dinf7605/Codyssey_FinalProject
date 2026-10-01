@@ -92,6 +92,8 @@ class MatchResponse(BaseModel):
 
     candidates: list[GoalCandidate] = Field(default_factory=list)
     query_used: Literal["tags", "fallback_popular"]
+    # RAG ① 검색 방식 — 'claude' 는 Claude 관련성 판단, 'tags' 는 태그 겹침(키 없음·장애 시 대체)
+    search_method: Literal["claude", "tags"] = "tags"
     usage: UsageInfo
 
 
@@ -126,6 +128,7 @@ class RecommendResponse(BaseModel):
     all_exceeded: bool = False
     # FeasibilityResponse.excluded 와 같은 뜻 — 기한을 못 맞춰 candidates 에서 빠진 후보들.
     excluded: list[FeasibleCandidate] = Field(default_factory=list)
+    search_method: Literal["claude", "tags"] = "tags"  # MatchResponse 와 같은 뜻
     usage: UsageInfo
 
 

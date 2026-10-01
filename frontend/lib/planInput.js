@@ -5,6 +5,7 @@
 // 온보딩 값이 없거나 30분이 지나 만료됐으면 기본값(평일 저녁)으로 시작한다.
 
 import { loadExploration } from '@/lib/goalSession';
+import { loadContestPlanning } from '@/lib/contest-planning';
 
 const DAYS = ['월', '화', '수', '목', '금', '토', '일'];
 
@@ -33,6 +34,19 @@ export function slotsFromExploration(cells = {}) {
   return slots.sort((a, b) => a.weekday - b.weekday || a.start.localeCompare(b.start));
 }
 
+// 직접 입력한 주당 시간을 월~금에 나누되 하루 6시간을 넘기지 않는다.
+export function slotsFromWeeklyHours(weeklyHours) {
+  let remaining = Math.round(Number(weeklyHours) * 60);
+  const slots = [];
+  for (let weekday = 0; weekday < 5 && remaining > 0; weekday++) {
+    const minutes = Math.min(remaining, Math.ceil(remaining / (5 - weekday)), 360);
+    const end = 17 * 60 + minutes;
+    slots.push({ weekday, start: '17:00', end: `${String(Math.floor(end / 60)).padStart(2, '0')}:${String(end % 60).padStart(2, '0')}` });
+    remaining -= minutes;
+  }
+  return slots;
+}
+
 export function toISODate(d) {
   // toISOString 은 UTC 기준이라 한국 새벽에 하루 전 날짜가 나온다
   const pad = (n) => String(n).padStart(2, '0');
@@ -51,7 +65,21 @@ export function firstStudyDay(slots, now = new Date()) {
   return toISODate(tomorrow);
 }
 
-export function planInput(saved = loadExploration(), now = new Date()) {
+export function planInput(saved = loadExploration(), now = new Date(), contest = loadContestPlanning()) {
+  if (contest) {
+    const slots = slotsFromWeeklyHours(contest.weeklyHours);
+    return {
+      goalTitle: contest.title,
+      goalId: 'custom',
+      availability: { slots },
+      today: toISODate(now),
+      startDay: firstStudyDay(slots, now),
+      deadline: contest.deadline,
+      weeks: contest.weeksNeeded,
+      fromOnboarding: true,
+      fromContest: true,
+    };
+  }
   const slots = slotsFromExploration(saved?.slots);
   const picked = saved?.picked;
 

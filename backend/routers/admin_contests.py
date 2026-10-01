@@ -18,7 +18,7 @@ class ContestInspectionItem(BaseModel):
     title: str
     host: str
     source: str
-    deadline: date
+    deadline: date | None
     status: Literal["upcoming", "open", "closed", "unknown"]
     collected_at: datetime
     index_status: Literal["pending", "indexed", "failed", "missing"]
@@ -30,6 +30,7 @@ class ContestInspectionPage(BaseModel):
     page_size: int
     total: int
     items: list[ContestInspectionItem]
+    collection_failure_streak: int = 0
 
 
 @router.get("/contests", response_model=ContestInspectionPage)
@@ -91,6 +92,16 @@ def list_contests(
             total=result.count,
             items=items,
         )
+        try:
+            runs = db.table("batch_runs").select("status,failed_count").eq(
+                "job_name", "contest.collect"
+            ).order("started_at", desc=True).limit(3).execute().data
+            payload.collection_failure_streak = next(
+                (index for index, run in enumerate(runs)
+                 if run["status"] == "success" and not run["failed_count"]), len(runs)
+            )
+        except Exception:  # noqa: BLE001 - 점검 로그 장애가 공고 목록을 막지 않는다
+            pass
     except Exception:
         raise HTTPException(
             status_code=503,
