@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { api } from '@/lib/api';
+import AdminContestFix from './AdminContestFix';
 
 const INDEX_LABELS = {
   pending: '색인 대기',
@@ -29,6 +30,7 @@ export default function AdminContestInspection() {
   const [page, setPage] = useState(1);
   const [revision, setRevision] = useState(0);
   const [result, setResult] = useState(null);
+  const [editing, setEditing] = useState(null); // FR-ADMIN-01 고치는 중인 공고 id
   const requestKey = `${page}:${revision}`;
   const loading = result?.key !== requestKey;
   const data = loading ? null : result?.data;
@@ -117,6 +119,13 @@ export default function AdminContestInspection() {
                       {INDEX_LABELS[item.index_status] || '색인 상태 미확인'}
                       {item.indexed_at ? ` · 색인 시각: ${formatTime(item.indexed_at)}` : ''}
                     </span>
+                    {editing === item.id ? (
+                      <AdminContestFix item={item} onCancel={() => setEditing(null)}
+                        onSaved={() => { setEditing(null); refresh(); }} />
+                    ) : (
+                      <button type="button" className="btn btn-sm" style={{ alignSelf: 'flex-start', marginTop: 4 }}
+                        onClick={() => setEditing(item.id)}>고치기</button>
+                    )}
                   </div>
                 </div>
               ))}

@@ -151,6 +151,8 @@ export const api = {
       });
       return request(`/admin/contests?${params}`, { cache: 'no-store' });
     },
+    // FR-ADMIN-01 수집 공고 고치기 — 보낸 항목만 바뀐다
+    fixContest: (id, changes) => patch(`/admin/contests/${encodeURIComponent(id)}`, changes),
     me: () => request('/admin/me'),
     logs: ({ day = '', page = 1, pageSize = 20 } = {}) => {
       const params = new URLSearchParams({
@@ -459,6 +461,16 @@ export const api = {
     moveBlock: (blockId, { start, force = false }) =>
       patch(`/plan/blocks/${encodeURIComponent(blockId)}`, { start, force }),
     deleteBlock: (blockId) => del(`/plan/blocks/${encodeURIComponent(blockId)}`),
+    // FR-PLAN-08 내 캘린더로 내보내기 — .ics 파일(Blob)을 받는다. 화면이 저장 창을 띄운다
+    calendarFile: async (planId) => {
+      const res = await fetch(`${BASE}/plan/${encodeURIComponent(planId)}/calendar.ics`, { headers: authHeaders() });
+      if (!res.ok) {
+        const err = new Error('캘린더 파일을 만들지 못했어요.');
+        err.status = res.status;
+        throw err;
+      }
+      return res.blob();
+    },
     // FR-ALARM-03 알림에서 미루기 — 다음 날 이후 빈 시간으로, 뒤 단원도 순서대로 함께
     postponeBlock: (blockId) => post(`/plan/blocks/${encodeURIComponent(blockId)}/postpone`, {}),
     // FR-MY-01 공부 가능 시간 바꾸기 — 앞으로의 블록을 새 시간에 다시 놓는다

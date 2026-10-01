@@ -10,6 +10,7 @@ from schemas.user import (
     ForgotPasswordRequest,
     ResetPasswordRequest,
 )
+from services import login_guard
 from utils.auth import get_current_user
 
 # 비밀번호는 Supabase Auth 가 해싱·저장한다. 우리 DB 에는 저장하지 않는다 (기능명세서 K15).
@@ -128,6 +129,11 @@ def signup(req: SignupRequest):
 
 @router.post("/login")
 def login(req: LoginRequest):
+    # ⓪ 같은 이메일로 5회 연속 실패하면 60초 잠금 (FR-AUTH-01 · services/login_guard.py)
+    wait = login_guard.locked_for(req.email)
+    if wait:
+        raise HTTPException(status_code=429, detail=f"로그인 시도가 많아 잠시 막았습니다. {wait}초 뒤에 다시 시도해 주세요.")
+
     # ① Supabase Auth에 로그인 요청 — 요청마다 새 클라이언트
     auth_client = new_auth_client()
     try:
@@ -136,12 +142,15 @@ def login(req: LoginRequest):
             "password": req.password,
         })
     except Exception:
+        login_guard.record_failure(req.email)
         raise HTTPException(status_code=401, detail=LOGIN_FAILED)
 
     # ② 성공하면 세션(출입증)이 담겨 옴
     session = auth_res.session
     if not session:
+        login_guard.record_failure(req.email)
         raise HTTPException(status_code=401, detail=LOGIN_FAILED)
+    login_guard.record_success(req.email)
 
     # ③ 프론트에 토큰 전달
     return {

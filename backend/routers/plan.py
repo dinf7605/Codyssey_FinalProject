@@ -19,6 +19,7 @@
   DELETE /plan/blocks/{id}     블록 지우기 (로그인)
   POST /plan/blocks/{id}/postpone  알림에서 미루기 — 다음 날 이후 첫 빈 시간 (로그인)
   PUT  /plan/{id}/availability     공부 가능 시간 바꾸기 — 앞으로의 블록을 다시 놓음 (로그인)
+  GET  /plan/{id}/calendar.ics     내 캘린더로 내보내기 (.ics, 로그인)
 
 계획 만들기(decompose·schedule·validate)는 로그인 없이도 된다 — 비회원도 써 보고 가입하게.
 저장부터 로그인이 필요하다.
@@ -34,15 +35,15 @@ import time
 from datetime import date, datetime
 from typing import Literal
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Response
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from db import get_db, get_supabase_client
 from schemas.plan import Availability, Block, DecomposeResult, SchedulePlan, StudyUnit, Violation
 from services import llm
 from services.decomposer import decompose_goal
-from services import replan
+from services import calendar_export, replan
 from services.plan_store import (
     PlanLimitReached,
     active_plan_rows,
@@ -51,6 +52,7 @@ from services.plan_store import (
     load_active_plans,
     log_ai_call,
     other_plan_blocks,
+    plan_blocks,
     save_plan,
 )
 from services.scope import check_scope
@@ -86,6 +88,18 @@ class DecomposeRequest(BaseModel):
     today: date | None = None  # 비우면 서버 날짜. 사용자 시간대가 다를 때 넘긴다
 
 
+class BusyTime(BaseModel):
+    """구글 캘린더의 바쁜 시간 하나 (FR-PLAN-01). 일정 제목·참석자는 없다."""
+
+    start: datetime  # 한국 시각. 시간대가 붙어 오면 한국 시각으로 바꾼다
+    end: datetime
+
+    @field_validator("start", "end")
+    @classmethod
+    def _kst(cls, value: datetime) -> datetime:
+        return value.astimezone(replan.KST).replace(tzinfo=None) if value.tzinfo else value
+
+
 class ScheduleRequest(BaseModel):
     units: list[StudyUnit]
     availability: Availability
@@ -94,6 +108,8 @@ class ScheduleRequest(BaseModel):
     fixed_blocks: list[Block] = Field(default_factory=list)
     # 로그인 상태면 다른 목표의 진행 중 계획 블록을 피해서 놓는다. 같은 목표(다시 만들기)의 옛 계획은 빼고
     goal_title: str | None = None
+    # FR-PLAN-01 구글 캘린더의 바쁜 시간 (POST /calendar/busy 결과). 이 시간에는 놓지 않는다
+    busy: list[BusyTime] = Field(default_factory=list, max_length=1000)
 
 
 class RescheduleRequest(BaseModel):
@@ -224,12 +240,15 @@ def schedule(req: ScheduleRequest, user=Depends(get_optional_user)) -> ScheduleP
     """
     others = _others_for(user, req.goal_title)
     plan = build_schedule(
-        req.units, req.availability, req.start_day, req.deadline, req.fixed_blocks + others
+        req.units, req.availability, req.start_day, req.deadline, req.fixed_blocks + others,
+        busy=[(b.start, b.end) for b in req.busy],
     )
     if others:
         other_ids = {b.id for b in others}
         plan.blocks = [b for b in plan.blocks if b.id not in other_ids]
         plan.notes.append(f"진행 중인 다른 목표의 블록 {len(others)}개와 겹치지 않게 놓았습니다.")
+    if req.busy:
+        plan.notes.append(f"구글 캘린더의 바쁜 시간 {len(req.busy)}개를 피해서 놓았습니다.")
     return plan
 
 
@@ -470,6 +489,20 @@ def postpone_block(block_id: str, user=Depends(get_current_user), db=Depends(get
         return replan.postpone_block(db, user.id, block_id, replan.now_kst())
     except (replan.ReplanError, replan.BlockNotFound) as exc:
         _refuse(exc)
+
+
+@router.get("/{plan_id}/calendar.ics")
+def export_calendar(plan_id: str, user=Depends(get_current_user), db=Depends(get_db)) -> Response:
+    """FR-PLAN-08 — 오늘 이후의 안 한 블록을 .ics 로 내려준다 (구글·애플·아웃룩 캘린더에서 가져오기)."""
+    plan = next((p for p in active_plan_rows(db, user.id) if p["id"] == str(plan_id)), None)
+    if plan is None:
+        raise HTTPException(status_code=404, detail="진행 중인 내 계획에서 찾지 못했어요.")
+    body = calendar_export.build_ics(plan["goal_title"], plan_blocks(db, plan["id"]), replan.now_kst())
+    return Response(
+        content=body,
+        media_type="text/calendar; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="studypace.ics"', "Cache-Control": "no-store"},
+    )
 
 
 class AvailabilityChangeResponse(BaseModel):

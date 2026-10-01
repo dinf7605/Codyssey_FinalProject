@@ -6,7 +6,7 @@ import { api } from '@/lib/api';
 import { BANDS, slotsFromExploration, slotsHours } from '@/lib/planInput';
 import { notifyPlanChanged } from '@/lib/usePlan';
 
-// FR-MY-01 가용 시간 수정 · FR-MY-02 목표 관리(종료·바꾸기) — 마이페이지
+// FR-MY-01 가용 시간 수정 · FR-MY-02 목표 관리(종료·바꾸기) · FR-PLAN-08 내 캘린더로 내보내기 — 마이페이지
 // 시간을 바꾸면 아직 안 한 앞으로의 블록이 새 시간에 다시 놓인다 (PUT /plan/{id}/availability).
 // 다 들어가지 않으면 서버가 아무것도 바꾸지 않고 이유를 알려 준다.
 
@@ -90,6 +90,25 @@ export default function GoalSettings({ plans }) {
   const [error, setError] = useState('');
   const [ending, setEnding] = useState(null);
 
+  // FR-PLAN-08 — 오늘 이후의 블록을 .ics 로 받아 구글·애플·아웃룩 캘린더에서 가져오게 한다
+  async function exportCalendar(plan) {
+    setError('');
+    try {
+      const blob = await api.plan.calendarFile(plan.plan_id);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `studypace-${plan.goal_title.replace(/[\\/:*?"<>|\s]+/g, '_')}.ics`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      setMessage('캘린더 파일을 받았어요. 구글 캘린더는 설정 → 가져오기·내보내기 → 가져오기에서 이 파일을 고르면 됩니다.');
+    } catch (err) {
+      setError(err.message || '캘린더 파일을 만들지 못했어요.');
+    }
+  }
+
   async function endGoal(plan) {
     if (!window.confirm(`'${plan.goal_title}' 목표를 종료할까요? 남은 블록은 일정에서 사라지고, 지금까지의 학습 기록은 남습니다.`)) return;
     setEnding(plan.plan_id);
@@ -116,6 +135,9 @@ export default function GoalSettings({ plans }) {
             <button type="button" className="btn btn-sm" aria-expanded={open === p.plan_id}
               onClick={() => { setOpen(open === p.plan_id ? null : p.plan_id); setMessage(''); }}>
               공부 시간 바꾸기
+            </button>
+            <button type="button" className="btn btn-sm" onClick={() => exportCalendar(p)}>
+              내 캘린더에 넣기 (.ics)
             </button>
             <button type="button" className="btn btn-sm btn-quiet" disabled={ending === p.plan_id} onClick={() => endGoal(p)}>
               {ending === p.plan_id ? '종료 중…' : '목표 종료'}

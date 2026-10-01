@@ -89,12 +89,36 @@ def iter_day_windows(
     return windows
 
 
+def subtract_busy(
+    windows: list[tuple[date, datetime, datetime]], busy: list[tuple[datetime, datetime]]
+) -> list[tuple[date, datetime, datetime]]:
+    """빈 시간 창에서 바쁜 시간(구글 캘린더 일정, FR-PLAN-01)을 잘라 낸다. 순서는 그대로."""
+    if not busy:
+        return windows
+    spans = sorted((s, e) for s, e in busy if e > s)
+    out: list[tuple[date, datetime, datetime]] = []
+    for day, start, end in windows:
+        cursor = start
+        for b_start, b_end in spans:
+            if b_end <= cursor or b_start >= end:
+                continue
+            if b_start > cursor:
+                out.append((day, cursor, b_start))
+            cursor = max(cursor, b_end)
+            if cursor >= end:
+                break
+        if cursor < end:
+            out.append((day, cursor, end))
+    return out
+
+
 def build_schedule(
     units: list[StudyUnit],
     availability: Availability,
     start_day: date,
     deadline: date,
     fixed_blocks: list[Block] | None = None,
+    busy: list[tuple[datetime, datetime]] | None = None,
 ) -> SchedulePlan:
     """학습 단위를 빈 시간에 놓는다.
 
@@ -104,9 +128,10 @@ def build_schedule(
       - 블록 사이 최소 10분 휴식 (단위가 최대 120분이므로 연속 2시간을 넘지 않는다)
       - 마감일을 넘기지 않는다 — 못 넣은 것은 unplaced 로 남긴다
       - 이미 고정된 블록(수동 이동·완료)은 그 자리를 비켜서 배치한다
+      - 바쁜 시간(busy, 캘린더 일정)에는 놓지 않는다. 블록이 아니므로 하루 상한에 세지 않고 결과에도 넣지 않는다
     """
     fixed_blocks = fixed_blocks or []
-    windows = iter_day_windows(availability, start_day, deadline)
+    windows = subtract_busy(iter_day_windows(availability, start_day, deadline), busy or [])
 
     day_blocks: dict[date, list[Block]] = {}
     for b in fixed_blocks:
