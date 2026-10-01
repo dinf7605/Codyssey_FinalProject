@@ -9,6 +9,7 @@ import PaceSignal from '@/components/PaceSignal';
 import DeadlineContests from '@/components/DeadlineContests';
 import SectionTitle from '@/components/SectionTitle';
 import EmptyState from '@/components/EmptyState';
+import ExpiredGoalPrompt from '@/components/ExpiredGoalPrompt';
 import { useAccount } from '@/components/CurrentAccount';
 import { api } from '@/lib/api';
 import { isOpen, nextUnlock } from '@/lib/growth';
@@ -170,6 +171,9 @@ export default function DashboardPage() {
               : '오늘 할 일을 다 마쳤어요',
       )}
 
+      {/* FR-MAIN-04 기한이 지난 목표는 끝낼지 묻는다 */}
+      {hasPlan && <ExpiredGoalPrompt plans={plans} today={today} />}
+
       {/* 목표·마감·이번 주 학습은 레벨과 무관하게 항상 보인다 */}
       {primary && (
         <ProfileSummary
@@ -228,7 +232,8 @@ export default function DashboardPage() {
 
           {/* 레벨 3 — 목표마다 진도 신호등 (목표는 최대 2개) */}
           {isOpen(level, 'pace') && plans.map((p) => (
-            <PaceSignal key={p.plan_id} goal={goalView(p, today)} pace={paceOf(p, today)} milestones={milestones(p)} />
+            <PaceSignal key={p.plan_id} goal={goalView(p, today)} pace={paceOf(p, today)} milestones={milestones(p)}
+              unplaced={p.unplaced?.length || 0} />
           ))}
         </div>
 

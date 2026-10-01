@@ -10,7 +10,7 @@ import { clearDraft } from '@/lib/planDraft';
 // 로그아웃·탈퇴 때 이 계정이 고른 목표·만들던 계획·레벨 표시까지 지운다.
 // 남겨 두면 공용 PC 에서 다음 비회원에게 앞사람의 목표(시험일·가용시간)가 그대로 보였다 (10-01 실사용).
 // 학습 타이머 기록은 계정별(owner)로 남아 그 사람이 다시 로그인하면 보내므로 지우지 않는다.
-function signOut() {
+export function signOut() {
   clearAuthTokens();
   clearExploration();
   clearDraft();

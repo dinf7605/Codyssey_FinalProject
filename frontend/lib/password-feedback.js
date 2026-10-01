@@ -1,14 +1,26 @@
 // 가입과 재설정에서 동일한 규칙을 사용한다. 비밀번호는 trim하지 않는다.
-export function passwordChecks(value) {
-  return [
+// 가입에서는 이메일 아이디·닉네임이 들어간 비밀번호도 막는다 (FR-JOIN-01, 서버 services/password_policy.py 와 같은 기준).
+// 자주 쓰이는 비밀번호 1만 개 검사는 목록이 커서 서버에서만 한다 — 걸리면 가입 버튼을 누른 뒤 안내한다.
+const MIN_PART = 3;
+
+function containsPersonal(value, { email = '', nickname = '' } = {}) {
+  const lower = value.toLowerCase();
+  const parts = [email.split('@')[0].toLowerCase(), nickname.trim().toLowerCase()];
+  return parts.some((part) => part.length >= MIN_PART && lower.includes(part));
+}
+
+export function passwordChecks(value, personal = null) {
+  const checks = [
     { label: '8~64자', met: [...value].length >= 8 && [...value].length <= 64 },
     { label: '영문 포함', met: /[A-Za-z]/.test(value) },
     { label: '숫자 포함', met: /[0-9]/.test(value) },
     { label: '특수문자 포함', met: /[^A-Za-z0-9]/.test(value) },
   ];
+  if (personal) checks.push({ label: '이메일 아이디·닉네임 미포함', met: value.length > 0 && !containsPersonal(value, personal) });
+  return checks;
 }
-export function passwordValid(value) {
-  return passwordChecks(value).every((rule) => rule.met);
+export function passwordValid(value, personal = null) {
+  return passwordChecks(value, personal).every((rule) => rule.met);
 }
 export function authErrorMessage(error, action) {
   if (!error.status) return '서버에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.';

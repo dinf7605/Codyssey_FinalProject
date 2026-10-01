@@ -154,6 +154,8 @@ export const api = {
     // FR-ADMIN-01 수집 공고 고치기 — 보낸 항목만 바뀐다
     fixContest: (id, changes) => patch(`/admin/contests/${encodeURIComponent(id)}`, changes),
     me: () => request('/admin/me'),
+    // FR-ADMIN-02 오늘 AI 예상 사용액 · 하루 한도 (80% 부터 비회원 추천 차단, 100% 면 새 AI 호출 차단)
+    aiBudget: () => request('/admin/ai-budget', { cache: 'no-store' }),
     logs: ({ day = '', page = 1, pageSize = 20 } = {}) => {
       const params = new URLSearchParams({
         page: String(page),
@@ -238,6 +240,10 @@ export const api = {
       }),
     me: () => request('/auth/me'),
 
+    // FR-JOIN-03 AI 이용 고지 문구가 바뀌면 다시 동의 (backend AI_NOTICE_VERSION)
+    consent: () => request('/auth/consent', { cache: 'no-store' }),
+    agreeAiNotice: () => post('/auth/consent/ai-notice', {}),
+
     // FR-AUTH-02 구글 로그인 — backend/routers/auth_google.py
     google: {
       start: (redirectTo) =>
@@ -264,10 +270,20 @@ export const api = {
     list: () => request('/notifications', { cache: 'no-store' }),
     read: (id) => patch(`/notifications/${encodeURIComponent(id)}/read`, {}),
     readAll: () => patch('/notifications/read-all', {}),
+    // FR-ALARM-02·03 오늘 쉬기 — 그날 남은 학습 알림을 멈추고 남은 블록은 야간 재조정이 옮긴다
+    restToday: () => post('/notifications/rest-today', {}),
+  },
+
+  // FR-CONT-07 관심 공모전 — 마감 D-7 · D-3 준비 블록 (backend/routers/contest_interest.py)
+  contestInterests: {
+    list: () => request('/contest-interests', { cache: 'no-store' }),
+    preview: (contestId) => post('/contest-interests/preview', { contest_id: contestId }),
+    add: (contestId) => post('/contest-interests', { contest_id: contestId }),
+    remove: (contestId) => del(`/contest-interests/${encodeURIComponent(contestId)}`),
   },
 
   settings: {
-    // FR-MY-03/05 알림 켜기·N분 전·방해금지·강도
+    // FR-MY-03/05 알림 켜기·N분 전·방해금지·강도·재조정 결과·마감 임박·학습 독촉
     notifications: () => request('/settings/notifications', { cache: 'no-store' }),
     saveNotifications: (body) => request('/settings/notifications', { method: 'PUT', body: JSON.stringify(body) }),
     profile: () => request('/settings/profile'),

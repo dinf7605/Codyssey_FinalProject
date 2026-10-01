@@ -4,9 +4,11 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { api, getToken } from '@/lib/api';
+import { showNewAlerts } from '@/lib/browserAlerts';
 
 // FR-ALARM-01~04 머리글·사이드바의 알림 링크 — 안 읽은 알림 수를 함께 보여 준다.
 // 화면을 옮길 때와 1분마다 다시 센다 (알림 워커가 1분마다 돈다). 비회원에게는 보이지 않는다.
+// 브라우저 알림을 허용했으면 새로 온 알림을 브라우저 알림으로도 띄운다 (FR-ALARM-01, lib/browserAlerts.js).
 
 const POLL_MS = 60 * 1000;
 
@@ -22,7 +24,10 @@ export default function NotificationLink({ position }) {
     async function load() {
       try {
         const rows = await api.notifications.list();
-        if (alive && getToken() === token) setState({ token, unread: rows.filter((r) => !r.is_read).length });
+        if (alive && getToken() === token) {
+          setState({ token, unread: rows.filter((r) => !r.is_read).length });
+          showNewAlerts(rows);
+        }
       } catch {
         // 못 세면 숫자 없이 링크만 둔다
         if (alive) setState({ token, unread: 0 });

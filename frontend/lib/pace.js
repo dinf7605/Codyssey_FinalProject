@@ -11,6 +11,9 @@
 import { addDays, dayKey, ddayOf, kstIso, kstToday, weekdayMon } from './planView';
 
 export const PENDING_DAYS = 3; // 계획을 시작한 지 이보다 짧으면 판정하지 않는다 ('집계 중')
+// FR-PACE-03 — 3일 이상 뒤처지면 주의, 7일 이상이면 경고. 1~2일은 오차 범위로 보고 '계획대로'로 둔다
+export const CAUTION_DAYS = 3;
+export const WARNING_DAYS = 7;
 
 // 단원 = 학습 단위. 그 단위의 블록을 모두 끝냈으면 완료
 export function unitProgress(plan) {
@@ -46,8 +49,9 @@ export function paceOf(plan, today = kstToday(), now = kstIso()) {
   const studyDays = new Set(blocks.map((b) => dayKey(b.start))).size;
   const perDay = blocks.length / studyDays;
   const diffDays = Math.round((done - due) / perDay);
-  const state = diffDays >= 1 ? 'ahead' : diffDays <= -1 ? 'late' : 'ontrack';
-  return { state, diffDays, nextCheckpoint };
+  const state = diffDays >= 1 ? 'ahead' : diffDays <= -CAUTION_DAYS ? 'late' : 'ontrack';
+  const level = diffDays <= -WARNING_DAYS ? 'warning' : state === 'late' ? 'caution' : null;
+  return { state, level, diffDays, nextCheckpoint };
 }
 
 // FR-PACE-01 중간 목표 — '언제까지 어디까지'.

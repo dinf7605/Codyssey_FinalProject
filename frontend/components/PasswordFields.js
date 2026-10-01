@@ -4,7 +4,7 @@ import { passwordChecks, passwordValid } from '@/lib/password-feedback';
 
 export default function PasswordFields({
   idPrefix, password, confirmation, onPasswordChange, onConfirmationChange,
-  disabled = false, label = '비밀번호',
+  disabled = false, label = '비밀번호', personal = null,
 }) {
   const mismatch = confirmation.length > 0 && password !== confirmation;
   const color = (met) => met ? '#15803d' : '#dc2626';
@@ -15,10 +15,10 @@ export default function PasswordFields({
         <input id={`${idPrefix}-password`} name="password" type="password" className="input"
           autoComplete="new-password" required minLength={8} maxLength={64}
           value={password} onChange={(event) => onPasswordChange(event.target.value)} disabled={disabled}
-          aria-describedby={`${idPrefix}-rules`} aria-invalid={password.length > 0 && !passwordValid(password)} />
+          aria-describedby={`${idPrefix}-rules`} aria-invalid={password.length > 0 && !passwordValid(password, personal)} />
         <ul id={`${idPrefix}-rules`} className="hint" aria-live="polite" aria-atomic="true"
           style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 14px', listStyle: 'none', padding: 0, margin: '6px 0 0' }}>
-          {passwordChecks(password).map(({ label: rule, met }) => (
+          {passwordChecks(password, personal).map(({ label: rule, met }) => (
             <li key={rule} style={{ color: color(met) }}>{met ? '✓ 충족' : '✗ 필요'} · {rule}</li>
           ))}
         </ul>

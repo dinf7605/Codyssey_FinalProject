@@ -13,12 +13,13 @@ export function densityForLevel(level, manual) {
 
 /** 진도 상태 → 화면에 쓸 색 이름과 문구.
  *  색만으로 구분하지 않도록 항상 label을 함께 반환한다 (NFR-A11Y-01). */
-export function paceView(state, diffDays = 0) {
+export function paceView(state, diffDays = 0, level = null) {
   switch (state) {
     case 'ahead':
       return { tone: 'ok', label: `계획보다 ${diffDays}일 앞섬` };
     case 'late':
-      return { tone: 'late', label: `계획보다 ${diffDays}일 뒤처짐` };
+      // FR-PACE-03 — 3일 이상 주의, 7일 이상 경고
+      return { tone: 'late', label: `${level === 'warning' ? '경고' : '주의'} · 계획보다 ${diffDays}일 뒤처짐` };
     case 'pending':
       return { tone: 'muted', label: '집계 중' };
     case 'ontrack':

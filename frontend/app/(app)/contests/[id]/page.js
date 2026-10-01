@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
+import ContestInterestButton from '@/components/ContestInterestButton';
 import EmptyState from '@/components/EmptyState';
 import { api, getToken } from '@/lib/api';
 import { saveContestPlanning } from '@/lib/contest-planning';
@@ -13,6 +14,7 @@ import { dday } from '@/lib/ui';
 // FR-CONT-11 계산 결과를 일정으로 만들려면 가입으로 유도한다.
 // 계산은 서버의 결정론적 나눗셈이다 (표준 준비시간 ÷ 주당 투입 시간, LLM 미사용 · 기획서 4-2절).
 // 공고 본문은 저장하지 않는다 — 자격·세부 내용은 원문 링크로 보낸다.
+// FR-CONT-07 관심 등록 — 마감 D-7 · D-3 준비 블록 (components/ContestInterestButton.js)
 
 const VERDICT = {
   possible: { label: '가능', cls: 'pill pill-ok' },
@@ -160,6 +162,8 @@ export default function ContestDetailPage() {
           )}
         </div>
       </section>
+
+      <ContestInterestButton contestId={c.id} />
 
       <section className="panel" style={{ padding: 'var(--gap-4)' }}>
         <h2 style={{ fontSize: '14px' }}>얼마나 준비해야 할까요</h2>

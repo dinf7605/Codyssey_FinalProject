@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import SectionTitle from '@/components/SectionTitle';
 import AdminRequestMetrics from '@/components/AdminRequestMetrics';
+import AdminAiBudget from '@/components/AdminAiBudget';
 import AdminContestInspection from '@/components/AdminContestInspection';
 import AdminDbStatus from '@/components/AdminDbStatus';
 import { api, getToken } from '@/lib/api';
@@ -230,6 +231,10 @@ export default function AdminPage() {
       )}
       {accessAllowed && (
         <>
+          <section className="sec">
+            <SectionTitle>오늘 AI 사용량 · 하루 한도</SectionTitle>
+            <AdminAiBudget />
+          </section>
           <section className="sec">
             <SectionTitle>AI 요청 실패율 · 토큰 사용량</SectionTitle>
             <AdminRequestMetrics day={day} revision={revision} />

@@ -160,7 +160,7 @@ export default function GoogleCallbackPage() {
 
               <label style={{ display: 'flex', gap: 10, alignItems: 'flex-start', fontSize: '14px' }}>
                 <input type="checkbox" name="marketing" style={{ marginTop: 3 }} />
-                <span><b className="muted">[선택]</b> 학습 알림 메일 수신</span>
+                <span><b className="muted">[선택]</b> 학습 알림 수신 (재조정 결과·마감 임박·학습 독촉)</span>
               </label>
             </fieldset>
 

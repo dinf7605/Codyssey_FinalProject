@@ -19,6 +19,8 @@ export default function SignupPage() {
   const [aiNotice, setAiNotice] = useState(false);
   const [marketing, setMarketing] = useState(false);
   const [password, setPassword] = useState('');
+  const [email, setEmail] = useState('');
+  const [nickname, setNickname] = useState('');
   const [confirmation, setConfirmation] = useState('');
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState('');
@@ -30,18 +32,21 @@ export default function SignupPage() {
       setMessage('개인정보 수집·이용 및 AI 이용 안내의 필수 항목에 동의해 주세요.');
       return;
     }
-    const form = event.currentTarget;
-    const email = form.elements.email.value.trim();
-    const nickname = form.elements.nickname.value.trim();
+    const trimmedEmail = email.trim();
+    const trimmedNickname = nickname.trim();
     if (!passwordValid(password)) {
       setMessage('비밀번호는 8~64자로 영문·숫자·특수문자를 포함해야 합니다.');
+      return;
+    }
+    if (!passwordValid(password, { email: trimmedEmail, nickname: trimmedNickname })) {
+      setMessage('비밀번호에 이메일 아이디나 닉네임을 넣을 수 없습니다.');
       return;
     }
     if (password !== confirmation) {
       setMessage('비밀번호 확인이 일치하지 않습니다.');
       return;
     }
-    if (nickname.length < 2 || nickname.length > 10) {
+    if (trimmedNickname.length < 2 || trimmedNickname.length > 10) {
       setMessage('닉네임은 2~10자로 입력해 주세요.');
       return;
     }
@@ -49,7 +54,7 @@ export default function SignupPage() {
     setMessage('');
     try {
       await api.auth.signup({
-        email, password, nickname,
+        email: trimmedEmail, password, nickname: trimmedNickname,
         agreePrivacy: privacy, agreeAiNotice: aiNotice,
         agreeMarketing: marketing,
       });
@@ -78,18 +83,20 @@ export default function SignupPage() {
       <form className="stack" style={{ gap: 'var(--gap-4)' }} onSubmit={submit}>
         <div className="field">
           <label htmlFor="su-email">이메일</label>
-          <input id="su-email" name="email" type="email" className="input" autoComplete="email" required />
+          <input id="su-email" name="email" type="email" className="input" autoComplete="email" required
+            value={email} onChange={(event) => setEmail(event.target.value)} />
         </div>
 
         <PasswordFields
           idPrefix="su" password={password} confirmation={confirmation}
           onPasswordChange={setPassword} onConfirmationChange={setConfirmation}
-          disabled={pending}
+          disabled={pending} personal={{ email, nickname }}
         />
 
         <div className="field">
           <label htmlFor="su-nick">닉네임</label>
-          <input id="su-nick" name="nickname" type="text" className="input" minLength={2} maxLength={10} placeholder="2~10자" required />
+          <input id="su-nick" name="nickname" type="text" className="input" minLength={2} maxLength={10} placeholder="2~10자" required
+            value={nickname} onChange={(event) => setNickname(event.target.value)} />
         </div>
 
         <SignupConsentFields
