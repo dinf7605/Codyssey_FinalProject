@@ -136,7 +136,7 @@ export default function GoogleCallbackPage() {
             <fieldset className="panel" style={{ padding: 'var(--gap-4)', display: 'flex', flexDirection: 'column', gap: 'var(--gap-3)' }}>
               <legend className="tiny strong" style={{ padding: '0 6px' }}>약관 동의</legend>
 
-              <label style={{ display: 'flex', gap: 10, alignItems: 'flex-start', fontSize: 13 }}>
+              <label style={{ display: 'flex', gap: 10, alignItems: 'flex-start', fontSize: '14px' }}>
                 <input type="checkbox" checked={privacy} onChange={(event) => setPrivacy(event.target.checked)} style={{ marginTop: 3 }} />
                 <span>
                   <b>[필수]</b> 개인정보 수집·이용 동의
@@ -147,7 +147,7 @@ export default function GoogleCallbackPage() {
                 </span>
               </label>
 
-              <label style={{ display: 'flex', gap: 10, alignItems: 'flex-start', fontSize: 13 }}>
+              <label style={{ display: 'flex', gap: 10, alignItems: 'flex-start', fontSize: '14px' }}>
                 <input type="checkbox" checked={aiNotice} onChange={(event) => setAiNotice(event.target.checked)} style={{ marginTop: 3 }} />
                 <span>
                   <b>[필수]</b> AI 생성 콘텐츠 고지 확인
@@ -158,7 +158,7 @@ export default function GoogleCallbackPage() {
                 </span>
               </label>
 
-              <label style={{ display: 'flex', gap: 10, alignItems: 'flex-start', fontSize: 13 }}>
+              <label style={{ display: 'flex', gap: 10, alignItems: 'flex-start', fontSize: '14px' }}>
                 <input type="checkbox" name="marketing" style={{ marginTop: 3 }} />
                 <span><b className="muted">[선택]</b> 학습 알림 메일 수신</span>
               </label>

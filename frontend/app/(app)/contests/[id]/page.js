@@ -97,7 +97,7 @@ export default function ContestDetailPage() {
         <p className="hint">지원 자격, 접수 기간, 제출 방법은 위비티의 공고 원문에서 확인해 주세요.</p>
         {url && <a className="btn btn-primary" href={url} target="_blank" rel="noopener noreferrer">위비티에서 공고 확인하기 ↗</a>}
         <section className="panel" style={{ padding: 'var(--gap-4)', marginTop: 'var(--gap-4)' }}>
-          <h2 style={{ fontSize: 15 }}>준비 기간 계산</h2>
+          <h2 style={{ fontSize: '14px' }}>준비 기간 계산</h2>
           <p className="hint">원문에서 마감일을 확인해 직접 입력해 주세요. 입력한 날짜·분야·시간은 서버에 저장하지 않습니다.</p>
           <div className="field" style={{ marginTop: 'var(--gap-3)' }}>
             <label htmlFor="wevity-deadline">원문에서 확인한 마감일</label>
@@ -147,7 +147,7 @@ export default function ContestDetailPage() {
       </header>
 
       <section className="panel" style={{ padding: 'var(--gap-4)' }}>
-        <h2 style={{ fontSize: 15 }}>공고 원문</h2>
+        <h2 style={{ fontSize: '14px' }}>공고 원문</h2>
         <p className="muted tiny" style={{ marginTop: 4 }}>
           지원 자격 충족 여부는 단정할 수 없습니다. 자세한 내용과 제출 방법은 반드시 원문에서 확인해 주세요.
         </p>
@@ -162,7 +162,7 @@ export default function ContestDetailPage() {
       </section>
 
       <section className="panel" style={{ padding: 'var(--gap-4)' }}>
-        <h2 style={{ fontSize: 15 }}>얼마나 준비해야 할까요</h2>
+        <h2 style={{ fontSize: '14px' }}>얼마나 준비해야 할까요</h2>
         <p className="muted tiny" style={{ marginTop: 4 }}>
           주당 투입 가능 시간을 넣으면 최소 준비 기간을 계산합니다
         </p>
@@ -197,7 +197,7 @@ export default function ContestDetailPage() {
             >
               <div className="stack" style={{ gap: 2 }}>
                 <span className="dim tiny">최소 필요 기간 · 마감까지 {estimate.weeks_left}주</span>
-                <span className="mono" style={{ fontSize: 18, fontWeight: 600 }}>{estimate.weeks_needed}주</span>
+                <span className="mono" style={{ fontSize: '14px', fontWeight: 600 }}>{estimate.weeks_needed}주</span>
               </div>
               <span className={verdict.cls}>{verdict.label}</span>
             </div>

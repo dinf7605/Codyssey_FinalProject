@@ -19,7 +19,7 @@ export default function PaceSignal({ goal, pace }) {
           <span className="tiny muted">
             {goal.unitsDone} / {goal.unitsTotal} 단원
           </span>
-          <span className="mono" style={{ fontSize: 13, fontWeight: 600 }}>{percent}%</span>
+          <span className="mono" style={{ fontSize: '14px', fontWeight: 600 }}>{percent}%</span>
         </div>
 
         <div

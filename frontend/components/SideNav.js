@@ -17,7 +17,7 @@ export default function SideNav({ name, levelName, streakDays, goal }) {
   return (
     <aside className="sidenav">
       <div className="sidenav-in">
-        <Link href="/dashboard" className="brand sidenav-brand">StudyPace</Link>
+        <Link href="/" className="brand sidenav-brand" aria-label="StudyPace 첫 페이지로 이동">StudyPace</Link>
 
         <nav aria-label="주요 메뉴" className="sidenav-list">
           {NAV_TABS.map(({ href, label, icon }) => {

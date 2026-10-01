@@ -194,7 +194,7 @@ export default function DashboardPage() {
               <EmptyState
                 title="오늘은 쉬는 날이에요"
                 description="주 1일은 휴식일로 비워 둡니다. 다음 블록은 일정에서 확인할 수 있어요."
-                action={<Link className="btn btn-sm" href="/schedule">일정 보기</Link>}
+                action={<Link className="btn btn-green btn-sm" href="/schedule">일정 보기</Link>}
               />
             ) : (
               <DayTimeline blocks={todayBlocks} />

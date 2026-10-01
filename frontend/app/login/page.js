@@ -78,7 +78,7 @@ export default function LoginPage() {
 
       <Link href="/onboarding" className="btn btn-quiet">로그인 없이 내게 맞는 목표 찾기</Link>
 
-      <div style={{ display: 'flex', justifyContent: 'center', gap: 'var(--gap-4)', fontSize: 13 }}>
+      <div style={{ display: 'flex', justifyContent: 'center', gap: 'var(--gap-4)', fontSize: '14px' }}>
         <Link href="/signup" className="accent-text">회원가입</Link>
         <Link href="/forgot-password" className="accent-text">비밀번호 재설정</Link>
       </div>

@@ -1,27 +1,15 @@
-import { Gowun_Batang, IBM_Plex_Sans_KR, IBM_Plex_Mono } from 'next/font/google';
+import localFont from 'next/font/local';
 import './globals.css';
 import { densityForLevel } from '@/lib/ui';
 
-// next/font는 빌드 시점에 폰트를 가져와 같은 도메인에서 내려준다.
-// 외부 스타일시트를 부르지 않아 첫 화면이 늦게 뜨거나 글자가 튀는 일이 없다.
-const display = Gowun_Batang({
-  subsets: ['latin'],
-  weight: ['400', '700'],
-  variable: '--font-display',
-  display: 'swap',
-});
-
-const body = IBM_Plex_Sans_KR({
-  subsets: ['latin'],
-  weight: ['300', '400', '500', '600', '700'],
-  variable: '--font-body',
-  display: 'swap',
-});
-
-const mono = IBM_Plex_Mono({
-  subsets: ['latin'],
-  weight: ['400', '500'],
-  variable: '--font-mono-src',
+const namsan = localFont({
+  src: [
+    { path: './fonts/SeoulNamsanL.ttf', weight: '300', style: 'normal' },
+    { path: './fonts/SeoulNamsanM.ttf', weight: '400 500', style: 'normal' },
+    { path: './fonts/SeoulNamsanB.ttf', weight: '600 700', style: 'normal' },
+    { path: './fonts/SeoulNamsanEB.ttf', weight: '800 900', style: 'normal' },
+  ],
+  variable: '--font-namsan',
   display: 'swap',
 });
 
@@ -54,9 +42,14 @@ export default function RootLayout({ children }) {
       lang="ko"
       data-level={level}
       data-density={density}
-      className={`${display.variable} ${body.variable} ${mono.variable}`}
+      className={namsan.variable}
     >
-      <body>{children}</body>
+      <body>
+        {children}
+        <footer className="font-credit">
+          서체: <a href="https://www.seoul.go.kr/seoul/font.do" target="_blank" rel="noreferrer">서울특별시 서울남산체</a>
+        </footer>
+      </body>
     </html>
   );
 }

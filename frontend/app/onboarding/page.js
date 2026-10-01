@@ -525,7 +525,7 @@ export default function OnboardingPage() {
         {/* ── FR-GOAL-01 ── */}
         {view === 'interest' && (
           <section className="stack" style={{ gap: 'var(--gap-4)' }}>
-            <p className="muted" style={{ fontSize: 14 }}>
+            <p className="muted" style={{ fontSize: '14px' }}>
               최대 5개까지 고를 수 있어요. 잘 모르겠으면 건너뛰어도 됩니다.
             </p>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--gap-2)' }}>
@@ -619,7 +619,7 @@ export default function OnboardingPage() {
         {/* ── FR-GOAL-02 ── */}
         {view === 'time' && (
           <section className="stack" style={{ gap: 'var(--gap-4)' }}>
-            <p className="muted" style={{ fontSize: 14 }}>
+            <p className="muted" style={{ fontSize: '14px' }}>
               공부할 수 있는 시간대를 눌러서 표시해 주세요. 주 3시간 이상을 권장합니다.
             </p>
 
@@ -650,8 +650,8 @@ export default function OnboardingPage() {
         {/* ── FR-GOAL-03 진행 상태 ── */}
         {view === 'matching' && (
           <section className="stack" style={{ gap: 'var(--gap-4)', alignItems: 'center', textAlign: 'center', padding: 'var(--gap-6) 0' }}>
-            <span className="pill pill-ai mono">AI 검색</span>
-            <p style={{ fontSize: 15, fontWeight: 600 }}>관심분야에 맞는 목표를 찾고 있어요</p>
+            <span className="pill pill-ai-search mono">AI 검색</span>
+            <p style={{ fontSize: '14px', fontWeight: 600 }}>관심분야에 맞는 목표를 찾고 있어요</p>
             <p className="muted tiny">자격증 · 공모전 후보를 분석하는 중...</p>
           </section>
         )}
@@ -659,7 +659,7 @@ export default function OnboardingPage() {
         {/* ── FR-GOAL-05 · FR-GOAL-08 ── */}
         {view === 'recommend' && (
           <section className="stack" style={{ gap: 'var(--gap-3)' }}>
-            <p className="muted" style={{ fontSize: 14 }}>
+            <p className="muted" style={{ fontSize: '14px' }}>
               {allDismissed ? (
                 // 후보가 있긴 했지만 전부 "관심없음"으로 치웠다 — "~목표만 남겼습니다"는
                 // 어긋나는 문구라 별도로 안내한다. (사용자 피드백: 화면 타이틀/내용 불일치)
@@ -724,7 +724,7 @@ export default function OnboardingPage() {
                     className="hint"
                     style={{ background: 'var(--surface-2)', borderRadius: 8, padding: '10px 12px' }}
                   >
-                    <p style={{ margin: 0, fontSize: 13 }}>{excludedDetailText(excludedCandidates)}</p>
+                    <p style={{ margin: 0, fontSize: '14px' }}>{excludedDetailText(excludedCandidates)}</p>
                     <button
                       type="button"
                       className="btn btn-sm"
@@ -752,7 +752,7 @@ export default function OnboardingPage() {
                             deadlineWeeksLeft(g) && <span className="pill pill-late">시험까지 빠듯해요</span>}
                         <span className="pill mono">주 {g.weekly_hours}시간</span>
                       </div>
-                      <b style={{ fontSize: 16 }}>{g.title}</b>
+                      <b style={{ fontSize: '14px' }}>{g.title}</b>
                       {g.reason && <p className="ct-reason">{g.reason}</p>}
 
                       <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
@@ -800,7 +800,7 @@ export default function OnboardingPage() {
               <button
                 type="button"
                 className="btn btn-quiet btn-quiet-hover"
-                style={{ fontSize: 13, width: 'auto' }}
+                style={{ fontSize: '14px', width: 'auto' }}
                 onClick={openManual}
               >
                 추천 대신 목표를 직접 입력할래요
@@ -808,7 +808,7 @@ export default function OnboardingPage() {
               <button
                 type="button"
                 className="btn btn-quiet btn-quiet-hover"
-                style={{ fontSize: 13, width: 'auto' }}
+                style={{ fontSize: '14px', width: 'auto' }}
                 onClick={restartInterest}
               >
                 관심분야 다시 고르기
@@ -837,7 +837,7 @@ export default function OnboardingPage() {
                         className="ct"
                         style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
                       >
-                        <span style={{ fontSize: 14 }}>{item.title}</span>
+                        <span style={{ fontSize: '14px' }}>{item.title}</span>
                         <button
                           type="button"
                           className="btn btn-sm btn-quiet btn-quiet-hover"
@@ -857,7 +857,7 @@ export default function OnboardingPage() {
         {/* ── FR-GOAL-06 ── */}
         {view === 'manual' && (
           <section className="stack" style={{ gap: 'var(--gap-4)' }}>
-            <p className="muted" style={{ fontSize: 14 }}>추천을 쓰지 않고 원하는 목표를 등록해요.</p>
+            <p className="muted" style={{ fontSize: '14px' }}>추천을 쓰지 않고 원하는 목표를 등록해요.</p>
 
             <div className="field">
               <label htmlFor="mg-title">목표명</label>
@@ -934,7 +934,7 @@ export default function OnboardingPage() {
         {view === 'confirm' && picked && (
           <section className="stack" style={{ gap: 'var(--gap-4)' }}>
             <div className="panel" style={{ padding: 'var(--gap-4)' }}>
-              <b style={{ fontSize: 16 }}>{picked.title}</b>
+              <b style={{ fontSize: '14px' }}>{picked.title}</b>
               <div style={{ display: 'flex', gap: 14, marginTop: 8 }}>
                 {plannedWeeks(picked) && <span className="mono tiny muted">약 {plannedWeeks(picked)}주</span>}
                 <span className="mono tiny muted">주 {picked.weeklyHours}시간</span>

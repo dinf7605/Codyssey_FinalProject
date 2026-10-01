@@ -124,7 +124,7 @@ export default function ContestsPage() {
                 aria-describedby="contest-interest-help"
                 onChange={(event) => setInput(event.target.value)}
               />
-              <button className="btn btn-primary" type="submit" disabled={loading}>
+              <button className="btn btn-orange" type="submit" disabled={loading}>
                 {loading ? '불러오는 중…' : '추천받기'}
               </button>
             </div>

@@ -445,7 +445,7 @@ export default function PlanBuilder() {
           {plan && (
             <div className="stack" style={{ gap: 'var(--gap-2)' }}>
               <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-                <b style={{ fontSize: 14 }}>빈 시간에 {plan.blocks.length}개 배치</b>
+                <b style={{ fontSize: '14px' }}>빈 시간에 {plan.blocks.length}개 배치</b>
                 {violations && (
                   <span className={violations.length ? 'pill pill-late' : 'pill pill-ok'}>
                     {violations.length ? `규칙 위반 ${violations.length}건` : '규칙 위반 0건'}

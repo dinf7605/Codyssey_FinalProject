@@ -70,7 +70,7 @@ export default function StudyNotes() {
         return (
           <div className="stack" style={{ gap: 'var(--gap-2)' }} key={keyOf(g)}>
             <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-              <b style={{ fontSize: 14 }}>{nameOf(g)}</b>
+              <b style={{ fontSize: '14px' }}>{nameOf(g)}</b>
               <span className="tag">메모 {g.notes.length}개</span>
               {g.plan_id && !g.active && <span className="pill">끝낸 목표</span>}
             </div>

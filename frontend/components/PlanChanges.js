@@ -77,12 +77,12 @@ export default function PlanChanges() {
       {latestRuns.map((run) => (
         <div className="stack" style={{ gap: 'var(--gap-2)' }} key={run.id}>
           <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-            {many && <b style={{ fontSize: 14 }}>{run.goal_title}</b>}
+            {many && <b style={{ fontSize: '14px' }}>{run.goal_title}</b>}
             {run.ai_generated && <AiBadge />}
             <span className="tag">{whenLabel(run.created_at)} 재조정</span>
             {run.undone && <span className="pill">되돌림</span>}
           </div>
-          <p style={{ fontSize: 14 }}>{run.summary}</p>
+          <p style={{ fontSize: '14px' }}>{run.summary}</p>
           {run.ai_generated && <AiNotice>요약 문장은 AI가 썼습니다. 바뀐 내용은 아래 목록이 정확합니다.</AiNotice>}
 
           <ul className="rows">

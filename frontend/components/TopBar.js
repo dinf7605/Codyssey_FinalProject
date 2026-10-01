@@ -9,7 +9,7 @@ export default function TopBar({ name, streakDays, levelName, goal }) {
   return (
     <header className="topbar">
       <div className="shell topbar-in">
-        <Link href="/dashboard" className="brand">StudyPace</Link>
+        <Link href="/" className="brand" aria-label="StudyPace 첫 페이지로 이동">StudyPace</Link>
         <div className="topbar-right">
           <AdminNavigationLink position="top" />
           {goal && <span className="tag tag-accent mono">{dday(goal.dDay)}</span>}

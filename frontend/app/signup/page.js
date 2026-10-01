@@ -103,7 +103,7 @@ export default function SignupPage() {
         />
 
         {message && <p role="status">{message}</p>}
-        <button type="submit" className="btn btn-primary" disabled={!privacy || !aiNotice || pending}>
+        <button type="submit" className="btn btn-yellow signup-submit" disabled={!privacy || !aiNotice || pending}>
           {pending ? '가입 중...' : '가입하고 일정 만들기'}
         </button>
         <p className="hint" style={{ textAlign: 'center' }}>
@@ -113,7 +113,7 @@ export default function SignupPage() {
 
       <GoogleLoginButton label="구글 계정으로 가입하기" />
 
-      <p style={{ textAlign: 'center', fontSize: 13 }}>
+      <p style={{ textAlign: 'center', fontSize: '14px' }}>
         이미 계정이 있나요? <Link href="/login" className="accent-text">로그인</Link>
       </p>
     </main>

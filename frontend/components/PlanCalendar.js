@@ -28,8 +28,12 @@ function Day({ date, label, today, selected, blocks, disabled, dropping, onPick,
   const [over, setOver] = useState(false);
   if (!date) return <div className="cal-day cal-out" aria-hidden="true" />;
   const canDrop = dropping && !disabled && date >= today;
+  const counts = { done: 0, miss: 0, plan: 0 };
+  blocks.forEach((block) => { counts[blockState(block, today)] += 1; });
+  const dayState = counts.miss ? 'miss' : counts.plan ? 'plan' : counts.done ? 'done' : null;
   const cls = [
     'cal-day', date === today && 'cal-today', date === selected && 'cal-picked', disabled && 'cal-out',
+    dayState && `cal-state-${dayState}`,
     canDrop && over && 'cal-drop',
   ].filter(Boolean).join(' ');
   return (
@@ -39,7 +43,7 @@ function Day({ date, label, today, selected, blocks, disabled, dropping, onPick,
       disabled={disabled}
       onClick={() => onPick(date)}
       aria-pressed={date === selected}
-      aria-label={`${date} 블록 ${blocks.length}개`}
+      aria-label={`${date}${date === today ? ' 오늘' : ''} 블록 ${blocks.length}개, 완료 ${counts.done}개, 지난 미완료 ${counts.miss}개, 예정 ${counts.plan}개`}
       onDragOver={canDrop ? (e) => { e.preventDefault(); setOver(true); } : undefined}
       onDragLeave={() => setOver(false)}
       onDrop={canDrop ? (e) => { e.preventDefault(); setOver(false); onDrop(date); } : undefined}
@@ -49,6 +53,7 @@ function Day({ date, label, today, selected, blocks, disabled, dropping, onPick,
       <span className="cal-dots">
         {blocks.map((b) => <i key={b.id} className={DOT[blockState(b, today)]} />)}
       </span>
+      {dayState && <span className="cal-state-label">{counts.miss ? '미완료' : counts.plan ? '예정' : '완료'}</span>}
     </button>
   );
 }
