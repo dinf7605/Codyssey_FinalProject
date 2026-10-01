@@ -13,6 +13,7 @@ Codyssey 게이트웨이 규칙 (2026-09-24 실측)
   - SDK 자동 재시도를 끈다 (max_retries=0). 켜 두면 타임아웃마다 2번 더 기다린다.
     재시도가 필요하면 각 기능이 정한 횟수만큼 직접 한다 (AI기능명세 6: 1회)
   - 키가 없으면 None 을 돌려준다. 호출하는 쪽은 규칙·템플릿으로 대체한다 — AI 가 없어도 기능은 동작한다
+  - 하루 비용 한도(services/ai_budget.py)를 넘었을 때도 None 이다
 """
 
 from __future__ import annotations
@@ -44,6 +45,9 @@ def get_client(timeout: float = 60):
     """게이트웨이용 Anthropic 클라이언트. 키가 없거나 SDK 가 없으면 None."""
     api_key = os.getenv("ANTHROPIC_API_KEY")
     if not api_key:
+        return None
+    from services import ai_budget  # 하루 비용 한도를 넘으면 새 호출을 막는다 (FR-ADMIN-02) — 호출 쪽이 규칙으로 대체
+    if ai_budget.ai_blocked():
         return None
     try:
         import anthropic

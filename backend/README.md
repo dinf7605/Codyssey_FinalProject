@@ -62,6 +62,7 @@ pytest -q                     # 테스트
 | `015_ai_request_logs.sql` | E | `ai_request_logs` — 학습 분해의 Claude 요청 한 번에 한 행 (성공·실패, 오류 종류, 토큰). 사용자 식별자·본문 없음. 09-29 적용 · 저장은 `AI_REQUEST_METRICS_ENABLED=1` 일 때만 |
 | `016_wevity_link_only.sql` | D | 위비티 제목·링크 전용 공고의 빈 마감일 허용. 09-29 적용 — SQL Editor 로 적용해 Migrations 목록에는 없다 |
 | `017_contest_title_vectors.sql` | D | 이전 OpenAI 임베딩 설계의 선택적 RPC. Claude 제목 추천에는 필요하지 않음 |
+| `018_alarm_detail_contest_interest.sql` | E·D | 알림 선택 3종(`notify_replan`·`notify_deadline`·`notify_nudge`) · `notification_logs.contest_id` · `contest_interests`(관심 공모전 준비 블록, FR-CONT-07) · `users.ai_notice_version`(FR-JOIN-03). 10-02 적용 |
 
 공용 DB 에 무엇이 적용됐는지는 Supabase 대시보드 → Database → Migrations 에서 본다 (적용한 이름이 이 표의 파일 이름과 같다).
 
@@ -350,7 +351,7 @@ Supabase Auth 의 Google 공급자를 쓴다. 코드는 `routers/auth_google.py`
 | 1 | 로그인·가입 화면의 **구글 계정으로 계속하기** → `GET /auth/google/start?redirect_to=<FRONTEND_ORIGIN>/auth/callback` 이 Supabase 인증 주소를 준다 |
 | 2 | 구글 계정 선택 → Supabase → `/auth/callback#access_token=…` 로 돌아온다. 화면이 토큰을 저장하고 주소창에서 지운다 |
 | 3 | `GET /auth/google/profile` — 우리 `users` 프로필이 있으면 바로 원래 가려던 화면(`?next=`, 기본 `/schedule`)으로 |
-| 4 | 처음 온 계정이면 닉네임 + 필수 동의 2개(개인정보·AI 고지) + 선택(알림 메일)을 받고 `POST /auth/google/complete` 로 프로필을 만든다 |
+| 4 | 처음 온 계정이면 닉네임 + 필수 동의 2개(개인정보·AI 고지) + 선택(학습 알림 수신)을 받고 `POST /auth/google/complete` 로 프로필을 만든다 |
 
 - 로그인에서 **캘린더 권한은 요구하지 않는다** (기본 email·profile). 캘린더 연동은 나중에 따로 권한을 받는다
 - `redirect_to` 는 `FRONTEND_ORIGIN` 의 `/auth/callback` 하나만 받는다. 배포하면 `FRONTEND_ORIGIN` 을 배포 주소로 바꾼다
@@ -399,19 +400,43 @@ Supabase Auth 의 Google 공급자를 쓴다. 코드는 `routers/auth_google.py`
 
 ## 알림 (FR-ALARM-01~04 · FR-MY-03/05)
 
-앱 안 알림이다 (메일·푸시 없음). 머리글·사이드바의 알림 링크(안 읽은 수)와 `/notifications` 화면. 일은 `services/alarms.py`.
+앱 안 알림이다 (메일·푸시 서버 없음). 머리글·사이드바의 알림 링크(안 읽은 수)와 `/notifications` 화면.
+사이트를 열어 둔 브라우저는 권한을 허용하면 브라우저 알림으로도 띄운다 (`frontend/lib/browserAlerts.js`). 일은 `services/alarms.py`.
 
-| 종류 | 언제 | 알림 강도 |
+| 종류 | 언제 | 보내는 조건 |
 |---|---|---|
-| 시작 전 | 블록 시작 N분 전 (마이페이지에서 5~60분, 기본 10분) | 낮음·보통·높음 |
-| 미완료 | 블록이 끝나고 30분이 지나도 완료하지 않음 (3시간 넘게 지난 것은 야간 재조정 몫) | 보통·높음 |
-| 하루 마감 | 21:00, 오늘 못 끝낸 블록이 있으면 하루 한 번 | 높음 |
-| 주간 요약 | 일요일 20:00, 블록 완료 수와 공부 시간 | 낮음·보통·높음 |
+| 시작 전 | 블록 시작 N분 전 (5~60분, 기본 10분) | 강도 약·보통·강 |
+| 미완료 | 블록이 끝나고 30분이 지나도 완료하지 않음. 남은 기한·가장 오래 밀린 날수를 함께 | 강도 강 + 학습 독촉 |
+| 하루 마감 | 21:00, 오늘 못 끝낸 블록이 있으면 하루 한 번 | 강도 강 + 학습 독촉 |
+| 주간 요약 | 일요일 20:00 — 완료율·밀린 날수·다음 중간 목표·이번 주 추천 공모전 1건. 기록이 0건이면 목표 다시 정하기 안내만 | 강도 보통·강 |
+| 재조정 결과 | 야간 재조정이 블록을 옮겼으면 방해금지가 끝난 뒤 | 강도 보통·강 + 재조정 결과 |
+| 공모전 마감 | 관심 등록한 공모전 마감 24시간 전 | 마감 임박 (알림 전체 끄기와 별개) |
 
-- 알림 끄기·방해금지(한국 시각)·강도는 `GET/PUT /settings/notifications` (마이페이지 알림 설정)
-- 블록 알림에서 **지금 시작**(`/study?block=`) · **미루기**(`POST /plan/blocks/{id}/postpone` — 다음 날 이후 빈 시간으로, 뒤 단원도 순서대로)
-- 실행: `python workers/notification_worker.py` (1분·5분·21시·일 20시) 또는 `POST /batch/alarm/{before-block|after-block|daily-nightly|weekly-summary}` + `X-Batch-Key`
+- 설정: `GET/PUT /settings/notifications` — 전체 끄기 · N분 전 · 방해금지(기본 23:00~07:00) · 강도 · 선택 3종(재조정 결과·마감 임박·학습 독촉, 기본은 가입 때 '학습 알림 수신(선택)' 동의를 따른다)
+- 방해금지 동안 시작한 블록은 끝난 뒤 첫 시작 알림에 "남은 블록 N개"로 합친다. 기록이 실패하면 한 번 더 시도한다
+- 독촉은 하루 3번까지, 직전 2번을 읽지 않았으면 그날은 멈춘다
+- 블록 알림에서 **지금 시작**(`/study?block=`) · **미루기**(`POST /plan/blocks/{id}/postpone`, 블록당 2번까지) · **오늘 쉬기**(`POST /notifications/rest-today` — 그날 남은 학습 알림을 멈추고 남은 블록은 야간 재조정이 옮긴다)
+- 실행: `python workers/notification_worker.py` (1분·5분·21시·일 20시·5분·30분) 또는 `POST /batch/alarm/{before-block|after-block|daily-nightly|weekly-summary|replan-result|contest-deadline}` + `X-Batch-Key`
 - 같은 블록·같은 종류는 한 번만 (DB 고유 인덱스도 막는다)
+
+## 관심 공모전 준비 블록 (FR-CONT-07)
+
+공모전 상세에서 **관심 등록하기** → `POST /contest-interests/preview` 로 마감 D-7·D-3 준비 블록(1시간)이 놓일 자리를 먼저 보여 주고,
+확인하면 `POST /contest-interests` 가 진행 중인 목표(준비일이 기한 안에 드는 것)에 학습 단위·고정 블록으로 넣는다.
+그날 빈 시간이 없으면 넣지 않고(409) 그날 일정을 보여 준다. `DELETE /contest-interests/{id}` 는 아직 안 한 준비 블록도 지운다 (`services/contest_interest.py`).
+
+## AI 하루 비용 한도 (FR-ADMIN-02 · FR-GOAL-12)
+
+`services/ai_budget.py` — 오늘(한국 시각) `ai_call_logs` 기록 × 모델별 1회 예상 비용(Sonnet 0.03 · Haiku 0.002 달러)으로 어림한다 (게이트웨이가 청구액을 주지 않아 예상치).
+`AI_DAILY_BUDGET_USD`(기본 5) 의 80% 를 넘으면 비회원 AI 추천을 먼저 막고, 100% 면 `llm.get_client()` 가 None 을 돌려 모든 기능이 규칙·템플릿으로 대신한다. 관리자 화면 `GET /admin/ai-budget`.
+비회원 한도는 세션 키 24시간 3회에 더해 IP 해시 24시간 15회(`IP_HASH_SALT` 를 섞은 SHA-256, 원문 IP 는 두지 않음).
+
+## 가입 · 계정 보안 세부 (FR-JOIN-01 · FR-JOIN-03 · FR-AUTH-03)
+
+- 이메일 아이디·닉네임이 들어간 비밀번호, 자주 쓰이는 비밀번호 상위 1만 개(`data/common_passwords.txt`, zxcvbn 4.5.0 목록 · MIT)는 가입·재설정 때 거부 (`services/password_policy.py`)
+- AI 이용 고지 문구를 바꾸면 `routers/auth.py` 의 `AI_NOTICE_VERSION` 을 올린다 → 다음 로그인 때 `GET /auth/consent` 가 재동의를 요구하고 화면(`ReconsentGate`)이 묻는다
+- 비밀번호를 재설정하면 `sign_out(scope=global)` 로 다른 기기의 로그인도 모두 끝낸다
+- 재설정 링크 유효시간(30분)은 Supabase 대시보드 Authentication → Email → OTP expiry 에서 정한다 (코드 밖 설정)
 
 ---
 

@@ -41,6 +41,8 @@ NIGHTLY_JOB = "plan.nightly_reschedule"
 KEEP_DAYS = 7            # 변경 내역 보관 (FR-PLAN-07)
 EXTEND_STREAK_DAYS = 3   # 이만큼 연속으로 밀리면 기한 조정 제안 (FR-PLAN-06)
 CANCEL_DONE_HOURS = 24   # 완료 취소 가능 시간 (FR-STUDY-02)
+POSTPONE_LIMIT = 2       # 알림에서 미루기는 블록당 2번까지 (FR-ALARM-03)
+POSTPONE_REASON = "알림에서 미뤄"  # plan_changes.reason 머리말 — 미룬 횟수를 이것으로 센다
 
 # 강행해도 되는 경고와 안 되는 위반. 겹침·기한 초과는 일정표가 성립하지 않는다.
 HARD_VIOLATIONS = {"overlap", "deadline_exceeded"}
@@ -628,8 +630,24 @@ def _save_moves(db, user_id: str, plan: dict, moves: list[tuple[Block, Block]], 
 
 # ── 알림에서 미루기 (FR-ALARM-03) ─────────────────────
 
+def postpone_counts(db, user_id: str, block_ids: list[str]) -> dict[str, int]:
+    """블록별로 알림에서 미룬 횟수."""
+    if not block_ids:
+        return {}
+    rows = (
+        db.table("plan_changes").select("block_id,reason")
+        .eq("user_id", user_id).in_("block_id", list(dict.fromkeys(block_ids)))
+        .execute().data
+    )
+    counts: dict[str, int] = {}
+    for r in rows:
+        if str(r.get("reason") or "").startswith(POSTPONE_REASON):
+            counts[str(r["block_id"])] = counts.get(str(r["block_id"]), 0) + 1
+    return counts
+
+
 def postpone_block(db, user_id: str, block_id: str, now: datetime) -> dict:
-    """블록을 '다음 날 이후 첫 빈 시간' 으로 미룬다.
+    """블록을 '다음 날 이후 첫 빈 시간' 으로 미룬다. 블록당 2번까지 (FR-ALARM-03).
 
     학습 단위는 앞뒤 순서가 있어서 이 블록만 옮기면 뒤 단원이 앞 단원보다 먼저 오게 된다.
     그래서 이 블록 뒤에 놓인, 아직 안 한 블록(직접 옮긴 것 제외)도 함께 순서대로 뒤로 민다.
@@ -637,6 +655,8 @@ def postpone_block(db, user_id: str, block_id: str, now: datetime) -> dict:
     plan, blocks, target = _load_for_edit(db, user_id, block_id)
     if target.done:
         raise ReplanError("완료한 블록은 미룰 수 없어요.")
+    if postpone_counts(db, user_id, [target.id]).get(target.id, 0) >= POSTPONE_LIMIT:
+        raise ReplanError(f"이 블록은 이미 {POSTPONE_LIMIT}번 미뤘어요. 일정에서 직접 옮기거나 오늘은 쉬어 가세요.")
     availability = availability_of(plan, blocks)
     if availability is None:
         raise ReplanError("빈 시간표가 없어 미룰 수 없어요.")
@@ -649,7 +669,7 @@ def postpone_block(db, user_id: str, block_id: str, now: datetime) -> dict:
         raise ReplanError("기한 안에 미룰 빈 시간이 없어요. 일정에서 직접 옮기거나 기한을 조정해 주세요.")
 
     _save_moves(db, user_id, plan, moves, now, lambda old, new: (
-        f"알림에서 미뤄 {_when(new.start)}로 옮겼어요." if old.id == target.id
+        f"{POSTPONE_REASON} {_when(new.start)}로 옮겼어요." if old.id == target.id
         else f"앞 단원을 미뤄서, 순서를 지키려고 {_when(new.start)}로 옮겼어요."
     ))
     return {"applied": True, "forceable": True, "violations": [], "block": moved, "moved": len(moves)}

@@ -10,7 +10,7 @@ from schemas.user import (
     ForgotPasswordRequest,
     ResetPasswordRequest,
 )
-from services import login_guard
+from services import login_guard, password_policy
 from utils.auth import get_current_user
 
 # 비밀번호는 Supabase Auth 가 해싱·저장한다. 우리 DB 에는 저장하지 않는다 (기능명세서 K15).
@@ -21,6 +21,10 @@ LOGIN_FAILED = "이메일 또는 비밀번호가 틀렸습니다."
 DUPLICATE_EMAIL = "이미 가입된 이메일입니다. 로그인하거나 비밀번호를 재설정해 주세요."
 PASSWORD_INVALID = "비밀번호가 보안 조건에 맞지 않습니다. 8~64자, 영문·숫자·특수문자를 확인해 주세요."
 RESET_SENT = "가입된 이메일이라면 비밀번호 재설정 메일이 발송됩니다. 메일함과 스팸함을 확인해 주세요."
+
+# FR-JOIN-03 — AI 이용 고지 문구 버전. 문구(frontend components/SignupConsentFields.js 의 ai 항목)를 바꾸면
+# 여기 버전도 올린다. 저장된 버전이 다르면 다음 로그인 때 다시 동의를 받는다 (frontend components/ReconsentGate.js).
+AI_NOTICE_VERSION = "v1"
 
 
 def _provider_code(error):
@@ -66,6 +70,10 @@ def signup(req: SignupRequest):
     # ① 필수 약관 체크
     if not req.agree_privacy or not req.agree_ai_notice:
         raise HTTPException(status_code=400, detail="필수 약관에 동의해야 합니다.")
+    # 이메일·닉네임이 들어간 비밀번호, 흔한 비밀번호는 거부 (FR-JOIN-01 · services/password_policy.py)
+    weak = password_policy.problem(req.password, email=req.email, nickname=req.nickname)
+    if weak:
+        raise HTTPException(status_code=400, detail=weak)
 
     # ② Supabase Auth로 계정 생성 — 요청마다 새 클라이언트 (db.py 설명 참고)
     #    설정이 비었을 때 나는 503 이 가입 실패 문구에 묻히지 않게 try 밖에서 만든다
@@ -100,6 +108,7 @@ def signup(req: SignupRequest):
             "agree_privacy": req.agree_privacy,
             "agree_ai_notice": req.agree_ai_notice,
             "agree_marketing": req.agree_marketing,
+            "ai_notice_version": AI_NOTICE_VERSION,
             "agreed_at": datetime.now(timezone.utc).isoformat(),
         }).execute()
     except Exception as error:
@@ -169,6 +178,33 @@ def get_me(user=Depends(get_current_user)):
     }
 
 
+# ── AI 이용 고지 재동의 (FR-JOIN-03) ──────────────
+@router.get("/consent")
+def consent_status(user=Depends(get_current_user)):
+    """고지 문구가 바뀌어 다시 동의를 받아야 하는가. 프로필이 없으면(구글 첫 가입 중) 묻지 않는다."""
+    rows = (
+        get_supabase_client().table("users").select("agree_ai_notice,ai_notice_version")
+        .eq("user_id", user.id).limit(1).execute().data
+    )
+    if not rows:
+        return {"ai_notice_version": AI_NOTICE_VERSION, "needs_ai_notice": False}
+    row = rows[0]
+    needs = not row.get("agree_ai_notice") or row.get("ai_notice_version") != AI_NOTICE_VERSION
+    return {"ai_notice_version": AI_NOTICE_VERSION, "needs_ai_notice": needs}
+
+
+@router.post("/consent/ai-notice")
+def agree_ai_notice(user=Depends(get_current_user)):
+    res = (
+        get_supabase_client().table("users")
+        .update({"agree_ai_notice": True, "ai_notice_version": AI_NOTICE_VERSION})
+        .eq("user_id", user.id).execute()
+    )
+    if not res.data:
+        raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다")
+    return {"ai_notice_version": AI_NOTICE_VERSION, "needs_ai_notice": False}
+
+
 # ── 비밀번호 재설정 메일 요청 ─────────────────────
 @router.post("/forgot-password")
 def forgot_password(req: ForgotPasswordRequest):
@@ -190,6 +226,9 @@ def forgot_password(req: ForgotPasswordRequest):
 # ── 새 비밀번호 설정 ──────────────────────────────
 @router.post("/reset-password")
 def reset_password(req: ResetPasswordRequest):
+    weak = password_policy.problem(req.new_password)
+    if weak:
+        raise HTTPException(status_code=400, detail=weak)
     auth_client = new_auth_client()
     try:
         # 메일 링크의 토큰 2개로 세션 복원 → 비밀번호 변경
@@ -207,4 +246,9 @@ def reset_password(req: ResetPasswordRequest):
             raise HTTPException(status_code=400, detail="링크가 만료되었거나 유효하지 않습니다. 새 메일을 요청해 주세요.") from None
         raise HTTPException(status_code=503, detail="비밀번호를 변경하지 못했습니다. 잠시 후 다시 시도해 주세요.") from None
 
-    return {"message": "비밀번호가 변경되었습니다. 새 비밀번호로 로그인해 주세요."}
+    # FR-AUTH-03 — 재설정하면 다른 기기의 로그인도 모두 끝낸다 (refresh token 전체 폐기)
+    try:
+        auth_client.auth.sign_out({"scope": "global"})
+    except Exception:
+        logger.warning("비밀번호 재설정 후 전체 로그아웃 실패")
+    return {"message": "비밀번호가 변경되었습니다. 모든 기기에서 로그아웃되었으니 새 비밀번호로 로그인해 주세요."}

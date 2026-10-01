@@ -27,6 +27,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field, field_validator
 
 from db import get_supabase_client
+from routers.auth import AI_NOTICE_VERSION
 from utils.auth import get_current_user
 
 router = APIRouter(prefix="/auth/google", tags=["auth"])
@@ -40,7 +41,7 @@ class GoogleProfileRequest(BaseModel):
     nickname: str = Field(min_length=2, max_length=10)
     agree_privacy: bool      # ① 개인정보 수집·이용 (필수)
     agree_ai_notice: bool    # ② AI 생성 콘텐츠 고지 (필수)
-    agree_marketing: bool = False  # ③ 학습 알림 메일 (선택)
+    agree_marketing: bool = False  # ③ 학습 알림 수신 (선택) — 재조정 결과·마감 임박·학습 독촉 (FR-MY-03)
 
     @field_validator("nickname")
     @classmethod
@@ -124,6 +125,7 @@ def complete(req: GoogleProfileRequest, user=Depends(get_current_user)) -> dict:
             "agree_privacy": req.agree_privacy,
             "agree_ai_notice": req.agree_ai_notice,
             "agree_marketing": req.agree_marketing,
+            "ai_notice_version": AI_NOTICE_VERSION,
             "agreed_at": datetime.now(timezone.utc).isoformat(),
         }).execute()
     except Exception as exc:

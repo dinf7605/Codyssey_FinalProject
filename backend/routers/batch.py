@@ -21,12 +21,14 @@ def batch_ping():
     return {
         "status": "ok",
         "module": "batch",
-        "alarm_jobs": 4,
+        "alarm_jobs": 6,
         "jobs": [
             "before-block",
             "after-block",
             "daily-nightly",
             "weekly-summary",
+            "replan-result",
+            "contest-deadline",
         ],
     }
 
@@ -52,8 +54,8 @@ def alarm_after_block(x_batch_key: str | None = Header(default=None)):
     return _run(alarms.run_after_block, x_batch_key)
 
 
-# 21시 하루 마감 알림 (알림 강도 '높음')
-@router.post("/alarm/daily-nightly", description="21시 하루 마감 알림 — 알림 강도 '높음'만")
+# 21시 하루 마감 알림 (알림 강도 '강' + 학습 독촉)
+@router.post("/alarm/daily-nightly", description="21시 하루 마감 알림 — 알림 강도 '강' + 학습 독촉")
 def alarm_daily_nightly(x_batch_key: str | None = Header(default=None)):
     return _run(alarms.run_daily_nightly, x_batch_key)
 
@@ -62,3 +64,15 @@ def alarm_daily_nightly(x_batch_key: str | None = Header(default=None)):
 @router.post("/alarm/weekly-summary", description="FR-ALARM-04 주간 진도 요약 (일요일 20시)")
 def alarm_weekly_summary(x_batch_key: str | None = Header(default=None)):
     return _run(alarms.run_weekly_summary, x_batch_key)
+
+
+# FR-MY-03 재조정 결과 — 야간 재조정이 블록을 옮겼으면 방해금지가 끝난 뒤 알린다
+@router.post("/alarm/replan-result", description="FR-MY-03 재조정 결과 알림 (5분마다)")
+def alarm_replan_result(x_batch_key: str | None = Header(default=None)):
+    return _run(alarms.run_replan_results, x_batch_key)
+
+
+# FR-MY-05 관심 공모전 마감 24시간 전 — 알림 전체 끄기와 별개 동의
+@router.post("/alarm/contest-deadline", description="FR-MY-05 관심 공모전 마감 24시간 전 알림 (30분마다)")
+def alarm_contest_deadline(x_batch_key: str | None = Header(default=None)):
+    return _run(alarms.run_contest_deadlines, x_batch_key)

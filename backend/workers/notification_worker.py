@@ -11,6 +11,8 @@ main.py를 수정하지 않고 별도 프로세스로 실행한다.
 | 미완료 알림    | 5분마다              |
 | 하루 마감 알림 | 매일 21:00 (한국)    |
 | 주간 요약      | 일요일 20:00 (한국)  |
+| 재조정 결과    | 5분마다              |
+| 공모전 마감    | 30분마다             |
 """
 
 from __future__ import annotations
@@ -53,8 +55,12 @@ def main():
                       id="alarm_daily_nightly", replace_existing=True)
     scheduler.add_job(_safe(alarms.run_weekly_summary), "cron", day_of_week="sun", hour=20, minute=0,
                       id="alarm_weekly_summary", replace_existing=True)
+    scheduler.add_job(_safe(alarms.run_replan_results), "interval", minutes=5,
+                      id="alarm_replan_result", replace_existing=True)
+    scheduler.add_job(_safe(alarms.run_contest_deadlines), "interval", minutes=30,
+                      id="alarm_contest_deadline", replace_existing=True)
 
-    print("[알림 워커] 시작됨 — 시작 전(1분) · 미완료(5분) · 하루 마감(21시) · 주간 요약(일 20시)")
+    print("[알림 워커] 시작됨 — 시작 전(1분) · 미완료(5분) · 하루 마감(21시) · 주간 요약(일 20시) · 재조정 결과(5분) · 공모전 마감(30분)")
 
     try:
         scheduler.start()

@@ -21,7 +21,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from db import get_supabase_client
 from schemas.goal import (
@@ -87,14 +87,22 @@ def get_popular(k: int = 3):
     return {"goals": popular_goals(k=k)}
 
 
+def client_ip(request: Request) -> str | None:
+    """비회원 한도용 IP (FR-GOAL-12). 배포 환경의 프록시 뒤라면 X-Forwarded-For 의 첫 주소. 해시로만 쓴다."""
+    forwarded = request.headers.get("x-forwarded-for", "")
+    if forwarded:
+        return forwarded.split(",")[0].strip() or None
+    return request.client.host if request.client else None
+
+
 @router.post("/suggest", response_model=SuggestResponse)
-def suggest(req: InterestRequest) -> SuggestResponse:
+def suggest(req: InterestRequest, request: Request) -> SuggestResponse:
     """FR-GOAL-11 — 관심분야를 안 적어도 유사 분야를 추천한다.
 
     이력이 전혀 없으면 추천을 만들지 않고 인기 목록으로 대체한다.
     """
     try:
-        usage = consume(req.session_id, req.is_member)
+        usage = consume(req.session_id, req.is_member, client_ip(request))
     except RateLimitExceeded as exc:
         raise HTTPException(status_code=429, detail=exc.message) from exc
 
@@ -108,10 +116,10 @@ def suggest(req: InterestRequest) -> SuggestResponse:
 
 
 @router.post("/match", response_model=MatchResponse)
-def match(req: MatchRequest) -> MatchResponse:
+def match(req: MatchRequest, request: Request) -> MatchResponse:
     """FR-GOAL-03 — 관심 태그로 목표 후보를 검색한다. 유사도가 낮으면 인기 목록으로 대체."""
     try:
-        usage = consume(req.session_id, req.is_member)
+        usage = consume(req.session_id, req.is_member, client_ip(request))
     except RateLimitExceeded as exc:
         raise HTTPException(status_code=429, detail=exc.message) from exc
 
@@ -140,7 +148,7 @@ def _log_search(source: str, latency_ms: int, message: str) -> None:
 
 
 @router.post("/recommend", response_model=RecommendResponse)
-def recommend(req: RecommendRequest, user=Depends(get_optional_user)) -> RecommendResponse:
+def recommend(req: RecommendRequest, request: Request, user=Depends(get_optional_user)) -> RecommendResponse:
     """FR-GOAL-05 — 목표 추천 카드. 태그 매칭 + 기간 계산 + 추천 이유를 한 번에 묶는다.
 
     FR-GOAL-08 — 최근(FEEDBACK_DISMISS_COOLDOWN_DAYS일 이내) "관심없음"으로 남긴
@@ -148,7 +156,7 @@ def recommend(req: RecommendRequest, user=Depends(get_optional_user)) -> Recomme
     자연히 빠져 다시 추천 대상에 포함된다.
     """
     try:
-        usage = consume(req.session_id, req.is_member)
+        usage = consume(req.session_id, req.is_member, client_ip(request))
     except RateLimitExceeded as exc:
         raise HTTPException(status_code=429, detail=exc.message) from exc
 

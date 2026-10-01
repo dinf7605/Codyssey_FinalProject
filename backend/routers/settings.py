@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 from db import get_supabase_client
 from schemas.user import WithdrawRequest
+from services import alarms
 from utils.auth import get_current_user
 
 router = APIRouter(prefix="/settings", tags=["settings"])
@@ -40,11 +41,16 @@ def get_my_profile(user=Depends(get_current_user)):
 # 저장한 값은 services/alarms.py 가 알림을 보낼 때마다 읽는다.
 
 class NotificationSettings(BaseModel):
-    enabled: bool = True
+    enabled: bool = True                                    # 알림 전체 끄기 (FR-MY-05)
     reminder_minutes_before: int = Field(default=10, ge=1, le=120)
-    quiet_start: str | None = None   # "22:00" — 한국 시각. 둘 다 있어야 방해금지가 켜진다
-    quiet_end: str | None = None
-    intensity: Literal["low", "normal", "high"] = "normal"
+    quiet_start: str | None = "23:00"   # 한국 시각. 둘 다 있어야 방해금지가 켜진다. 기본 23:00~07:00 (FR-MY-05)
+    quiet_end: str | None = "07:00"
+    intensity: Literal["low", "normal", "high"] = "normal"  # 약: 시작 알림만 · 보통 · 강: 독촉 포함
+    # FR-MY-03 — 재조정 결과 · 마감 임박(관심 공모전 마감 24시간 전, 전체 끄기와 별개) · 학습 독촉
+    # 저장한 적 없으면 가입 때 '학습 알림 수신(선택)' 동의를 따른다 (기본 꺼짐)
+    notify_replan: bool = False
+    notify_deadline: bool = False
+    notify_nudge: bool = False
 
     @field_validator("quiet_start", "quiet_end", mode="before")
     @classmethod
@@ -66,14 +72,9 @@ class NotificationSettings(BaseModel):
 
 @router.get("/notifications", response_model=NotificationSettings)
 def get_notification_settings(user=Depends(get_current_user)):
-    rows = (
-        get_supabase_client().table("user_notification_settings")
-        .select("enabled,reminder_minutes_before,quiet_start,quiet_end,intensity")
-        .eq("user_id", user.id)
-        .limit(1)
-        .execute()
-    ).data
-    return NotificationSettings(**rows[0]) if rows else NotificationSettings()
+    # 알림을 보낼 때와 같은 규칙으로 읽는다 (저장한 값 · 기본값 · 가입 때 선택 동의)
+    current = alarms.settings_for(get_supabase_client(), [str(user.id)])[str(user.id)]
+    return NotificationSettings(**{k: current.get(k) for k in NotificationSettings.model_fields})
 
 
 @router.put("/notifications", response_model=NotificationSettings)

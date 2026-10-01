@@ -18,7 +18,7 @@ class SignupRequest(BaseModel):
     # 약관 3종
     agree_privacy: bool      # ① 개인정보 수집·이용 (필수)
     agree_ai_notice: bool    # ② AI 생성 콘텐츠 고지 (필수)
-    agree_marketing: bool    # ③ 학습 알림 메일 (선택)
+    agree_marketing: bool    # ③ 학습 알림 수신 (선택) — 재조정 결과·마감 임박·학습 독촉 (FR-MY-03)
 
     @field_validator("nickname")
     @classmethod

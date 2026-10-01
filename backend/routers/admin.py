@@ -131,3 +131,15 @@ def ai_request_metrics(response: Response, day: date | None = Query(default=None
         return request_metrics_payload(get_supabase_client, selected_day, enabled)
     except (ValueError, OverflowError):
         raise HTTPException(status_code=422, detail="조회할 수 없는 날짜입니다")
+
+
+@router.get("/ai-budget")
+def ai_budget_status(response: Response):
+    """FR-ADMIN-02 — 오늘 AI 예상 사용액과 하루 한도. 80% 부터 비회원 추천을 막고, 100% 면 새 AI 호출을 막는다."""
+    from services import ai_budget
+
+    response.headers["Cache-Control"] = "no-store"
+    try:
+        return ai_budget.status(get_supabase_client())
+    except Exception:
+        raise HTTPException(status_code=503, detail="AI 사용량을 읽지 못했습니다")
