@@ -196,6 +196,15 @@ def search_catalog_ai(tags: list[str], k: int = 20, on_call=None) -> tuple[list[
     return [_to_candidate(by_id[goal_id], score) for goal_id, score in ranked[:k] if score > 0], "claude"
 
 
+def by_ids(goal_ids: set[str]) -> dict[str, GoalCandidate]:
+    """goal_id 집합으로 카탈로그 항목을 그대로 조회한다 (검색이 아니라 조회).
+
+    FR-GOAL-08 "관심없음" 목록 화면처럼, 이미 알고 있는 goal_id에 제목·분야만
+    다시 붙이고 싶을 때 쓴다.
+    """
+    return {item["goal_id"]: _to_candidate(item) for item in _CATALOG if item["goal_id"] in goal_ids}
+
+
 def popular_goals(k: int = 3, exclude_ids: list[str] | None = None) -> list[GoalCandidate]:
     """FR-GOAL-11 / FR-GOAL-03 폴백 — 이력이 없을 때 보여줄 인기 목표 목록."""
     exclude = set(exclude_ids or [])

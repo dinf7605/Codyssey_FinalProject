@@ -10,6 +10,7 @@
   POST /goal/feasibility         기간 적합성 판정 (FR-GOAL-04 · FR-GOAL-09) · LLM 미사용
   POST /goal/feedback            추천 피드백 (FR-GOAL-08) · 회원은 Supabase, 비회원은
                                   서버 로컬 파일에 저장
+  GET  /goal/feedback/dismissed  지금 "관심없음"으로 빠져 있는 목표 목록 (FR-GOAL-08)
   DELETE /goal/feedback/{goal_id} 추천 피드백 취소 (FR-GOAL-08)
   POST /goal/manual/check        기한 실현가능성 경고 (FR-GOAL-10)
   POST /goal/confirm             목표 확정 (FR-GOAL-07)
@@ -28,6 +29,7 @@ from schemas.goal import (
     SIMILARITY_THRESHOLD,
     ConfirmRequest,
     ConfirmResponse,
+    DismissedFeedbackResponse,
     FeasibilityRequest,
     FeasibilityResponse,
     FeedbackRequest,
@@ -54,6 +56,7 @@ from services.goal_feasibility import evaluate_all, evaluate_candidates, manual_
 from services.goal_feedback import (
     cancel_nonmember_dismiss,
     record_nonmember_dismiss,
+    recently_dismissed_candidates,
     recently_dismissed_goal_ids,
 )
 from services.goal_limiter import RateLimitExceeded, consume, usage_for
@@ -209,6 +212,19 @@ def feedback(req: FeedbackRequest, user=Depends(get_optional_user)) -> FeedbackR
     elif not req.interested:
         record_nonmember_dismiss(req.session_id, req.goal_id)
     return FeedbackResponse(ok=True, message="피드백을 받았습니다. 다음 추천에 반영할게요.")
+
+
+@router.get("/feedback/dismissed", response_model=DismissedFeedbackResponse)
+def list_dismissed_feedback(
+    session_id: str, user=Depends(get_optional_user)
+) -> DismissedFeedbackResponse:
+    """FR-GOAL-08 — 지금 "관심없음"으로 처리돼 추천에서 빠져 있는 목표 목록.
+
+    추천 화면 하단의 "관심없음 목록 보기" 섹션에서 쓴다. 회원이면 Supabase 30일
+    이내 기록, 비회원이면 로컬 파일 24시간 이내 기록을 카탈로그 제목과 합쳐 돌려준다.
+    """
+    items = recently_dismissed_candidates(session_id, user.id if user else None)
+    return DismissedFeedbackResponse(items=items)
 
 
 @router.delete("/feedback/{goal_id}", response_model=FeedbackResponse)

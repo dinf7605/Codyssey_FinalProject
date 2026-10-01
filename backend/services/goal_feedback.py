@@ -116,6 +116,21 @@ def recently_dismissed_goal_ids(session_id: str, user_id: str | None) -> set[str
     return _nonmember_dismissed_goal_ids(session_id)
 
 
+def recently_dismissed_candidates(session_id: str, user_id: str | None) -> list:
+    """최근 "관심없음"으로 남긴 목표를 제목·분야까지 붙여서 돌려준다.
+
+    "관심없음 목록 보기" 화면(FR-GOAL-08)에서 쓴다 — recently_dismissed_goal_ids가
+    주는 goal_id만으로는 화면에 제목을 못 보여주니, 카탈로그에서 조회해 붙인다.
+    """
+    from services.goal_catalog import by_ids  # 순환 import 방지 — 지역 임포트
+
+    ids = recently_dismissed_goal_ids(session_id, user_id)
+    if not ids:
+        return []
+    catalog = by_ids(ids)
+    return [catalog[goal_id] for goal_id in ids if goal_id in catalog]
+
+
 def _reset_for_tests() -> None:
     """테스트에서만 쓴다 — 전역 상태와 저장 파일을 모두 비운다."""
     global _loaded

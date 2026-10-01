@@ -313,6 +313,10 @@ export const api = {
     cancelFeedback: ({ goalId, sessionId }) =>
       del(`/goal/feedback/${encodeURIComponent(goalId)}?session_id=${encodeURIComponent(sessionId)}`),
 
+    // FR-GOAL-08 — 지금 "관심없음"으로 빠져 있는 목표 목록(추천 화면 하단 섹션).
+    dismissedFeedback: ({ sessionId }) =>
+      request(`/goal/feedback/dismissed?session_id=${encodeURIComponent(sessionId)}`),
+
     manualCheck: ({ title, dueDate, weeklyHours }) =>
       post('/goal/manual/check', {
         title,

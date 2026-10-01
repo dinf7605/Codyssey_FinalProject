@@ -87,10 +87,11 @@ export default function OnboardingPage() {
   const [excludedCandidates, setExcludedCandidates] = useState([]);
   const [feedbackDone, setFeedbackDone] = useState({}); // goal_id -> true (제출 후 카드 숨김)
   const [reasonPromptFor, setReasonPromptFor] = useState(null);
-  // "관심없음" 직후 잠깐 보여주는 취소 배너 — 마이페이지 같은 별도 관리 화면이 아직
-  // 없어서(FR-MY, 다른 담당 영역), 누른 자리에서 바로 되돌릴 수 있게 해 둔다.
-  const [lastDismissed, setLastDismissed] = useState(null); // { goalId, title } | null
-  const dismissTimerRef = useRef(null);
+  // "관심없음" 목록 보기(FR-GOAL-08) — 당장 취소 배너 대신, 추천 화면 하단에 접은/펼친
+  // 섹션으로 모아 둔다. 당시엔 관심없었지만 한참 지나 다시 관심이 생기거나 기간
+  // 부담이 없어진 목표를 돌려놓을 수 있게 하기 위한 용도라 즉시성보다 상시 접근이 맞다.
+  const [dismissedList, setDismissedList] = useState([]); // [{ goal_id, title, field }]
+  const [dismissedOpen, setDismissedOpen] = useState(false);
 
   const [manualGoal, setManualGoal] = useState({ title: '', dueDate: '', weeklyHours: '' });
   const [manualWarning, setManualWarning] = useState(null);
@@ -131,12 +132,23 @@ export default function OnboardingPage() {
     return () => window.removeEventListener('pageshow', handlePageShow);
   }, []);
 
-  // 언마운트 시 취소 배너 타이머 정리.
+  // 추천 화면(recommend)에 들어올 때마다 "관심없음" 목록을 새로 받아온다 — "이전"으로
+  // 돌아왔거나 다른 경로로 재진입했을 때도 최신 상태를 보여주기 위해서다.
   useEffect(() => {
+    if (view !== 'recommend') return;
+    let cancelled = false;
+    api.goal
+      .dismissedFeedback({ sessionId: getAnonSessionId() })
+      .then((res) => {
+        if (!cancelled) setDismissedList(res?.items || []);
+      })
+      .catch(() => {
+        /* 조회 실패해도 화면 흐름은 막지 않는다 — 섹션이 그냥 비어 보인다 */
+      });
     return () => {
-      if (dismissTimerRef.current) clearTimeout(dismissTimerRef.current);
+      cancelled = true;
     };
-  }, []);
+  }, [view]);
 
   function toggleTag(tag) {
     setTags((prev) =>
@@ -319,10 +331,13 @@ export default function OnboardingPage() {
     // 돌아왔을 때 방금 고른 카드까지 사라지면 안 되므로 숨김 처리는 하지 않는다.
     if (!interested) {
       setFeedbackDone((prev) => ({ ...prev, [candidate.goal_id]: true }));
-      // 잠깐 "취소" 배너를 보여준다 — 이전 배너가 떠 있었으면 타이머부터 정리.
-      if (dismissTimerRef.current) clearTimeout(dismissTimerRef.current);
-      setLastDismissed({ goalId: candidate.goal_id, title: candidate.title });
-      dismissTimerRef.current = setTimeout(() => setLastDismissed(null), 8000);
+      // "관심없음 목록 보기" 섹션에 바로 반영한다 — 다시 조회하지 않고 지금 가진
+      // 카드 정보(제목·분야)로 낙관적으로 추가한다.
+      setDismissedList((prev) =>
+        prev.some((item) => item.goal_id === candidate.goal_id)
+          ? prev
+          : [...prev, { goal_id: candidate.goal_id, title: candidate.title, field: candidate.field }]
+      );
     }
     setReasonPromptFor(null);
     try {
@@ -337,10 +352,10 @@ export default function OnboardingPage() {
     }
   }
 
-  // "관심없음" 취소 — 카드를 다시 보여주고, 서버에 저장된 피드백 기록도 지운다.
-  async function undoFeedback(goalId) {
-    if (dismissTimerRef.current) clearTimeout(dismissTimerRef.current);
-    setLastDismissed(null);
+  // "관심없음 목록 보기" 섹션에서 "취소" — 목록에서 바로 빼고(재조회 없이), 카드가 이
+  // 화면에 아직 남아있었다면 다시 보이게 하고, 서버에 저장된 피드백 기록도 지운다.
+  async function cancelDismissed(goalId) {
+    setDismissedList((prev) => prev.filter((item) => item.goal_id !== goalId));
     setFeedbackDone((prev) => {
       const next = { ...prev };
       delete next[goalId];
@@ -679,29 +694,6 @@ export default function OnboardingPage() {
               />
             ) : (
               <>
-                {lastDismissed && (
-                  <div
-                    className="hint"
-                    style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      gap: 8,
-                      background: 'var(--surface-2)',
-                      borderRadius: 8,
-                      padding: '10px 12px',
-                    }}
-                  >
-                    <span style={{ fontSize: 13 }}>'{lastDismissed.title}'을(를) 관심없음으로 처리했어요.</span>
-                    <button
-                      type="button"
-                      className="btn btn-sm btn-quiet btn-quiet-hover"
-                      onClick={() => undoFeedback(lastDismissed.goalId)}
-                    >
-                      취소
-                    </button>
-                  </div>
-                )}
                 {excludedCandidates.length > 0 && (
                   <div
                     className="hint"
@@ -789,6 +781,42 @@ export default function OnboardingPage() {
                 관심분야 다시 고르기
               </button>
             </div>
+            )}
+
+            {/* "관심없음" 목록 보기 (FR-GOAL-08) — 당시엔 관심없었지만 한참 지나
+                다시 관심이 생기거나 기간 부담이 없어진 목표를 돌려놓을 수 있게 한다.
+                0개면 섹션 자체를 숨긴다. */}
+            {dismissedList.length > 0 && (
+              <div style={{ borderTop: '1px solid var(--rule)', paddingTop: 'var(--gap-3)' }}>
+                <button
+                  type="button"
+                  className="btn btn-sm btn-quiet btn-quiet-hover"
+                  style={{ width: 'auto' }}
+                  onClick={() => setDismissedOpen((v) => !v)}
+                >
+                  {dismissedOpen ? '▾' : '▸'} 관심없음 처리한 목표 보기 ({dismissedList.length}개)
+                </button>
+                {dismissedOpen && (
+                  <ul className="list" style={{ marginTop: 8 }}>
+                    {dismissedList.map((item) => (
+                      <li
+                        key={item.goal_id}
+                        className="ct"
+                        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                      >
+                        <span style={{ fontSize: 14 }}>{item.title}</span>
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-quiet btn-quiet-hover"
+                          onClick={() => cancelDismissed(item.goal_id)}
+                        >
+                          취소
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
             )}
           </section>
         )}

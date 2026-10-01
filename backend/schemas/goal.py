@@ -146,6 +146,12 @@ class FeedbackResponse(BaseModel):
     message: str
 
 
+class DismissedFeedbackResponse(BaseModel):
+    """FR-GOAL-08 — 지금 "관심없음"으로 처리돼 추천에서 빠져 있는 목표 목록."""
+
+    items: list[GoalCandidate] = Field(default_factory=list)
+
+
 class ManualGoalRequest(BaseModel):
     """FR-GOAL-06 — 목표 직접 입력."""
 
