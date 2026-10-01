@@ -46,6 +46,7 @@ from schemas.goal import (
 from services import llm
 from services.goal_catalog import (
     all_tags,
+    find_by_title,
     popular_goals,
     search_catalog,
     search_catalog_ai,
@@ -180,8 +181,11 @@ def check_manual_goal(req: ManualGoalRequest) -> ManualGoalWarning:
 
     제목으로 카탈로그를 찾아보고, 걸리는 게 없으면 계산 없이 '계산 불가'를 알린다.
     """
-    matched_list = search_catalog([req.title], k=1)
-    matched = matched_list[0] if matched_list else None
+    # 이름이 조금 달라도('토익 900점' ↔ '토익 900+') 같은 목표를 먼저 찾고, 없으면 태그로 찾는다
+    matched = find_by_title(req.title)
+    if matched is None:
+        matched_list = search_catalog([req.title], k=1)
+        matched = matched_list[0] if matched_list else None
     return manual_goal_warning(req.due_date, req.weekly_hours, matched)
 
 

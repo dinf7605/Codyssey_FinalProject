@@ -482,9 +482,13 @@ export default function PlanBuilder() {
                       계획을 저장했습니다. 위 &apos;내 학습 일정&apos;에서 확인할 수 있어요. 다시 만들면 이전 계획은 보관됩니다.
                     </p>
                   ) : saveState.state === 'login' ? (
-                    <p className="hint">
-                      로그인하면 이 계획을 저장할 수 있어요. <a href="/login?next=/schedule">로그인하기</a>
-                    </p>
+                    <div className="stack" style={{ gap: 'var(--gap-2)' }}>
+                      <p className="hint">가입하거나 로그인하면 이 계획을 저장할 수 있어요. 만든 계획은 그대로 이어집니다.</p>
+                      <div style={{ display: 'flex', gap: 'var(--gap-2)' }}>
+                        <Link className="btn btn-primary btn-sm" href="/signup?next=/schedule">회원가입</Link>
+                        <Link className="btn btn-sm" href="/login?next=/schedule">로그인</Link>
+                      </div>
+                    </div>
                   ) : (
                     <button
                       type="button"

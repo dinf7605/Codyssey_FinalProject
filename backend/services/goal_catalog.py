@@ -12,6 +12,7 @@ AI기능명세의 RAG ① "목표 카탈로그" 자리다. 검색은 두 가지�
 
 from __future__ import annotations
 
+import re
 from statistics import median
 
 from schemas.goal import GoalCandidate
@@ -163,6 +164,29 @@ def _to_candidate(item: dict, similarity: float = 0.0) -> GoalCandidate:
         estimated_hours=estimated,
         popularity=item["popularity"],
     )
+
+
+def _title_key(title: str) -> str:
+    """제목 비교용 — 소문자, 공백·기호를 뺀다. '토익 900+' → '토익900', 'SQLD (SQL 개발자)' → 'sqldsql개발자'."""
+    return re.sub(r"[^0-9a-z가-힣]", "", title.lower())
+
+
+def find_by_title(title: str) -> GoalCandidate | None:
+    """직접 입력한 목표 이름으로 카탈로그 항목을 찾는다 (FR-GOAL-10 기한 확인).
+
+    태그 검색은 이름 전체를 태그 하나로 봐서 '토익 900점'이 '토익 900+'를 못 찾았다 (10-01 실사용).
+    공백·기호를 뺀 이름이 같거나 한쪽이 다른 쪽으로 시작하면 같은 목표로 본다.
+    너무 짧은 이름('정보')이 엉뚱한 항목에 붙지 않게 4글자 이상일 때만 앞부분 일치를 쓴다.
+    """
+    key = _title_key(title)
+    if not key:
+        return None
+    for item in _CATALOG:
+        item_key = _title_key(item["title"])
+        prefix = min(len(key), len(item_key)) >= 4 and (key.startswith(item_key) or item_key.startswith(key))
+        if key == item_key or prefix:
+            return _to_candidate(item, 1.0)
+    return None
 
 
 def search_catalog(tags: list[str], k: int = 20) -> list[GoalCandidate]:

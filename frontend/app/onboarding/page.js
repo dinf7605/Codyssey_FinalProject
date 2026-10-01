@@ -392,6 +392,12 @@ export default function OnboardingPage() {
   }
 
   // ── STEP 3-대체: 목표 직접 입력 (FR-GOAL-06) ────────────────
+  // 주당 시간은 방금 고른 가용시간으로 채워 둔다 — 같은 걸 두 번 묻지 않게
+  function openManual() {
+    setManualGoal((prev) => (prev.weeklyHours ? prev : { ...prev, weeklyHours: weeklyHours ? String(weeklyHours) : '' }));
+    setView('manual');
+  }
+
   async function handleManualNext() {
     if (
       manualGoal.title.trim().length < 2 ||
@@ -432,7 +438,8 @@ export default function OnboardingPage() {
   }
 
   // ── STEP 4: 목표 확정 (FR-GOAL-07) ──────────────────────────
-  async function handleConfirm() {
+  // tryFirst — 비회원이 가입 전에 계획부터 만들어 보기 (일정 화면은 로그인 없이도 계획을 만든다)
+  async function handleConfirm(tryFirst = false) {
     setBusy(true);
     setError('');
     try {
@@ -452,7 +459,8 @@ export default function OnboardingPage() {
       saveExploration({ tags, weeklyHours, slots, picked });
       // 이미 로그인된 회원이면 가입을 또 거칠 필요 없이 바로 일정 생성 화면으로 —
       // 그 화면(PlanBuilder)이 방금 저장한 탐색 결과를 그대로 읽는다.
-      router.push(isMember ? '/schedule' : '/signup');
+      // 비회원은 가입 → 로그인 뒤 일정 화면으로 돌아오게 next 를 붙인다
+      router.push(isMember || tryFirst ? '/schedule' : '/signup?next=/schedule');
     } catch (err) {
       setError(err.message || '요청이 실패했습니다.');
     } finally {
@@ -679,7 +687,7 @@ export default function OnboardingPage() {
                     <button type="button" className="btn btn-sm" onClick={restartInterest}>
                       관심분야 다시 고르기
                     </button>
-                    <button type="button" className="btn btn-sm btn-primary" onClick={() => setView('manual')}>
+                    <button type="button" className="btn btn-sm btn-primary" onClick={openManual}>
                       직접 입력할래요
                     </button>
                   </div>
@@ -703,7 +711,7 @@ export default function OnboardingPage() {
                     <button type="button" className="btn btn-sm" onClick={restartInterest}>
                       관심분야 다시 고르기
                     </button>
-                    <button type="button" className="btn btn-sm btn-primary" onClick={() => setView('manual')}>
+                    <button type="button" className="btn btn-sm btn-primary" onClick={openManual}>
                       직접 입력할래요
                     </button>
                   </div>
@@ -793,7 +801,7 @@ export default function OnboardingPage() {
                 type="button"
                 className="btn btn-quiet btn-quiet-hover"
                 style={{ fontSize: 13, width: 'auto' }}
-                onClick={() => setView('manual')}
+                onClick={openManual}
               >
                 추천 대신 목표를 직접 입력할래요
               </button>
@@ -934,6 +942,12 @@ export default function OnboardingPage() {
                   <span className="mono tiny muted">{picked.source === 'manual' ? '기한' : '시험일'} {picked.deadline}</span>
                 )}
               </div>
+              {picked.deadline && plannedWeeks(picked) > deadlineWeeksLeft(picked) && (
+                <p className="hint" style={{ marginTop: 8 }}>
+                  {picked.source === 'manual' ? '기한' : '시험일'}까지 약 {Math.floor(deadlineWeeksLeft(picked))}주라 권장 기간보다 빠듯해요.
+                  일정 화면에서 범위를 줄이거나 기한을 늘릴 수 있어요.
+                </p>
+              )}
             </div>
             <p className="hint">동시 진행 목표는 최대 2개까지예요.</p>
           </section>
@@ -1017,7 +1031,7 @@ export default function OnboardingPage() {
                   type="button"
                   className="btn btn-primary"
                   disabled={busy}
-                  onClick={handleConfirm}
+                  onClick={() => handleConfirm()}
                 >
                   {busy ? '확정하는 중...' : isMember ? '이 목표로 일정 만들기' : '가입하고 일정 만들기'}
                 </button>
@@ -1026,6 +1040,11 @@ export default function OnboardingPage() {
                     ? '다음 화면에서 시험일·마감일을 확인하고 계획을 만들어요'
                     : '일정 저장에는 가입이 필요합니다 · 방금 고른 값은 그대로 이어집니다'}
                 </p>
+                {!isMember && (
+                  <button type="button" className="btn btn-quiet" disabled={busy} onClick={() => handleConfirm(true)}>
+                    가입 전에 계획 먼저 만들어 보기
+                  </button>
+                )}
               </>
             )}
 

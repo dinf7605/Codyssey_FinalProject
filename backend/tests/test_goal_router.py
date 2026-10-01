@@ -95,6 +95,21 @@ def test_카탈로그에_없는_직접입력은_경고_생략():
     assert res.json()["severity"] == "unknown"
 
 
+def test_직접입력_이름이_조금_달라도_카탈로그_목표를_찾는다():
+    res = client.post(
+        "/goal/manual/check",
+        json={"title": "토익 900점", "due_date": "2026-12-01", "weekly_hours": 15},
+    )
+    assert res.json()["severity"] != "unknown"  # '토익 900+' 로 계산한다
+
+
+def test_짧은_이름은_앞부분만_같아도_엉뚱한_목표로_잇지_않는다():
+    from services.goal_catalog import find_by_title
+
+    assert find_by_title("정보") is None
+    assert find_by_title("SQLD").title == "SQLD (SQL 개발자)"
+
+
 def test_피드백은_DB_없어도_성공():
     # conftest._no_real_db 가 Supabase 환경변수를 지워 두므로, 이 테스트는 DB 미설정
     # 상황에서도 온보딩 흐름이 끊기지 않는지를 확인한다 (FR-GOAL-08).
