@@ -652,3 +652,11 @@ a.btn[href="/contests"], a.btn[href^="/contests/"],
 .db-table th, .db-table td { padding: 6px 10px; border-bottom: 1px solid var(--rule); text-align: left; white-space: nowrap; }
 .db-table th { font-family: var(--f-mono); font-weight: 500; color: var(--ink-3); background: var(--surface-2); }
 .db-table td { max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
+
+/* ── 알림 (FR-ALARM) ───────────────────────────────── */
+.noti-link { position: relative; display: inline-flex; align-items: center; gap: 4px; }
+.noti-count { min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--late); color: #fff; font-size: 11px; line-height: 18px; text-align: center; }
+.sidenav-item .noti-count { margin-left: auto; }
+.noti-item { display: flex; flex-direction: column; gap: 6px; padding: 12px 0; border-bottom: 1px solid var(--rule); }
+.noti-item.noti-unread .noti-msg { font-weight: 600; }
+.noti-actions { display: flex; gap: 8px; flex-wrap: wrap; }

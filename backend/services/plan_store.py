@@ -242,6 +242,7 @@ def _plan_payload(db, plan: dict) -> dict:
         "units": units,
         "blocks": blocks,
         "unplaced": unplaced_units(units, blocks, removed),
+        "availability": plan.get("availability"),  # FR-MY-01 화면이 지금 시간표를 보여 주고 고친다
     }
 
 

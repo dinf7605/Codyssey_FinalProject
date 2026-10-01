@@ -12,7 +12,7 @@ import EmptyState from '@/components/EmptyState';
 import { useAccount } from '@/components/CurrentAccount';
 import { api } from '@/lib/api';
 import { isOpen, nextUnlock } from '@/lib/growth';
-import { goalView, paceOf } from '@/lib/pace';
+import { goalView, milestones, paceOf } from '@/lib/pace';
 import { dayKey, hhmm, kstToday, weekdayMon, WEEKDAY_MON } from '@/lib/planView';
 import { subjectParticle } from '@/lib/ui';
 import { usePlan } from '@/lib/usePlan';
@@ -228,7 +228,7 @@ export default function DashboardPage() {
 
           {/* 레벨 3 — 목표마다 진도 신호등 (목표는 최대 2개) */}
           {isOpen(level, 'pace') && plans.map((p) => (
-            <PaceSignal key={p.plan_id} goal={goalView(p, today)} pace={paceOf(p, today)} />
+            <PaceSignal key={p.plan_id} goal={goalView(p, today)} pace={paceOf(p, today)} milestones={milestones(p)} />
           ))}
         </div>
 

@@ -50,6 +50,23 @@ export function paceOf(plan, today = kstToday(), now = kstIso()) {
   return { state, diffDays, nextCheckpoint };
 }
 
+// FR-PACE-01 중간 목표 — '언제까지 어디까지'.
+// 계획을 주(월~일) 단위로 끊고, 각 주의 마지막 블록을 그 주의 체크포인트로 삼는다.
+// 블록 시각을 그대로 쓰므로 야간 재조정·미루기로 블록이 옮겨지면 체크포인트도 따라 옮겨진다.
+// 반환: [{ due: 'YYYY-MM-DD'(그 주 일요일), title: 그 주 마지막 블록 이름, done: 그때까지 블록을 다 끝냈는가 }]
+export function milestones(plan) {
+  const blocks = [...plan.blocks].sort((a, b) => a.start.localeCompare(b.start));
+  const lastOfWeek = new Map();
+  for (const b of blocks) {
+    const day = dayKey(b.start);
+    lastOfWeek.set(addDays(day, -weekdayMon(day)), b);
+  }
+  return [...lastOfWeek.entries()].map(([monday, last]) => {
+    const due = addDays(monday, 6);
+    return { due, title: last.title, done: blocks.filter((b) => dayKey(b.start) <= due).every((b) => b.done) };
+  });
+}
+
 // 화면 컴포넌트(ProfileSummary · PaceSignal)가 받는 목표 모양으로 바꾼다
 export function goalView(plan, today = kstToday(), weeklyMinutes = 0) {
   const { done, total } = unitProgress(plan);

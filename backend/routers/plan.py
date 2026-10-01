@@ -140,6 +140,7 @@ class CurrentPlanResponse(BaseModel):
     units: list[StudyUnit]
     blocks: list[Block]
     unplaced: list[StudyUnit] = []  # FR-PLAN-04 블록이 없는 단위 (직접 지운 단위는 빠짐)
+    availability: Availability | None = None  # FR-MY-01 저장한 빈 시간표 (예전 계획은 없을 수 있다)
 
 
 @router.get("/ping")

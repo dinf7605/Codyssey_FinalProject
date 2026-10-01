@@ -251,7 +251,17 @@ export const api = {
     },
   },
 
+  // FR-ALARM-01~04 앱 안 알림 (backend/routers/notifications.py)
+  notifications: {
+    list: () => request('/notifications', { cache: 'no-store' }),
+    read: (id) => patch(`/notifications/${encodeURIComponent(id)}/read`, {}),
+    readAll: () => patch('/notifications/read-all', {}),
+  },
+
   settings: {
+    // FR-MY-03/05 알림 켜기·N분 전·방해금지·강도
+    notifications: () => request('/settings/notifications', { cache: 'no-store' }),
+    saveNotifications: (body) => request('/settings/notifications', { method: 'PUT', body: JSON.stringify(body) }),
     profile: () => request('/settings/profile'),
     withdraw: () => request('/settings/withdraw', {
       method: 'DELETE',
@@ -449,6 +459,11 @@ export const api = {
     moveBlock: (blockId, { start, force = false }) =>
       patch(`/plan/blocks/${encodeURIComponent(blockId)}`, { start, force }),
     deleteBlock: (blockId) => del(`/plan/blocks/${encodeURIComponent(blockId)}`),
+    // FR-ALARM-03 알림에서 미루기 — 다음 날 이후 빈 시간으로, 뒤 단원도 순서대로 함께
+    postponeBlock: (blockId) => post(`/plan/blocks/${encodeURIComponent(blockId)}/postpone`, {}),
+    // FR-MY-01 공부 가능 시간 바꾸기 — 앞으로의 블록을 새 시간에 다시 놓는다
+    changeAvailability: (planId, availability) =>
+      request(`/plan/${encodeURIComponent(planId)}/availability`, { method: 'PUT', body: JSON.stringify(availability) }),
   },
 
   // 학습 실행

@@ -1,4 +1,5 @@
 import localFont from 'next/font/local';
+import Link from 'next/link';
 import './globals.css';
 import { densityForLevel } from '@/lib/ui';
 
@@ -47,6 +48,7 @@ export default function RootLayout({ children }) {
       <body>
         {children}
         <footer className="font-credit">
+          <Link href="/privacy">개인정보 처리방침</Link>{' · '}
           서체: <a href="https://www.seoul.go.kr/seoul/font.do" target="_blank" rel="noreferrer">서울특별시 서울남산체</a>
         </footer>
       </body>

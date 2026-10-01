@@ -7,6 +7,8 @@ import AccountMemories from '@/components/AccountMemories';
 import SectionTitle from '@/components/SectionTitle';
 import StudyGrass from '@/components/StudyGrass';
 import AccountSettings from '@/components/AccountSettings';
+import GoalSettings from '@/components/GoalSettings';
+import NotificationSettings from '@/components/NotificationSettings';
 import { isOpen, nextUnlock, LEVELS, UNLOCK_LABEL } from '@/lib/growth';
 import { ddayOf, kstToday } from '@/lib/planView';
 import { dday, subjectParticle } from '@/lib/ui';
@@ -144,6 +146,18 @@ export default function MyPage() {
             <span className="pill">준비 중</span>
           </div>
         </div>
+      </section>
+
+      {plans.length > 0 && (
+        <section className="sec" id="goal-settings">
+          <SectionTitle>목표 관리</SectionTitle>
+          <GoalSettings plans={plans} />
+        </section>
+      )}
+
+      <section className="sec" id="notification-settings">
+        <SectionTitle>알림 설정</SectionTitle>
+        <NotificationSettings />
       </section>
 
       <ContestInterestMemory />
