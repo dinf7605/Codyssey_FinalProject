@@ -140,6 +140,8 @@ export default function DashboardPage() {
   // 계획을 아직 확정하지 않았다 — 기록 요약은 보여주되 오늘 할 일 대신 계획 만들기로 안내
   const hasPlan = plan.status === 'ready' && plan.plans.length > 0;
   const plans = hasPlan ? [...plan.plans].sort((a, b) => a.deadline.localeCompare(b.deadline)) : [];
+  // 계획에 저장한 휴식 요일(0=월 … 6=일). 예전 계획처럼 없으면 기본 일요일
+  const restDay = plans.some((p) => (p.availability?.rest_weekday ?? 6) === weekdayMon(today));
   const primary = plans[0];
 
   const todayBlocks = plan.blocks
@@ -195,11 +197,20 @@ export default function DashboardPage() {
                 action={<Link className="btn btn-primary btn-sm" href="/onboarding">목표 정하기</Link>}
               />
             ) : todayBlocks.length === 0 ? (
-              <EmptyState
-                title="오늘은 쉬는 날이에요"
-                description="주 1일은 휴식일로 비워 둡니다. 다음 블록은 일정에서 확인할 수 있어요."
-                action={<Link className="btn btn-green btn-sm" href="/schedule">일정 보기</Link>}
-              />
+              // FR-MAIN-03 — 정해 둔 휴식일이면 쉬는 날, 아니면(미루거나 옮겨서 비었으면) 그대로 알린다
+              restDay ? (
+                <EmptyState
+                  title="오늘은 쉬는 날이에요"
+                  description="주 1일은 휴식일로 비워 둡니다. 다음 블록은 일정에서 확인할 수 있어요."
+                  action={<Link className="btn btn-green btn-sm" href="/schedule">일정 보기</Link>}
+                />
+              ) : (
+                <EmptyState
+                  title="오늘 놓인 블록이 없어요"
+                  description="미루거나 옮겨서 오늘이 비었어요. 다음 블록은 일정에서 확인하고, 밀린 블록은 일정에서 지금 다시 놓을 수 있어요."
+                  action={<Link className="btn btn-green btn-sm" href="/schedule">일정 보기</Link>}
+                />
+              )
             ) : (
               <DayTimeline blocks={todayBlocks} />
             )}

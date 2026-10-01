@@ -15,14 +15,18 @@ export const PENDING_DAYS = 3; // 계획을 시작한 지 이보다 짧으면 �
 export const CAUTION_DAYS = 3;
 export const WARNING_DAYS = 7;
 
+// 관심 공모전 준비 블록(FR-CONT-07)은 목표의 학습 단위가 아니다 — 진행률·중간 목표에서 뺀다.
+// 단위 id 머리말은 backend services/contest_interest.py 의 _unit_key 와 같다.
+export const isContestPrep = (unitId) => String(unitId || '').startsWith('contest-');
+
 // 단원 = 학습 단위. 그 단위의 블록을 모두 끝냈으면 완료
 export function unitProgress(plan) {
   const byUnit = new Map();
-  for (const b of plan.blocks) {
+  for (const b of plan.blocks.filter((x) => !isContestPrep(x.unit_id))) {
     if (!byUnit.has(b.unit_id)) byUnit.set(b.unit_id, []);
     byUnit.get(b.unit_id).push(b);
   }
-  const total = plan.units?.length || byUnit.size;
+  const total = plan.units?.filter((u) => !isContestPrep(u.id)).length || byUnit.size;
   const done = [...byUnit.values()].filter((list) => list.every((b) => b.done)).length;
   return { done, total };
 }
@@ -59,7 +63,7 @@ export function paceOf(plan, today = kstToday(), now = kstIso()) {
 // 블록 시각을 그대로 쓰므로 야간 재조정·미루기로 블록이 옮겨지면 체크포인트도 따라 옮겨진다.
 // 반환: [{ due: 'YYYY-MM-DD'(그 주 일요일), title: 그 주 마지막 블록 이름, done: 그때까지 블록을 다 끝냈는가 }]
 export function milestones(plan) {
-  const blocks = [...plan.blocks].sort((a, b) => a.start.localeCompare(b.start));
+  const blocks = plan.blocks.filter((b) => !isContestPrep(b.unit_id)).sort((a, b) => a.start.localeCompare(b.start));
   const lastOfWeek = new Map();
   for (const b of blocks) {
     const day = dayKey(b.start);

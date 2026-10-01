@@ -270,3 +270,50 @@ def test_세션을_바꿔도_같은_IP는_넉넉한_한도에서_막힌다(monke
     goal_limiter.consume("session-new", is_member=False, ip="198.51.100.1")  # 다른 IP 는 괜찮다
     assert not any("203.0.113.7" in key for key in goal_limiter._calls)  # IP 원문은 남기지 않는다
     goal_limiter._reset_for_tests()
+
+
+# ── 실사용 피드백 (10-02) ─────────────────────────────
+
+def _candidate(recommended_weeks, weeks_left):
+    from datetime import timedelta
+
+    from schemas.goal import FeasibleCandidate
+    return FeasibleCandidate(
+        goal_id="cert-sqld", title="SQLD", field="데이터", standard_hours=60,
+        deadline=(date.today() + timedelta(weeks=weeks_left)).isoformat(),
+        weekly_hours=19, min_weeks=recommended_weeks / 1.3, recommended_weeks=recommended_weeks, feasible=True,
+    )
+
+
+def test_계산과_반대로_말하는_AI_추천_이유는_버린다():
+    from services.goal_recommender import reason_consistent
+    roomy = _candidate(4, 6)   # 4주 필요 · 6주 남음 — 여유
+    assert not reason_consistent("시험까지 6주로 예상 기간보다 짧으니 빠듯할 수 있습니다.", roomy)  # 10-02 실제 문장
+    assert reason_consistent("데이터에 관심이 있으시다면 약 4주면 준비할 수 있어 여유가 있어요.", roomy)
+    assert not reason_consistent("약 8주면 충분히 준비할 수 있어요.", roomy)  # 카드에 없는 숫자
+    tight = _candidate(9, 6)   # 9주 필요 · 6주 남음 — 빠듯
+    assert not reason_consistent("시간 여유가 충분합니다.", tight)
+    assert reason_consistent("시험까지 6주라 빠듯하게 준비해야 해요.", tight)
+
+
+def test_AI_이유가_틀리면_템플릿으로_바꾼다(monkeypatch):
+    from services import goal_recommender
+    roomy = _candidate(4, 6)
+    monkeypatch.setattr(goal_recommender, "search_catalog_ai", lambda tags, k, on_call=None: ([roomy], "claude"))
+    monkeypatch.setattr(goal_recommender, "evaluate_all", lambda cands, hours: cands)
+    monkeypatch.setattr(goal_recommender, "_make_client", lambda: (object(), "m"))
+    monkeypatch.setattr(goal_recommender, "_ai_reason", lambda *a: "예상 기간보다 짧아 빠듯해요.")
+    roomy.similarity = 0.9
+    [card], *_ = goal_recommender.recommend_goals(["데이터"], 19)
+    assert card.ai_generated is False and "빠듯" not in card.reason
+
+
+def test_공모전_준비_블록은_중간_목표에서_뺀다():
+    from services import alarms
+    from services.plan_store import to_db_time
+    blocks = [
+        {"unit_key": "u1", "title": "1단원", "start_at": to_db_time(datetime(2026, 10, 6, 19)), "done": True},
+        {"unit_key": "contest-1a2b3c4d-d7", "title": "[공모전 준비] X · D-7", "start_at": to_db_time(datetime(2026, 10, 7, 19)), "done": False},
+        {"unit_key": "u2", "title": "2단원", "start_at": to_db_time(datetime(2026, 10, 13, 19)), "done": False},
+    ]
+    assert alarms.next_checkpoint(blocks, date(2026, 10, 7)) == (date(2026, 10, 18), "2단원")

@@ -44,6 +44,7 @@ CONTEST_DEADLINE = "contest_deadline"
 REST_TODAY = "rest_today"
 BLOCK_TYPES = (BEFORE_BLOCK, AFTER_BLOCK)  # 블록 하나에 대한 알림 — 화면에서 시작·미루기를 붙인다
 NUDGE_TYPES = (AFTER_BLOCK, DAILY_NIGHTLY)
+CONTEST_PREP_PREFIX = "contest-"  # 관심 공모전 준비 단위 (services/contest_interest._unit_key)
 
 MAX_REMINDER_MINUTES = 120
 AFTER_BLOCK_DELAY = timedelta(minutes=30)
@@ -432,6 +433,8 @@ def next_checkpoint(blocks: list[dict], today: date) -> tuple[date, str] | None:
     아직 다 끝내지 않은 첫 체크포인트 중 오늘 이후 것 (일요일, 블록 이름)."""
     by_week: dict[date, list[dict]] = defaultdict(list)
     for b in blocks:
+        if str(b.get("unit_key") or "").startswith(CONTEST_PREP_PREFIX):
+            continue  # 관심 공모전 준비 블록은 목표의 중간 목표가 아니다
         day = from_db_time(b["start_at"]).date()
         by_week[day - timedelta(days=day.weekday())].append(b)
     for monday in sorted(by_week):
@@ -465,7 +468,7 @@ def run_weekly_summary(db, now: datetime | None = None) -> dict:
     plans = _active_plans(db)
     if not plans:
         return {"job": "weekly_summary", "checked": 0, "sent": 0}
-    rows = db.table("plan_blocks").select("plan_id,title,start_at,done").in_("plan_id", list(plans)).execute().data
+    rows = db.table("plan_blocks").select("plan_id,unit_key,title,start_at,done").in_("plan_id", list(plans)).execute().data
     blocks_of: dict[str, list[dict]] = defaultdict(list)
     for row in rows:
         blocks_of[str(plans[str(row["plan_id"])]["user_id"])].append(row)

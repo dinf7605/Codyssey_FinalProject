@@ -9,6 +9,7 @@ decomposer.py 와 같은 원칙을 따른다 — ANTHROPIC_API_KEY 가 있으면
 from __future__ import annotations
 
 import math
+import re
 from datetime import date
 
 from schemas.goal import RECOMMEND_MAX, SIMILARITY_THRESHOLD, FeasibleCandidate
@@ -19,6 +20,40 @@ from services.goal_feasibility import _weeks_between, evaluate_all
 REASON_TIMEOUT_SECONDS = 20  # AI기능명세와 동일한 타임아웃
 # 120 토큰이면 2문장이 중간에 잘리는 경우가 있어 250으로 올림 (담당 B, 2026-09-25)
 REASON_MAX_TOKENS = 250
+
+# AI 이유가 계산 결과와 반대로 말하면 버리고 템플릿을 쓴다 (10-02 실사용: 4주 필요·6주 남음인데 "짧아 빠듯")
+_TIGHT_WORDS = ("빠듯", "짧", "부족", "촉박", "어렵", "모자")
+_ROOMY_WORDS = ("여유", "충분", "넉넉")
+_WEEKS = re.compile(r"(\d+)\s*주")
+
+
+def _is_tight(candidate: FeasibleCandidate) -> bool | None:
+    """권장 기간이 시험일까지 남은 기간보다 길면 빠듯하다. 시험일이 없으면 None."""
+    left = _weeks_between(date.today(), candidate.deadline)
+    if left is None:
+        return None
+    return candidate.recommended_weeks > left
+
+
+def reason_consistent(text: str, candidate: FeasibleCandidate) -> bool:
+    """AI 추천 이유가 결정론 계산(카드에 보이는 기간·남은 기간)과 맞는가.
+
+    - 여유가 있는데 빠듯하다고 하거나, 빠듯한데 여유 있다고 하면 안 된다
+    - 'N주' 라고 쓴 숫자는 카드의 예상 기간이나 시험일까지 남은 주 수여야 한다
+    """
+    tight = _is_tight(candidate)
+    if tight is False and any(w in text for w in _TIGHT_WORDS):
+        return False
+    if tight is True and any(w in text for w in _ROOMY_WORDS):
+        return False
+    allowed = set()
+    if candidate.recommended_weeks > 0:
+        allowed.add(math.ceil(candidate.recommended_weeks))
+    left = _weeks_between(date.today(), candidate.deadline)
+    if left is not None:
+        allowed |= {math.floor(left), math.ceil(left)}
+    numbers = {int(n) for n in _WEEKS.findall(text)}
+    return not numbers or numbers <= allowed
 
 
 def _template_reason(candidate: FeasibleCandidate, tags: list[str]) -> str:
@@ -48,7 +83,10 @@ def _ai_reason(candidate: FeasibleCandidate, tags: list[str], client, model: str
         f"사용자가 입력한 관심 단어: {', '.join(tags) or '없음'}\n"
         f"추천 목표: {candidate.title} ({candidate.field})\n"
         + (f"예상 준비 기간: 약 {weeks}주 (주당 {candidate.weekly_hours}시간 기준)\n" if weeks else "")
-        + (f"다음 시험일까지: 약 {math.floor(left)}주 — 예상 기간보다 짧으면 빠듯하다고 쓰세요\n" if left is not None else "")
+        + (f"다음 시험일까지: 약 {math.floor(left)}주\n" if left is not None else "")
+        + ({True: "기간 판정: 빠듯함 (시험일까지 남은 기간이 예상 기간보다 짧다)\n",
+            False: "기간 판정: 여유 있음 (시험일까지 남은 기간이 예상 기간보다 길다) — 빠듯하다고 쓰지 마세요\n"}
+           .get(_is_tight(candidate), ""))
         + "위 정보로 이 목표를 추천하는 이유를 2문장 이내, 80자 이내, 한국어 존댓말로 짧게 써 주세요.\n"
         "지킬 것: 관심 단어는 사용자의 관심일 뿐이니 사용자의 실력·경력·보유 지식을 가정하지 마세요. "
         "시험 과목·공인 여부·난이도처럼 위에 없는 사실은 쓰지 마세요. 기간은 위 숫자만 쓰세요. "
@@ -115,6 +153,8 @@ def recommend_goals(
         reason = None
         if client is not None:
             reason = _ai_reason(candidate, tags, client, model)
+            if reason and not reason_consistent(reason, candidate):
+                reason = None  # 계산과 반대로 말한 문장은 내보내지 않는다
         if reason:
             candidate.reason = reason
             candidate.ai_generated = True
