@@ -25,7 +25,7 @@ export default function DayTimeline({ blocks }) {
               </span>
             </div>
             {block.done ? (
-              <span className="tl-check" aria-label={`${block.subject} 완료`} role="img">
+              <span className="tl-check tl-check-on" aria-label={`${block.subject} 완료`} role="img">
                 <IconCheck width={14} height={14} />
               </span>
             ) : (

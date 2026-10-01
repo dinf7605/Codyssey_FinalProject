@@ -27,6 +27,13 @@ export function paceView(state, diffDays = 0) {
   }
 }
 
+/** 받침에 맞는 조사 — '연속 학습 기록이', '학습 패턴이' / 받침 없으면 '가'. 한글이 아니면 '이(가)' */
+export function subjectParticle(word) {
+  const code = (word || '').trim().slice(-1).charCodeAt(0) - 0xac00;
+  if (Number.isNaN(code) || code < 0 || code > 11171) return '이(가)';
+  return code % 28 ? '이' : '가';
+}
+
 /** 남은 일수 → 'D-12' 형태 (FR-MAIN-04: 기한이 지나면 D+) */
 export function dday(days) {
   if (days === 0) return 'D-DAY';

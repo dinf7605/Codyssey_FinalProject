@@ -1,13 +1,15 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import Link from 'next/link';
 import { api, getToken } from '@/lib/api';
 import { loadExploration } from '@/lib/goalSession';
 import { clearContestPlanning, loadContestPlanning } from '@/lib/contest-planning';
-import { planInput } from '@/lib/planInput';
+import { planInput, slotsHours, weeksBetween } from '@/lib/planInput';
 import { clearDraft, draftKey, loadDraft, saveDraft } from '@/lib/planDraft';
 import { notifyPlanChanged } from '@/lib/usePlan';
 import { AiBadge, AiNotice } from './AiNotice';
+import EmptyState from './EmptyState';
 
 // FR-PLAN-02 학습 분해(AI Agent) → FR-PLAN-03 배치 → 규칙 검증
 //
@@ -27,6 +29,29 @@ const TOOL_LABEL = {
 };
 
 const WEEKDAY = ['일', '월', '화', '수', '목', '금', '토'];
+
+// 기한이 어디서 왔는지 — 사용자가 고른 날짜가 아니면 그렇다고 밝히고 바꿀 수 있게 한다
+const DEADLINE_LABEL = {
+  exam: '다음 시험일',
+  manual: '직접 정한 기한',
+  contest: '공모전 마감일',
+  estimate: '권장 기간으로 잡은 기한',
+  user: '직접 고친 기한',
+};
+
+// 확정한 계획의 관심분야를 계정 메모리(관심 분야)에 더한다 — 공모전 추천 · 마이페이지가 같은 값을 쓴다.
+// 실패해도 계획 저장은 끝났으니 조용히 넘어간다.
+async function rememberInterests(tags) {
+  if (!tags?.length) return;
+  try {
+    const rows = await api.memories.list();
+    const saved = rows.find((r) => r.memory_type === 'interest_tags')?.value?.tags || [];
+    const merged = [...new Set([...saved, ...tags])].slice(0, 10);
+    if (merged.length !== saved.length) await api.memories.saveInterests(merged);
+  } catch {
+    // 메모리 저장은 부가 기능이다
+  }
+}
 const PREVIEW_UNITS = 6;
 
 function statusText(event) {
@@ -55,17 +80,23 @@ function blockWhen(iso) {
 }
 
 export default function PlanBuilder() {
-  // 로그인하러 다녀오기 전에 만든 계획 — 있으면 그 상태로 이어서 보여준다 (lib/planDraft.js)
+  // 확정 전에 만들어 둔 계획 — 있으면 그 상태로 이어서 보여준다 (lib/planDraft.js)
   // 서버 렌더에서는 null 이고, 브라우저 첫 렌더는 input 이 없어 어차피 아무것도 그리지 않는다
   const [draft] = useState(loadDraft);
   const [restoredKey, setRestoredKey] = useState(draft?.key ?? null);
   const [phase, setPhase] = useState(draft ? 'done' : 'idle'); // idle | running | done | error
   const saved = useSyncExternalStore(subscribeStorage, readSaved, readSavedOnServer);
-  const input = useMemo(() => {
+  const baseInput = useMemo(() => {
     if (saved === 'server') return null;
     const state = JSON.parse(saved);
     return planInput(state.exploration, new Date(), state.contest);
   }, [saved]);
+  // 사용자가 고친 기한 — 목표가 바뀌면 버린다. 보관본에 있으면 이어받는다
+  const [deadlineEdit, setDeadlineEdit] = useState(draft?.deadlineEdit ?? null);
+  const input =
+    baseInput && deadlineEdit && deadlineEdit.goal === baseInput.goalTitle
+      ? { ...baseInput, deadline: deadlineEdit.value, deadlineSource: 'user' }
+      : baseInput;
   const [last, setLast] = useState(null);
   const [tools, setTools] = useState([]); // [{name, count}] 처음 부른 순서대로
   const [elapsed, setElapsed] = useState(0);
@@ -89,12 +120,13 @@ export default function PlanBuilder() {
 
   useEffect(() => () => abortRef.current?.abort(), []);
 
-  // 비회원이 만든 계획을 보관한다 — 확정하려고 로그인하러 다녀와도 다시 만들 필요가 없게.
-  // 범위 줄이기·기한 늘리기로 다시 놓으면 그 결과로 덮어쓴다.
+  // 만든 계획을 확정 전까지 보관한다 — 비회원이 로그인하러 다녀오거나, 회원이 다른 화면을 보고 와도
+  // 1분 가까이 걸린 AI 결과를 다시 만들 필요가 없게 (10-01 실사용: 회원은 화면을 옮기면 사라졌다).
+  // 범위 줄이기·기한 바꾸기로 다시 놓으면 그 결과로 덮어쓴다. 확정하면 지운다.
   useEffect(() => {
-    if (view !== 'done' || !key || !result || !plan || getToken()) return;
-    saveDraft(key, { result, plan, violations, scope, used });
-  }, [view, key, result, plan, violations, scope, used]);
+    if (view !== 'done' || !key || !result || !plan || saveState.state === 'saved') return;
+    saveDraft(key, { result, plan, violations, scope, used, deadlineEdit });
+  }, [view, key, result, plan, violations, scope, used, deadlineEdit, saveState.state]);
 
   useEffect(() => {
     if (phase !== 'running') return undefined;
@@ -197,11 +229,46 @@ export default function PlanBuilder() {
 
   if (!input) return null;
 
-  const weeklyHours = input.availability.slots.reduce((sum, s) => {
-    const [sh, sm] = s.start.split(':').map(Number);
-    const [eh, em] = s.end.split(':').map(Number);
-    return sum + (eh * 60 + em - sh * 60 - sm) / 60;
-  }, 0);
+  // 고른 목표가 없다 — 아무 목표로나 계획을 만들지 않고 목표 정하기로 보낸다
+  if (!input.goalTitle) {
+    return (
+      <EmptyState
+        title="먼저 목표를 정해 주세요"
+        description="관심분야와 공부할 수 있는 시간을 알려 주시면 맞는 목표를 찾아 드려요. 공모전 화면에서 고른 공모전으로도 만들 수 있어요."
+        action={
+          <div style={{ display: 'flex', gap: 'var(--gap-2)', justifyContent: 'center', flexWrap: 'wrap' }}>
+            <Link className="btn btn-primary btn-sm" href="/onboarding">목표 정하기</Link>
+            <Link className="btn btn-sm" href="/contests">공모전 둘러보기</Link>
+          </div>
+        }
+      />
+    );
+  }
+
+  const weeklyHours = slotsHours(input.availability.slots);
+  const deadlineValid = input.deadline > input.startDay;
+  // 확정한 뒤에는 고치지 않는다 — 저장된 계획은 일정 화면에서 다룬다
+  const editable = view !== 'running' && saveState.state !== 'saved';
+
+  function changeDeadline(value) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return;
+    setDeadlineEdit({ goal: baseInput.goalTitle, value });
+    // 학습 단위는 기한과 무관하다 — AI를 다시 부르지 않고 새 기한으로 배치만 다시 한다
+    if (view !== 'done' || !result || value <= input.startDay) return;
+    const next = { ...input, deadline: value, deadlineSource: 'user' };
+    setRestoredKey(null);
+    setScope(null);
+    api.plan
+      .scope({ units: result.units, availability: next.availability, startDay: next.startDay, deadline: value })
+      .then(setScope, () => setScope(null));
+    setPlacing(true);
+    place('as-is', result.units, value, next)
+      .catch((err) => {
+        setError(err.message || '다시 배치하지 못했습니다.');
+        setPhase('error');
+      })
+      .finally(() => setPlacing(false));
+  }
   // 에이전트의 save_plan 은 "사용자 확인 필요" 로 멈춘다 — 여기서 사람이 누른다 (AI기능명세 2)
   async function confirmPlan() {
     if (!getToken()) {
@@ -220,6 +287,7 @@ export default function PlanBuilder() {
         availability: input.availability,
       });
       setSaveState({ state: 'saved', message: '' });
+      rememberInterests(input.tags);
       clearDraft(); // 저장했으니 보관본은 필요 없다
       setRestoredKey(null);
       if (input.fromContest) clearContestPlanning();
@@ -243,7 +311,8 @@ export default function PlanBuilder() {
         <div className="row-main">
           <b>{input.goalTitle}</b>
           <span>
-            {input.weeks}주 · 주 {Math.round(weeklyHours)}시간 ·{' '}
+            {DEADLINE_LABEL[input.deadlineSource]} {input.deadline}
+            {deadlineValid && ` (${weeksBetween(input.startDay, input.deadline)}주)`} · 주 {weeklyHours}시간 ·{' '}
             {input.fromOnboarding ? '온보딩에서 고른 시간' : '기본값: 평일 저녁'}
           </span>
         </div>
@@ -254,9 +323,32 @@ export default function PlanBuilder() {
         )}
       </div>
 
+      {editable && (
+        <div className="field">
+          <label htmlFor="plan-deadline">시험일·마감일</label>
+          <input
+            id="plan-deadline"
+            className="input"
+            type="date"
+            min={input.startDay}
+            value={input.deadline}
+            disabled={placing}
+            onChange={(e) => changeDeadline(e.target.value)}
+          />
+          <p className={deadlineValid ? 'hint' : 'hint hint-error'}>
+            {!deadlineValid
+              ? '기한은 첫 공부일보다 뒤여야 해요.'
+              : input.deadlineSource === 'estimate'
+                ? '시험일이나 마감일이 정해져 있다면 그 날짜로 바꿔 주세요. 지금은 권장 기간으로 잡은 날짜예요.'
+                : '날짜가 다르면 바꿔 주세요. 이 날짜까지 끝나도록 배치합니다.'}{' '}
+            <Link href="/onboarding">목표 바꾸기</Link>
+          </p>
+        </div>
+      )}
+
       {view === 'idle' && (
         <>
-          <button type="button" className="btn btn-primary" onClick={run}>
+          <button type="button" className="btn btn-primary" onClick={run} disabled={!deadlineValid}>
             AI로 학습 계획 만들기
           </button>
           <p className="hint">
@@ -296,7 +388,7 @@ export default function PlanBuilder() {
       {view === 'error' && (
         <div className="stack" style={{ gap: 'var(--gap-2)' }}>
           <p className="hint hint-error">{error}</p>
-          <button type="button" className="btn" onClick={run}>
+          <button type="button" className="btn" onClick={run} disabled={!deadlineValid}>
             다시 시도
           </button>
         </div>
@@ -379,7 +471,7 @@ export default function PlanBuilder() {
               ))}
               <p className="hint">
                 배치는 AI가 아니라 규칙으로 합니다 — 선행 순서, 하루 3블록, 연속 2시간, 쉬는 날을
-                지킵니다. 캘린더 저장은 연동 후 열립니다.
+                지킵니다.
               </p>
 
               {/* 규칙 위반이 0건이고 놓인 블록이 있을 때만 확정할 수 있다 — 서버도 한 번 더 검사한다 */}

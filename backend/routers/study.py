@@ -15,7 +15,14 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from db import get_db
-from services.aggregator import MIN_RECORDED_MINUTES, daily_history, daily_totals, hour_pattern, summarize
+from services.aggregator import (
+    MIN_RECORDED_MINUTES,
+    STREAK_MIN_MINUTES,
+    daily_history,
+    daily_totals,
+    hour_pattern,
+    summarize,
+)
 from services import replan
 from services.plan_store import KST, active_plan_rows, plan_blocks, record_session, session_starts, study_notes
 from services.study_memory import refresh_study_memories
@@ -30,6 +37,9 @@ class SessionRequest(BaseModel):
     ended_at: datetime
     expected_minutes: int | None = None
     note: str | None = Field(default=None, max_length=200)  # FR-STUDY-05 메모 200자
+    # 블록도 끝냈는지 — 예상보다 훨씬 짧게 공부하면 화면이 물어보고 False 로 보낸다.
+    # (10-01 실사용: 120분 블록을 5분 하고 완료하자 블록 전체가 완료로 잡혀 주간 달성률이 40%가 됐다)
+    mark_done: bool = True
 
 
 class SessionResponse(BaseModel):
@@ -85,6 +95,7 @@ def record(req: SessionRequest, user=Depends(get_current_user), db=Depends(get_d
         minutes=minutes,
         expected_minutes=req.expected_minutes,
         note=req.note,
+        mark_done=req.mark_done,
     )
     try:
         refresh_study_memories(db, str(user.id))
@@ -112,6 +123,8 @@ def my_stats(user=Depends(get_current_user), db=Depends(get_db)) -> dict:
         # 대시보드·마이페이지의 학습 잔디와 '언제 잘 되나요' (목업 대신 실제 기록)
         "history": daily_history(daily_totals(events), today),
         "hours": hour_pattern(starts),
+        # 연속 일수에 드는 하루 최소 학습 시간 — 화면이 기준을 알려 준다 (5분만 한 날은 0일로 보여 헷갈렸다)
+        "streak_min_minutes": STREAK_MIN_MINUTES,
     }
 
 

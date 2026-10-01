@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useState, useSyncExternalStore } from 'react';
 import { usePathname } from 'next/navigation';
 import { api, getToken } from '@/lib/api';
 import SideNav from '@/components/SideNav';
@@ -46,8 +46,18 @@ export function AccountName() {
   return account?.nickname ? `${account.nickname}님` : '내 계정';
 }
 
+function subscribeToken(onChange) {
+  window.addEventListener('storage', onChange);
+  return () => window.removeEventListener('storage', onChange);
+}
+const readSignedIn = () => Boolean(getToken());
+const readSignedInOnServer = () => false;
+
 export function AccountNavigation({ position }) {
   const account = useContext(AccountContext);
+  const signedIn = useSyncExternalStore(subscribeToken, readSignedIn, readSignedInOnServer);
   const Navigation = position === 'side' ? SideNav : TopBar;
-  return <Navigation nickname={account?.nickname} />;
+  // 로그인했는데 닉네임이 없거나 프로필을 못 읽었어도 '로그인' 버튼을 띄우지 않는다
+  const name = account?.nickname ? `${account.nickname}님` : signedIn ? '내 계정' : null;
+  return <Navigation name={name} />;
 }

@@ -14,6 +14,7 @@ import { api } from '@/lib/api';
 import { isOpen, nextUnlock } from '@/lib/growth';
 import { goalView, paceOf } from '@/lib/pace';
 import { dayKey, hhmm, kstToday, weekdayMon, WEEKDAY_MON } from '@/lib/planView';
+import { subjectParticle } from '@/lib/ui';
 import { usePlan } from '@/lib/usePlan';
 import { useStats } from '@/lib/useStats';
 
@@ -133,7 +134,7 @@ export default function DashboardPage() {
   const s = stats.data;
   const level = s.level;
   const next = nextUnlock(s.total_minutes);
-  const user = { nickname: account?.nickname || '나', totalMinutes: s.total_minutes, streakDays: s.streak_days };
+  const user = { nickname: account?.nickname || null, totalMinutes: s.total_minutes, streakDays: s.streak_days };
 
   // 계획을 아직 확정하지 않았다 — 기록 요약은 보여주되 오늘 할 일 대신 계획 만들기로 안내
   const hasPlan = plan.status === 'ready' && plan.plans.length > 0;
@@ -186,8 +187,8 @@ export default function DashboardPage() {
             {!hasPlan ? (
               <EmptyState
                 title="목표를 정하고 계획을 만들어 보세요"
-                description="AI가 공부 단위로 나누고, 규칙에 맞춰 빈 시간에 놓아 드립니다."
-                action={<Link className="btn btn-primary btn-sm" href="/schedule">계획 만들기</Link>}
+                description="관심분야와 공부할 수 있는 시간을 알려 주시면 목표를 찾고, AI가 공부 단위로 나눠 빈 시간에 놓아 드립니다."
+                action={<Link className="btn btn-primary btn-sm" href="/onboarding">목표 정하기</Link>}
               />
             ) : todayBlocks.length === 0 ? (
               <EmptyState
@@ -313,7 +314,7 @@ export default function DashboardPage() {
               <div className="bar">
                 <div className="bar-fill" style={{ width: next.percent + '%' }} />
               </div>
-              <p className="micro dim">{next.items.join(' · ')}이(가) 열립니다</p>
+              <p className="micro dim">{next.items.join(' · ')}{subjectParticle(next.items.at(-1))} 열립니다</p>
             </div>
           )}
         </div>

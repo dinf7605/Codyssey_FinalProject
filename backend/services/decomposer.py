@@ -29,6 +29,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import time
 from datetime import date
 from typing import Callable
@@ -44,6 +45,8 @@ from services import llm
 from services.ai_request_metrics import track_decomposition, tracked_create
 from services.agent_tools import CONFIRM_REQUIRED, TOOL_SCHEMAS, run_tool
 from services.template import template_units
+
+logger = logging.getLogger(__name__)
 
 MAX_TOOL_ITERATIONS = 5     # AI기능명세 2
 LLM_BUDGET_SECONDS = 60     # NFR-PERF-01 — 에이전트 전체에 주는 시간
@@ -83,22 +86,26 @@ EventHandler = Callable[[dict], None]
 def _extract_json(text: str) -> dict | None:
     """모델 응답에서 JSON 을 꺼낸다.
 
-    설명을 덧붙이지 말라고 해도 가끔 붙는다. 중괄호 구간만 잘라 본다.
+    설명을 덧붙이지 말라고 해도 가끔 붙는다 — 실측(10-01)에서는 매번 JSON 앞에 마크다운 설명을 길게 썼다.
+    '{' 마다 JSON 객체를 읽어 보고, "units" 가 든 객체를 답으로 고른다. 없으면 처음 읽힌 객체.
+    예전엔 첫 '{' ~ 마지막 '}' 를 잘라 읽어서, 설명에 중괄호가 섞이면 멀쩡한 답을 버리고
+    재시도(20초 이상)로 넘어갔다.
     """
-    text = (text or "").strip()
-    if text.startswith("```"):
-        parts = text.split("```")
-        if len(parts) > 1:
-            text = parts[1]
-            if text.startswith("json"):
-                text = text[4:]
-    start, end = text.find("{"), text.rfind("}")
-    if start == -1 or end == -1:
-        return None
-    try:
-        return json.loads(text[start : end + 1])
-    except json.JSONDecodeError:
-        return None
+    text = text or ""
+    first = None
+    start = text.find("{")
+    while start != -1:
+        try:
+            obj, end = json.JSONDecoder().raw_decode(text[start:])
+        except ValueError:
+            start = text.find("{", start + 1)
+            continue
+        if isinstance(obj, dict):
+            if "units" in obj:
+                return obj
+            first = first or obj
+        start = text.find("{", start + end)
+    return first
 
 
 def parse_units(payload: dict) -> list[StudyUnit]:
@@ -173,6 +180,7 @@ def decompose_goal(
     ]
 
     tool_calls = 0
+    exhausted = True  # 반복 상한까지 도구만 불렀다 (False 면 최종 답의 형식이 틀렸다)
 
     for step in range(1, MAX_TOOL_ITERATIONS + 1):
         remaining = deadline - time.monotonic()
@@ -207,8 +215,12 @@ def decompose_goal(
                     )
                     emit({"type": "done", "source": "agent"})
                     return result
-                except Exception:  # noqa: BLE001 - 아래 재시도 1회로 넘어간다
-                    pass
+                except Exception as exc:  # noqa: BLE001 - 아래 재시도 1회로 넘어간다
+                    # 재시도는 20초 넘게 든다 — 무엇이 틀렸는지 남겨야 프롬프트를 고칠 수 있다 (응답 본문은 남기지 않는다)
+                    logger.warning("학습 분해 응답이 형식에 맞지 않아 재시도: %s", str(exc)[:300])
+            else:
+                logger.warning("학습 분해 응답에서 JSON 을 찾지 못해 재시도 (stop_reason=%s)", response.stop_reason)
+            exhausted = False
             break
 
         # 도구 호출 처리
@@ -244,7 +256,7 @@ def decompose_goal(
     remaining = deadline - time.monotonic()
     if remaining >= MIN_CALL_SECONDS:
         emit({"type": "retry"})
-        retry = _retry_once(client, model, messages, tool_calls, remaining)
+        retry = _retry_once(client, model, messages, tool_calls, remaining, exhausted)
         if retry is not None:
             emit({"type": "done", "source": "partial"})
             return retry
@@ -253,7 +265,9 @@ def decompose_goal(
     return fallback(TIMEOUT_MESSAGE, tool_calls)
 
 
-def _retry_once(client, model: str, messages: list[dict], tool_calls: int, timeout: float):
+def _retry_once(
+    client, model: str, messages: list[dict], tool_calls: int, timeout: float, exhausted: bool = True
+):
     """도구 없이 한 번만 더 물어본다 (AI기능명세 6: 동일 프롬프트로 1회 재시도)."""
     try:
         response = tracked_create(client,
@@ -269,7 +283,13 @@ def _retry_once(client, model: str, messages: list[dict], tool_calls: int, timeo
             return DecomposeResult(
                 units=parse_units(payload),
                 source="partial",
-                message="일부만 생성되어 중간 결과로 계획을 만들었습니다.",
+                # 반복 상한에 걸렸으면 정말 중간 결과다(기획서: '일부만 생성됨').
+                # 형식만 틀렸던 거면 두 번째 응답으로 만든 온전한 계획이다 — '일부만'이라 쓰면 빠진 걸 찾게 된다
+                message=(
+                    "일부만 생성되어 중간 결과로 계획을 만들었습니다."
+                    if exhausted
+                    else "AI 응답을 한 번 더 받아 만든 계획입니다. 학습 단위를 한 번 훑어봐 주세요."
+                ),
                 tool_calls=tool_calls,
             )
     except Exception:  # noqa: BLE001

@@ -453,13 +453,15 @@ export const api = {
 
   // 학습 실행
   study: {
-    record: ({ blockId = null, startedAt, endedAt, expectedMinutes = null, note = null }) =>
+    // markDone=false — 시간만 남기고 블록은 완료하지 않는다 (예상보다 훨씬 짧게 하고 멈춘 경우)
+    record: ({ blockId = null, startedAt, endedAt, expectedMinutes = null, note = null, markDone = true }) =>
       post('/study/sessions', {
         block_id: blockId,
         started_at: startedAt,
         ended_at: endedAt,
         expected_minutes: expectedMinutes,
         note,
+        mark_done: markDone,
       }),
 
     // 누적·주간·연속·레벨 + 이번 주 달성률

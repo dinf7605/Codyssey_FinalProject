@@ -1,12 +1,13 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { AiBadge, AiNotice } from '@/components/AiNotice';
 import EmptyState from '@/components/EmptyState';
 import { api, getToken } from '@/lib/api';
 import { getAnonSessionId, saveExploration } from '@/lib/goalSession';
+import { BANDS, plannedWeeks, weeklyHoursOf } from '@/lib/planInput';
 
 // /goal/tags 를 받기 전·받지 못했을 때 보여줄 관심분야 칩. 받으면 카탈로그 태그로 바뀐다
 const FALLBACK_TAGS = ['IT·개발', '데이터분석', '디자인', '마케팅', '기획', '금융', '어학', '공모전', '포트폴리오'];
@@ -56,6 +57,11 @@ function freeTextTokens(text) {
     .filter((t) => t.length >= 2);
 }
 
+// 로그인 여부 — 서버 렌더에서는 비회원으로 그리고 브라우저에서 토큰을 읽는다 (확정 버튼 문구용)
+const subscribeNothing = () => () => {};
+const readMember = () => Boolean(getToken());
+const readMemberOnServer = () => false;
+
 const FEEDBACK_REASONS = [
   { id: 'field_mismatch', label: '분야 안 맞음' },
   { id: 'too_long', label: '기간 부담' },
@@ -64,6 +70,7 @@ const FEEDBACK_REASONS = [
 
 export default function OnboardingPage() {
   const router = useRouter();
+  const isMember = useSyncExternalStore(subscribeNothing, readMember, readMemberOnServer);
   const [view, setView] = useState('interest');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -76,8 +83,8 @@ export default function OnboardingPage() {
   const [popularGoals, setPopularGoals] = useState([]);
 
   const [slots, setSlots] = useState({});
-  const slotCount = Object.values(slots).filter(Boolean).length;
-  const weeklyHours = slotCount * 2;
+  // 칸마다 실제 시각(planInput.BANDS)으로 센다 — 일정 화면이 쓰는 값과 같아야 한다
+  const weeklyHours = weeklyHoursOf(slots);
 
   const [candidates, setCandidates] = useState([]);
   const [queryUsed, setQueryUsed] = useState('tags');
@@ -256,6 +263,7 @@ export default function OnboardingPage() {
             minWeeks: g.min_weeks,
             recommendedWeeks: g.recommended_weeks,
             weeklyHours: g.weekly_hours,
+            deadline: g.deadline || null, // 다음 시험일 — 일정 화면이 기한으로 이어받는다
             source: 'popular_pick',
           });
           setView('confirm');
@@ -377,6 +385,7 @@ export default function OnboardingPage() {
       minWeeks: candidate.min_weeks,
       recommendedWeeks: candidate.recommended_weeks,
       weeklyHours: candidate.weekly_hours,
+      deadline: candidate.deadline || null, // 다음 시험일 — 일정 화면이 기한으로 이어받는다
       source: 'recommend',
     });
     setView('confirm');
@@ -416,6 +425,7 @@ export default function OnboardingPage() {
       minWeeks: manualWarning?.min_weeks ?? null,
       recommendedWeeks: manualWarning?.recommended_weeks ?? null,
       weeklyHours: Number(manualGoal.weeklyHours),
+      deadline: manualGoal.dueDate, // 직접 입력한 기한 — 예전엔 여기서 버려져 일정이 다른 날짜로 잡혔다
       source: 'manual',
     });
     setView('confirm');
@@ -427,7 +437,13 @@ export default function OnboardingPage() {
     setError('');
     try {
       const isMember = Boolean(getToken());
-      const res = await api.goal.confirm({ goalTitle: picked.title, isMember, activeGoalCount: 0 });
+      // 회원이면 진행 중인 목표 수를 실제로 센다 — 같은 목표를 다시 만드는 건 교체라 세지 않는다
+      let activeGoalCount = 0;
+      if (isMember) {
+        const active = await api.plan.active().catch(() => null);
+        activeGoalCount = (active?.plans || []).filter((p) => p.goal_title !== picked.title).length;
+      }
+      const res = await api.goal.confirm({ goalTitle: picked.title, isMember, activeGoalCount });
       if (res.requires_closing_goal) {
         setError(res.message);
         return;
@@ -620,14 +636,13 @@ export default function OnboardingPage() {
               </p>
             )}
 
-            <p className="hint">구글 캘린더를 연동하면 빈 시간을 자동으로 채웁니다</p>
           </section>
         )}
 
         {/* ── FR-GOAL-03 진행 상태 ── */}
         {view === 'matching' && (
           <section className="stack" style={{ gap: 'var(--gap-4)', alignItems: 'center', textAlign: 'center', padding: 'var(--gap-6) 0' }}>
-            <span className="pill pill-ai mono">RAG 검색</span>
+            <span className="pill pill-ai mono">AI 검색</span>
             <p style={{ fontSize: 15, fontWeight: 600 }}>관심분야에 맞는 목표를 찾고 있어요</p>
             <p className="muted tiny">자격증 · 공모전 후보를 분석하는 중...</p>
           </section>
@@ -718,7 +733,15 @@ export default function OnboardingPage() {
                     <li key={g.goal_id} className="ct">
                       <div style={{ display: 'flex', gap: 'var(--gap-2)', marginBottom: 8, flexWrap: 'wrap' }}>
                         {g.ai_generated ? <AiBadge /> : <span className="pill mono">인기 목표</span>}
-                        <span className="pill mono">{g.min_weeks}주 예상</span>
+                        {plannedWeeks({ minWeeks: g.min_weeks, recommendedWeeks: g.recommended_weeks }) && (
+                          <span className="pill mono">
+                            약 {plannedWeeks({ minWeeks: g.min_weeks, recommendedWeeks: g.recommended_weeks })}주
+                          </span>
+                        )}
+                        {g.deadline && <span className="pill mono">시험일 {g.deadline}</span>}
+                        {g.deadline &&
+                          plannedWeeks({ minWeeks: g.min_weeks, recommendedWeeks: g.recommended_weeks }) >
+                            deadlineWeeksLeft(g) && <span className="pill pill-late">시험까지 빠듯해요</span>}
                         <span className="pill mono">주 {g.weekly_hours}시간</span>
                       </div>
                       <b style={{ fontSize: 16 }}>{g.title}</b>
@@ -905,10 +928,11 @@ export default function OnboardingPage() {
             <div className="panel" style={{ padding: 'var(--gap-4)' }}>
               <b style={{ fontSize: 16 }}>{picked.title}</b>
               <div style={{ display: 'flex', gap: 14, marginTop: 8 }}>
-                {picked.minWeeks != null && picked.minWeeks >= 0 && (
-                  <span className="mono tiny muted">예상 {picked.minWeeks}주</span>
-                )}
+                {plannedWeeks(picked) && <span className="mono tiny muted">약 {plannedWeeks(picked)}주</span>}
                 <span className="mono tiny muted">주 {picked.weeklyHours}시간</span>
+                {picked.deadline && (
+                  <span className="mono tiny muted">{picked.source === 'manual' ? '기한' : '시험일'} {picked.deadline}</span>
+                )}
               </div>
             </div>
             <p className="hint">동시 진행 목표는 최대 2개까지예요.</p>
@@ -995,10 +1019,12 @@ export default function OnboardingPage() {
                   disabled={busy}
                   onClick={handleConfirm}
                 >
-                  {busy ? '확정하는 중...' : '가입하고 일정 만들기'}
+                  {busy ? '확정하는 중...' : isMember ? '이 목표로 일정 만들기' : '가입하고 일정 만들기'}
                 </button>
                 <p className="hint" style={{ textAlign: 'center' }}>
-                  일정 저장에는 가입이 필요합니다 · 방금 고른 값은 그대로 이어집니다
+                  {isMember
+                    ? '다음 화면에서 시험일·마감일을 확인하고 계획을 만들어요'
+                    : '일정 저장에는 가입이 필요합니다 · 방금 고른 값은 그대로 이어집니다'}
                 </p>
               </>
             )}
@@ -1055,7 +1081,10 @@ function backTargetFor(view, picked, pickOrigin, allDismissed = false) {
 function SlotRow({ label, days, slots, onToggle }) {
   return (
     <>
-      <span className="slot-time">{label}</span>
+      <span className="slot-time">
+        {label}
+        <span className="micro">{BANDS[label].start.slice(0, 2)}~{BANDS[label].end.slice(0, 2)}시</span>
+      </span>
       {days.map((d) => {
         const key = label + '-' + d;
         return (

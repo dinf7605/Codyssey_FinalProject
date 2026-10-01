@@ -245,7 +245,7 @@ pytest -q                     # 테스트
 | GET | `/plan/current` | 가장 최근 계획 하나, 없으면 `null` (예전 화면 호환, 로그인) |
 | POST | `/plan/{id}/archive` | 목표 끝내기 — 보관, 학습 기록은 남음 (로그인) |
 | POST | `/plan/{id}/place-unplaced` | 미배치 단위(블록 없는 단위)를 오늘 이후 빈 시간에 넣어 보기. 놓인 블록은 안 움직임, 직접 지운 단위는 제외 (`FR-PLAN-04`, 로그인) |
-| POST | `/study/sessions` | 학습 세션 저장 + 본인 블록 완료 (`FR-STUDY-01/02`, 로그인) |
+| POST | `/study/sessions` | 학습 세션 저장 + 본인 블록 완료 (`FR-STUDY-01/02`, 로그인). `mark_done: false` 면 시간만 남기고 블록은 그대로 (예상의 절반 미만이면 화면이 묻는다) |
 | GET | `/study/stats` | 내 누적·주간·연속·레벨 + 이번 주 달성률 — 저장된 기록 기준 (`FR-STUDY-03/04`, 로그인) |
 | POST | `/study/stats` | 받은 기록으로 계산만 (DB 없이 시험용) |
 | DELETE | `/study/blocks/{id}/done` | 완료 취소 — 24시간 안에만. 공부한 시간 기록은 남긴다 (`FR-STUDY-02`, 로그인) |

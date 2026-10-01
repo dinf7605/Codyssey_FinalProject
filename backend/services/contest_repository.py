@@ -33,6 +33,26 @@ class ContestSearch:
     limit: int = 20
 
 
+def dedupe_contests(items: list[Contest]) -> list[Contest]:
+    """같은 공고가 위비티 여러 분야에 따로 올라와 두 번 보이는 것을 하나로 합친다.
+
+    위비티는 분야마다 다른 글 번호(ix)로 같은 공고를 올린다 (10-01: '스파크업'이 기획 분야·창업 분야로 2건).
+    제목·주최·마감일이 모두 같으면 같은 공고로 보고, 먼저 온 것에 분야를 합친다. 순서는 유지한다.
+    """
+    merged: dict[tuple, Contest] = {}
+    order: list[tuple] = []
+    for contest in items:
+        key = (contest.title.strip(), (contest.host or "").strip(), contest.deadline)
+        if key not in merged:
+            merged[key] = contest
+            order.append(key)
+            continue
+        first = merged[key]
+        fields = list(dict.fromkeys([*(first.fields or []), *(contest.fields or [])]))
+        merged[key] = first.model_copy(update={"fields": fields})
+    return [merged[key] for key in order]
+
+
 @dataclass(frozen=True)
 class PreparationHours:
     hours: float
@@ -52,6 +72,11 @@ class SupabaseContestRepository:
         self.client = client
 
     def search(self, filters: ContestSearch) -> tuple[list[Contest], int]:
+        items, total = self._search(filters)
+        unique = dedupe_contests(items)
+        return unique, total - (len(items) - len(unique))
+
+    def _search(self, filters: ContestSearch) -> tuple[list[Contest], int]:
         def fetch(scope: str) -> tuple[list[Contest], int]:
             request = self.client.table("contests").select(CONTEST_COLUMNS, count="exact")
             if scope == "dated":

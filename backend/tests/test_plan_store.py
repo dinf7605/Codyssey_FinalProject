@@ -201,6 +201,22 @@ def test_남의_블록은_완료_처리하지_않는다(client, db):
     assert next(r for r in db.rows("plan_blocks") if r["id"] == block_id)["done"] is False
 
 
+def test_블록을_끝내지_않았다고_하면_시간만_남기고_블록은_그대로다(client, db):
+    block_id = _first_block_id(client)
+
+    res = client.post("/study/sessions", json={
+        "block_id": block_id,
+        "started_at": "2026-10-05T19:00:00",
+        "ended_at": "2026-10-05T19:05:00",
+        "expected_minutes": 120,
+        "mark_done": False,
+    }).json()
+
+    assert res["recorded"] and not res["block_done"]
+    assert db.rows("study_sessions")[0]["block_id"] == block_id  # 시간은 그 블록에 묶인다
+    assert next(r for r in db.rows("plan_blocks") if r["id"] == block_id)["done"] is False
+
+
 def test_5분_미만은_저장하지_않는다(client, db):
     res = client.post("/study/sessions", json={
         "started_at": "2026-10-05T19:00:00",
@@ -223,6 +239,7 @@ def test_누적_통계는_저장된_기록으로_계산한다(client):
     # 대시보드 학습 잔디 · 시간대 패턴도 같은 기록에서 나온다
     assert len(stats["history"]) == 140
     assert {h["label"]: h["value"] for h in stats["hours"]}["18시"] == 2
+    assert stats["streak_min_minutes"] == 20  # 화면이 연속 기준을 안내한다
 
 
 # ── AI 호출 기록 ───────────────────────────────────────

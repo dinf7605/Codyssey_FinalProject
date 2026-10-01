@@ -18,6 +18,9 @@ const DRAFT_KEY = 'sp_study_timer';
 const QUEUE_KEY = 'sp_study_pending';
 const MIN_SECONDS = 5 * 60;
 const IDLE_MS = 30 * 60 * 1000;
+// 예상의 이 비율보다 적게 하고 완료를 누르면 블록도 끝냈는지 묻는다.
+// 묻지 않으면 120분 블록을 5분 하고 눌러도 블록 전체가 완료로 잡혀 주간 달성률이 부풀었다 (10-01 실사용)
+const SHORT_RATIO = 0.5;
 
 function readJson(key, fallback) {
   try {
@@ -85,6 +88,14 @@ function format(sec) {
   const m = String(Math.floor((s % 3600) / 60)).padStart(2, '0');
   const r = String(s % 60).padStart(2, '0');
   return h ? `${h}:${m}:${r}` : `${m}:${r}`;
+}
+
+// 예상 대비 실제 — "-96%" 대신 몇 분 차이인지 말로 쓴다
+function deviationText(minutes, expected) {
+  if (!expected) return '';
+  const diff = minutes - expected;
+  if (Math.abs(diff) <= expected * 0.1) return ` · 예상(${expected}분)과 비슷해요`;
+  return ` · 예상(${expected}분)보다 ${Math.abs(diff)}분 ${diff > 0 ? '더 걸렸어요' : '짧았어요'}`;
 }
 
 function hoursText(minutes) {
@@ -221,16 +232,21 @@ export default function StudyTimer({ blockId = null }) {
       setResult({ state: 'login' });
       return;
     }
-    setResult({ state: 'saving' });
+    // 아직 끝내지 않은 블록을 예상보다 한참 적게 했다 — 블록까지 끝냈는지 묻는다
+    if (block && !block.done && block.minutes && active < block.minutes * 60 * SHORT_RATIO) {
+      setResult({ state: 'ask', record, minutes: Math.floor(active / 60) });
+      return;
+    }
     submit(record);
   }
 
   async function submit(record) {
+    setResult({ state: 'saving' });
     try {
       const res = await api.study.record(record);
       setTimer(null);
       setNote('');
-      setResult({ state: 'saved', res, blockId: record.blockId });
+      setResult({ state: 'saved', res, blockId: record.blockId, expected: record.expectedMinutes });
       notifyPlanChanged();
       loadStats();
     } catch (err) {
@@ -341,8 +357,7 @@ export default function StudyTimer({ blockId = null }) {
       {result?.state === 'saved' && (
         <p className="hint" style={{ color: 'var(--ok)' }} role="status">
           {result.res.minutes}분을 기록했어요
-          {result.res.deviation_percent != null &&
-            ` · 예상보다 ${result.res.deviation_percent >= 0 ? '+' : ''}${result.res.deviation_percent}%`}
+          {deviationText(result.res.minutes, result.expected)}
           {result.res.block_done ? ' · 블록을 완료로 표시했어요.' : '.'} <Link href="/schedule">일정 보기</Link>
           {result.res.block_done && result.blockId && (
             <>
@@ -353,6 +368,20 @@ export default function StudyTimer({ blockId = null }) {
             </>
           )}
         </p>
+      )}
+      {result?.state === 'ask' && block && (
+        <section className="progress" role="alertdialog" aria-label="블록 완료 확인">
+          <b>예상 {block.minutes}분 중 {result.minutes}분 했어요. 이 블록을 끝냈나요?</b>
+          <p className="muted tiny">끝내지 않았다면 공부한 시간만 기록하고 블록은 일정에 남겨 둬요.</p>
+          <div style={{ display: 'flex', gap: 'var(--gap-2)' }}>
+            <button type="button" className="btn btn-sm" onClick={() => submit({ ...result.record, markDone: true })}>
+              네, 끝냈어요
+            </button>
+            <button type="button" className="btn btn-sm" onClick={() => submit({ ...result.record, markDone: false })}>
+              시간만 기록
+            </button>
+          </div>
+        </section>
       )}
       {result?.state === 'cancelled' && (
         <p className="hint" role="status">완료를 취소했어요. 공부한 시간 기록은 그대로 남아요.</p>
@@ -400,12 +429,14 @@ export default function StudyTimer({ blockId = null }) {
             </div>
             <span className="pill">{stats.streak_days}일 연속</span>
           </div>
+          <StreakHint stats={stats} />
           {stats.week_rate != null && (
             <div className="row">
               <div className="row-main">
-                <b>이번 주 달성률 {stats.week_rate}%</b>
+                {/* 실제 공부 시간(위 '이번 주')이 아니라 끝낸 블록의 분량이다 — 둘을 같은 말로 쓰면 숫자가 어긋나 보인다 */}
+                <b>이번 주 블록 완료율 {stats.week_rate}%</b>
                 <span>
-                  계획 {hoursText(stats.week_planned_minutes)} 중 완료 {hoursText(stats.week_done_minutes)}
+                  이번 주 블록 {hoursText(stats.week_planned_minutes)} 중 {hoursText(stats.week_done_minutes)} 분량을 끝냈어요
                 </span>
               </div>
               <div className="bar" style={{ width: 80 }} aria-hidden="true">
@@ -416,5 +447,17 @@ export default function StudyTimer({ blockId = null }) {
         </section>
       )}
     </>
+  );
+}
+
+// 연속 일수는 하루 기준 시간(서버 STREAK_MIN_MINUTES)을 채워야 오른다 — 오늘 조금 했는데 0일이면 이유를 알려 준다
+function StreakHint({ stats }) {
+  const min = stats.streak_min_minutes;
+  const todayMinutes = stats.history?.at(-1)?.minutes ?? 0;
+  if (!min || todayMinutes === 0 || todayMinutes >= min) return null;
+  return (
+    <p className="hint" style={{ padding: '0 var(--gap-1)' }}>
+      오늘 {todayMinutes}분 공부했어요. 하루 {min}분을 채우면 연속 기록에 들어가요.
+    </p>
   );
 }

@@ -278,9 +278,12 @@ def record_session(
     minutes: int,
     expected_minutes: int | None,
     note: str | None,
+    mark_done: bool = True,
     now: datetime | None = None,
 ) -> bool:
     """학습 세션을 저장한다. 본인 블록이면 완료 처리하고 True 를 돌려준다.
+
+    mark_done=False 면 시간만 블록에 묶어 남기고 블록은 그대로 둔다 (조금만 하고 멈춘 경우).
 
     완료 시각(done_at)을 같이 남긴다 — 완료 취소는 24시간 안에만 된다 (FR-STUDY-02).
     """
@@ -296,13 +299,13 @@ def record_session(
         "note": note,
     }).execute()
 
-    if mine:
+    if mine and mark_done:
         # 이미 완료한 블록이면 완료 시각을 덮어쓰지 않는다 — 덮으면 24시간 취소 기한이 계속 늘어난다
         done_at = now or datetime.now(KST).replace(tzinfo=None)
         db.table("plan_blocks").update({"done": True, "done_at": to_db_time(done_at)}).eq(
             "id", block_id
         ).eq("done", False).execute()
-    return mine
+    return mine and mark_done
 
 
 NOTES_LIMIT = 200  # 메모 모아보기에 한 번에 보여 줄 최대 개수

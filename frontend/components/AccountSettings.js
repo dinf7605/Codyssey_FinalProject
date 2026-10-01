@@ -12,7 +12,11 @@ export default function AccountSettings() {
 
   useEffect(() => {
     if (!getToken()) return;
-    api.settings.profile().then(setProfile).catch(() => setError('프로필을 불러오지 못했습니다.'));
+    api.settings.profile().then(setProfile).catch((err) => {
+      // 프로필 행이 없는 계정(가입 중 프로필 저장이 실패했거나 관리자가 만든 계정)도 쓸 수는 있다 — 오류로 보이지 않는다
+      if (err.status === 404) setProfile({ nickname: null, email: null });
+      else setError('프로필을 불러오지 못했습니다.');
+    });
   }, []);
 
   function logout() {
@@ -40,7 +44,7 @@ export default function AccountSettings() {
   return (
     <section className="sec">
       <div className="rows">
-        {profile && <div className="row"><div className="row-main"><b>내 계정</b><span>{profile.nickname} · {profile.email}</span></div></div>}
+        {profile && <div className="row"><div className="row-main"><b>내 계정</b><span>{[profile.nickname || '닉네임 미등록', profile.email].filter(Boolean).join(' · ')}</span></div></div>}
         <div className="row">
           <div className="row-main"><b>로그아웃</b><span>이 브라우저의 로그인 정보를 지웁니다</span></div>
           <button type="button" className="btn btn-sm" onClick={logout} disabled={pending}>로그아웃</button>

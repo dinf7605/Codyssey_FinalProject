@@ -7,9 +7,9 @@ import AccountMemories from '@/components/AccountMemories';
 import SectionTitle from '@/components/SectionTitle';
 import StudyGrass from '@/components/StudyGrass';
 import AccountSettings from '@/components/AccountSettings';
-import { nextUnlock, LEVELS, UNLOCK_LABEL } from '@/lib/growth';
+import { isOpen, nextUnlock, LEVELS, UNLOCK_LABEL } from '@/lib/growth';
 import { ddayOf, kstToday } from '@/lib/planView';
-import { dday } from '@/lib/ui';
+import { dday, subjectParticle } from '@/lib/ui';
 import { usePlan } from '@/lib/usePlan';
 import { useStats } from '@/lib/useStats';
 
@@ -53,7 +53,12 @@ export default function MyPage() {
           <div className="stats">
             <div className="stat">
               <span className="stat-label">누적</span>
-              <span className="stat-value">{Math.round(s.total_minutes / 60)}<small>시간</small></span>
+              {/* 1시간이 안 되면 분으로 — 5분 공부하고 '0시간'이면 기록이 안 된 것처럼 보인다 */}
+              {s.total_minutes < 60 ? (
+                <span className="stat-value">{s.total_minutes}<small>분</small></span>
+              ) : (
+                <span className="stat-value">{Math.round(s.total_minutes / 60)}<small>시간</small></span>
+              )}
             </div>
             <div className="stat">
               <span className="stat-label">연속</span>
@@ -64,6 +69,9 @@ export default function MyPage() {
               <span className="stat-value">{s.level}<small>/5</small></span>
             </div>
           </div>
+          {s.streak_min_minutes > 0 && (
+            <p className="micro dim">연속은 하루 {s.streak_min_minutes}분 이상 공부한 날을 이어서 셉니다.</p>
+          )}
 
           {next && (
             <div className="next-level">
@@ -74,13 +82,14 @@ export default function MyPage() {
               <div className="bar">
                 <div className="bar-fill" style={{ width: next.percent + '%' }} />
               </div>
-              <p className="micro dim">{next.items.join(' · ')}이(가) 열립니다</p>
+              <p className="micro dim">{next.items.join(' · ')}{subjectParticle(next.items.at(-1))} 열립니다</p>
             </div>
           )}
         </section>
       )}
 
-      {s?.history?.length > 0 && (
+      {/* 잔디는 레벨 4에서 열린다 — 아래 '레벨별로 열리는 것' 표와 대시보드가 같은 규칙을 쓴다 */}
+      {s?.history?.length > 0 && isOpen(s.level, 'grass') && (
         <section className="sec">
           <SectionTitle>학습 기록</SectionTitle>
           <StudyGrass history={s.history} weeks={20} />

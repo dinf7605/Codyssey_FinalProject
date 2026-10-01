@@ -162,6 +162,34 @@ def test_스키마가_틀리면_1회_재시도하고_partial이_된다():
     assert "tools" not in client.calls[1]  # 재시도에서는 도구를 주지 않는다
 
 
+def test_JSON_뒤에_중괄호가_든_설명이_붙어도_첫_객체를_읽는다():
+    reply = "계획입니다.\n```json\n" + FINAL_JSON + "\n```\n참고: {선행} 표시는 순서를 뜻합니다."
+    client = FakeClient([respond("end_turn", text(reply))])
+
+    result = decompose_goal("목표", "g", client=client, model="m")
+
+    assert result.source == "agent"  # 예전엔 마지막 '}' 까지 잘라 읽어 재시도로 넘어갔다
+    assert len(client.calls) == 1
+
+
+def test_설명에_다른_JSON_조각이_있어도_units_객체를_답으로_고른다():
+    reply = '묶음 규칙: {"minutes": 30} 이하 항목은 합칩니다.\n\n' + FINAL_JSON
+    client = FakeClient([respond("end_turn", text(reply))])
+
+    result = decompose_goal("목표", "g", client=client, model="m")
+
+    assert result.source == "agent" and len(result.units) == 2
+
+
+def test_형식만_틀려_재시도했으면_일부만이라고_하지_않는다():
+    bad = json.dumps({"units": [{"id": "u01", "title": "너무 김", "estimated_minutes": 500}]})
+    client = FakeClient([respond("end_turn", text(bad)), respond("end_turn", text(FINAL_JSON))])
+
+    result = decompose_goal("목표", "g", client=client, model="m")
+
+    assert result.source == "partial" and "일부만" not in result.message
+
+
 def test_반복_상한을_넘기면_더_부르지_않는다():
     loop = [respond("tool_use", tool_use("search_curriculum",
                                          {"goal_id": "g", "query": "a", "k": 1}))

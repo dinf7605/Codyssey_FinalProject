@@ -8,10 +8,13 @@ decomposer.py 와 같은 원칙을 따른다 — ANTHROPIC_API_KEY 가 있으면
 
 from __future__ import annotations
 
+import math
+from datetime import date
+
 from schemas.goal import RECOMMEND_MAX, SIMILARITY_THRESHOLD, FeasibleCandidate
 from services import llm
 from services.goal_catalog import popular_goals, search_catalog_ai
-from services.goal_feasibility import evaluate_all
+from services.goal_feasibility import _weeks_between, evaluate_all
 
 REASON_TIMEOUT_SECONDS = 20  # AI기능명세와 동일한 타임아웃
 # 120 토큰이면 2문장이 중간에 잘리는 경우가 있어 250으로 올림 (담당 B, 2026-09-25)
@@ -24,7 +27,10 @@ def _template_reason(candidate: FeasibleCandidate, tags: list[str]) -> str:
         tag_part = f"관심 태그 '{overlap[0]}'와 가장 유사해요."
     else:
         tag_part = "지금 인기 있는 목표예요."
-    if candidate.min_weeks >= 0 and candidate.min_weeks <= candidate.recommended_weeks:
+    left = _weeks_between(date.today(), candidate.deadline)
+    if left is not None and candidate.recommended_weeks > left:
+        time_part = "시험일까지 권장 기간보다 짧아 빠듯하게 준비해야 해요."
+    elif candidate.min_weeks >= 0 and candidate.min_weeks <= candidate.recommended_weeks:
         time_part = "지금 가용시간이면 기한 안에 준비할 수 있어요."
     else:
         time_part = "가용시간을 조금 늘리면 여유 있게 준비할 수 있어요."
@@ -32,12 +38,20 @@ def _template_reason(candidate: FeasibleCandidate, tags: list[str]) -> str:
 
 
 def _ai_reason(candidate: FeasibleCandidate, tags: list[str], client, model: str) -> str | None:
+    # 카드에 보이는 기간과 같은 값(권장 주 수 올림)만 준다 — 예전엔 "6~8주"처럼 카드와 다른 숫자를 썼다.
+    # 관심 단어는 사용자가 적은 문장을 쪼갠 것이라 실력·경력을 뜻하지 않는다 (10-01 실사용:
+    # "SQL이 필요할 것 같다"는 입력에 "SQL 기초를 갖추신 분께"라고 씀). 목표 정보에 없는 사실도 지어냈다.
+    weeks = math.ceil(candidate.recommended_weeks) if candidate.recommended_weeks > 0 else None
+    # 시험일까지 남은 기간 — 권장 기간보다 짧으면 "충분하다"고 쓰면 안 된다 (정보처리기사: 권장 12주, 시험 9주 뒤)
+    left = _weeks_between(date.today(), candidate.deadline)
     prompt = (
-        f"사용자 관심 태그: {', '.join(tags) or '없음'}\n"
+        f"사용자가 입력한 관심 단어: {', '.join(tags) or '없음'}\n"
         f"추천 목표: {candidate.title} ({candidate.field})\n"
-        f"예상 기간: 최소 {candidate.min_weeks}주 · 권장 {candidate.recommended_weeks}주 · "
-        f"주당 {candidate.weekly_hours}시간\n"
-        "위 정보로 이 목표를 추천하는 이유를 2문장 이내, 80자 이내, 한국어 존댓말로 짧게 써 주세요. "
+        + (f"예상 준비 기간: 약 {weeks}주 (주당 {candidate.weekly_hours}시간 기준)\n" if weeks else "")
+        + (f"다음 시험일까지: 약 {math.floor(left)}주 — 예상 기간보다 짧으면 빠듯하다고 쓰세요\n" if left is not None else "")
+        + "위 정보로 이 목표를 추천하는 이유를 2문장 이내, 80자 이내, 한국어 존댓말로 짧게 써 주세요.\n"
+        "지킬 것: 관심 단어는 사용자의 관심일 뿐이니 사용자의 실력·경력·보유 지식을 가정하지 마세요. "
+        "시험 과목·공인 여부·난이도처럼 위에 없는 사실은 쓰지 마세요. 기간은 위 숫자만 쓰세요. "
         "설명 문장 없이 추천 이유 본문만 출력하세요."
     )
     try:

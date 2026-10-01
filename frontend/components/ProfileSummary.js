@@ -13,13 +13,16 @@ export default function ProfileSummary({ user, goal, levelName, weekMinutes }) {
   const weekPercent = goal.weeklyHours > 0
     ? Math.min(100, Math.round((weekMinutes / 60 / goal.weeklyHours) * 100))
     : 0;
-  const totalHours = Math.round(user.totalMinutes / 60);
+  // 1시간이 안 되면 분으로 — 5분 공부하고 '0'이면 기록이 안 된 것처럼 보인다
+  const total = user.totalMinutes < 60
+    ? { value: user.totalMinutes, label: '누적 분' }
+    : { value: Math.round(user.totalMinutes / 60), label: '누적 시간' };
 
   return (
     <section className="panel profile" aria-label="내 학습 현황">
       <div className="profile-head">
         <div className="stack" style={{ gap: 3, minWidth: 0 }}>
-          <span className="profile-name">{user.nickname}님</span>
+          <span className="profile-name">{user.nickname ? `${user.nickname}님` : '내 학습'}</span>
           <span className="tiny dim">레벨 {levelName}</span>
         </div>
         <div className="stack profile-goal">
@@ -30,13 +33,13 @@ export default function ProfileSummary({ user, goal, levelName, weekMinutes }) {
 
       <div className="profile-dday">
         <span className="num-big">{dday(goal.dDay)}</span>
-        <span className="tiny dim">시험일까지</span>
+        <span className="tiny dim">기한까지</span>
       </div>
 
       {/* 주당 학습시간 목표 — 이번 주 얼마나 채웠는지 */}
       <div className="profile-week">
         <div className="profile-week-top">
-          <span className="tiny muted">이번 주 학습</span>
+          <span className="tiny muted">이번 주 공부 시간</span>
           <span className="mono tiny">
             <b>{weekHours}</b> / {goal.weeklyHours}시간
           </span>
@@ -55,8 +58,8 @@ export default function ProfileSummary({ user, goal, levelName, weekMinutes }) {
 
       <div className="profile-stats">
         <div className="profile-stat">
-          <span className="profile-stat-value mono">{totalHours}</span>
-          <span className="micro dim">누적 시간</span>
+          <span className="profile-stat-value mono">{total.value}</span>
+          <span className="micro dim">{total.label}</span>
         </div>
         <div className="profile-stat">
           <span className="profile-stat-value mono">{user.streakDays}</span>

@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 from main import app
 from routers.contests import _repository_or_503
 from schemas.contest import Contest
-from services.contest_repository import ContestSearch, PreparationHours
+from services.contest_repository import ContestSearch, PreparationHours, dedupe_contests
 
 
 SAMPLE_CONTEST = Contest(
@@ -150,3 +150,13 @@ def test_link_only_row_without_deadline_needs_user_deadline():
     assert supplied.status_code == 200
     assert supplied.json()["weeks_needed"] == 5
     assert repository.fields == ["과학/공학"], "분야가 비어 있을 때만 사용자가 적은 분야를 쓴다"
+
+
+def test_같은_공고가_분야별로_두_번_올라오면_하나로_합친다():
+    twin = SAMPLE_CONTEST.model_copy(update={"id": "contest-2", "source_id": "111156", "fields": ["취업/창업"]})
+    other = SAMPLE_CONTEST.model_copy(update={"id": "contest-3", "title": "다른 공모전"})
+
+    items = dedupe_contests([SAMPLE_CONTEST, other, twin])
+
+    assert [c.id for c in items] == ["contest-1", "contest-3"]
+    assert items[0].fields == ["과학/공학", "취업/창업"]

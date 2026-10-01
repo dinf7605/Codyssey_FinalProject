@@ -81,7 +81,10 @@ def _ask(client, candidates: list[Contest], tags: list[str]) -> tuple[dict[str, 
                 "제목에 없는 자격, 마감일, 주최 또는 원문 내용은 추측하지 마세요. "
                 "관련성이 높은 공고만 포함하고 JSON 객체 하나만 출력하세요: "
                 '{"matches":[{"id":"입력의 id","score":0.0}]}. '
-                "score는 0~1 사이 관련성 점수이며 무관하면 목록에서 제외하세요."
+                "score는 0~1 사이 관련성 점수이며 무관하면 목록에서 제외하세요. "
+                # 10-01 실사용: '데이터 분석, SQL'에 일반 'AI 앱 해커톤'이 추천됐다 — 넓은 분야만 겹쳐도 높게 줬다
+                "기준: 0.8 이상은 관심사가 제목의 핵심 주제와 바로 일치할 때(예: 데이터 분석 ↔ 데이터 분석 공모전), "
+                "0.6~0.8은 관심사가 공고 주제의 주된 일부일 때, 'IT'·'AI'처럼 넓은 분야만 겹치면 0.5 미만입니다."
             ),
             messages=[{"role": "user", "content": json.dumps(payload, ensure_ascii=False)}],
         )

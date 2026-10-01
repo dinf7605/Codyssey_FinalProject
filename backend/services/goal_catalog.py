@@ -103,7 +103,7 @@ _CATALOG: list[dict] = [
     {
         "goal_id": "contest-publicdata",
         "title": "공공데이터 활용 아이디어 공모전",
-        "field": "IT·데이터",
+        "field": "데이터",  # 예전 "IT·데이터" — "데이터" 칩과 겹쳐 하나로 합쳤다
         "tags": ["공모전", "공공데이터", "데이터분석", "it·개발"],
         "kind": "contest",
         "standard_hours": 24,

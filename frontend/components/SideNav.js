@@ -11,7 +11,7 @@ import { dday } from '@/lib/ui';
 // 넓은 화면에서 가로 탭 한 줄만 띄우면 남는 공간이 그대로 비어 보인다.
 // 모바일에서는 CSS로 숨기고 BottomNav가 대신한다.
 
-export default function SideNav({ nickname, levelName, streakDays, goal }) {
+export default function SideNav({ name, levelName, streakDays, goal }) {
   const pathname = usePathname();
 
   return (
@@ -38,7 +38,7 @@ export default function SideNav({ nickname, levelName, streakDays, goal }) {
         <AdminNavigationLink position="side" />
         </nav>
 
-        {nickname && (
+        {name && (
           <Link href="/mypage" className="sidenav-user">
             {goal && (
               <span className="sidenav-goal">
@@ -46,7 +46,7 @@ export default function SideNav({ nickname, levelName, streakDays, goal }) {
                 <span className="sidenav-dday mono">{dday(goal.dDay)}</span>
               </span>
             )}
-            <span className="sidenav-user-name">{nickname}님</span>
+            <span className="sidenav-user-name">{name}</span>
             <span className="micro dim">
               {levelName}
               {streakDays > 0 ? ' · ' + streakDays + '일 연속' : ''}
