@@ -5,9 +5,11 @@
   POST /goal/suggest             유사 분야 추천 (FR-GOAL-11) · AI 호출 한도 적용
   POST /goal/match               목표 후보 매칭 (FR-GOAL-03) · AI 호출 한도 적용
   POST /goal/recommend           목표 추천 카드 (FR-GOAL-05) · AI 호출 한도 적용
-                                  · 최근 "관심없음"은 제외 (FR-GOAL-08, 30일 뒤 자동 재포함)
+                                  · 최근 "관심없음"은 제외 (FR-GOAL-08, 회원 30일/비회원
+                                    24시간 뒤 자동 재포함)
   POST /goal/feasibility         기간 적합성 판정 (FR-GOAL-04 · FR-GOAL-09) · LLM 미사용
-  POST /goal/feedback            추천 피드백 (FR-GOAL-08)
+  POST /goal/feedback            추천 피드백 (FR-GOAL-08) · 회원은 Supabase, 비회원은
+                                  서버 로컬 파일에 저장
   DELETE /goal/feedback/{goal_id} 추천 피드백 취소 (FR-GOAL-08)
   POST /goal/manual/check        기한 실현가능성 경고 (FR-GOAL-10)
   POST /goal/confirm             목표 확정 (FR-GOAL-07)
@@ -49,7 +51,11 @@ from services.goal_catalog import (
 )
 from services.plan_store import log_ai_call
 from services.goal_feasibility import evaluate_all, evaluate_candidates, manual_goal_warning
-from services.goal_feedback import recently_dismissed_goal_ids
+from services.goal_feedback import (
+    cancel_nonmember_dismiss,
+    record_nonmember_dismiss,
+    recently_dismissed_goal_ids,
+)
 from services.goal_limiter import RateLimitExceeded, consume, usage_for
 from services.goal_recommender import recommend_goals
 from utils.auth import get_optional_user
@@ -178,24 +184,30 @@ def check_manual_goal(req: ManualGoalRequest) -> ManualGoalWarning:
 
 @router.post("/feedback", response_model=FeedbackResponse)
 def feedback(req: FeedbackRequest, user=Depends(get_optional_user)) -> FeedbackResponse:
-    """FR-GOAL-08 — 추천 피드백. goal_feedback 테이블에 저장한다 (마이그레이션 007).
+    """FR-GOAL-08 — 추천 피드백.
 
-    비회원도 쓰는 화면이라 로그인을 요구하지 않는다 — 로그인돼 있으면 user_id 도 같이
-    남기고, 아니면 session_id 만 남긴다. DB가 아직 설정되지 않았거나 쓰기가 실패해도
-    온보딩 흐름 자체는 막지 않는다 — 프론트는 이 응답을 저장 실패로 취급하지 않는다.
+    비회원도 쓰는 화면이라 로그인을 요구하지 않는다. 회원은 Supabase goal_feedback
+    테이블(마이그레이션 007)에 user_id 와 함께 남긴다. 비회원은 session_id 를 서버 DB에
+    남기지 않기 위해 Supabase 에 쓰지 않고, "관심없음"(interested=False)일 때만
+    goal_feedback.py 의 서버 로컬 파일에 session_id 기준으로 기록한다(FR-GOAL-12 한도
+    체크와 같은 방식). DB가 아직 설정되지 않았거나 쓰기가 실패해도 온보딩 흐름 자체는
+    막지 않는다 — 프론트는 이 응답을 저장 실패로 취급하지 않는다.
     """
-    try:
-        get_supabase_client().table("goal_feedback").insert(
-            {
-                "session_id": req.session_id,
-                "user_id": user.id if user else None,
-                "goal_id": req.goal_id,
-                "interested": req.interested,
-                "reason": req.reason,
-            }
-        ).execute()
-    except Exception:  # noqa: BLE001 - DB 미설정·일시 장애여도 추천 흐름을 막지 않는다
-        pass
+    if user:
+        try:
+            get_supabase_client().table("goal_feedback").insert(
+                {
+                    "session_id": req.session_id,
+                    "user_id": user.id,
+                    "goal_id": req.goal_id,
+                    "interested": req.interested,
+                    "reason": req.reason,
+                }
+            ).execute()
+        except Exception:  # noqa: BLE001 - DB 미설정·일시 장애여도 추천 흐름을 막지 않는다
+            pass
+    elif not req.interested:
+        record_nonmember_dismiss(req.session_id, req.goal_id)
     return FeedbackResponse(ok=True, message="피드백을 받았습니다. 다음 추천에 반영할게요.")
 
 
@@ -205,24 +217,23 @@ def delete_feedback(
 ) -> FeedbackResponse:
     """FR-GOAL-08 — 남긴 "관심없음" 피드백을 취소(삭제)한다.
 
-    마이페이지 같은 별도 관리 화면이 없어도, 방금 "관심없음"을 누른 자리에서 바로
-    "취소"할 수 있게 하기 위한 용도다. 회원이면 user_id로, 비회원이면 session_id로만
-    자기 기록을 지운다 — 다른 사람 세션의 기록은 지울 수 없다. DB가 없거나 실패해도
-    (POST /goal/feedback과 동일하게) 화면 흐름은 막지 않는다.
+    방금 "관심없음"을 누른 자리가 아니더라도, 한참 지나 다시 관심이 생기거나 기간
+    부담이 없어진 목표를 바로 추천 대상에 되돌리기 위한 용도다. 회원이면 Supabase
+    goal_feedback 테이블에서 user_id로, 비회원이면 goal_feedback.py 의 서버 로컬
+    파일에서 session_id로만 자기 기록을 지운다 — 다른 사람 세션의 기록은 지울 수
+    없다. DB가 없거나 실패해도 (POST /goal/feedback과 동일하게) 화면 흐름은 막지 않는다.
     """
-    try:
-        query = get_supabase_client().table("goal_feedback").delete().eq("goal_id", goal_id)
-        if user:
-            query = query.eq("user_id", user.id)
-        elif session_id:
-            query = query.eq("session_id", session_id)
-        else:
-            raise HTTPException(status_code=400, detail="session_id가 필요합니다.")
-        query.execute()
-    except HTTPException:
-        raise
-    except Exception:  # noqa: BLE001 - DB 미설정·일시 장애여도 흐름을 막지 않는다
-        pass
+    if user:
+        try:
+            get_supabase_client().table("goal_feedback").delete().eq("goal_id", goal_id).eq(
+                "user_id", user.id
+            ).execute()
+        except Exception:  # noqa: BLE001 - DB 미설정·일시 장애여도 흐름을 막지 않는다
+            pass
+    elif session_id:
+        cancel_nonmember_dismiss(session_id, goal_id)
+    else:
+        raise HTTPException(status_code=400, detail="session_id가 필요합니다.")
     return FeedbackResponse(ok=True, message="피드백을 취소했어요.")
 
 

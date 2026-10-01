@@ -54,3 +54,6 @@ graphify-out/
 
 # ── 비회원 AI 호출 한도 임시 저장 (FR-GOAL-12, 재시작 대비용 — 각자 로컬 상태) ──
 backend/services/_goal_limiter_state.json
+
+# ── 비회원 "관심없음" 임시 저장 (FR-GOAL-08, 재시작 대비용 — 각자 로컬 상태) ──
+backend/services/_goal_feedback_state.json
