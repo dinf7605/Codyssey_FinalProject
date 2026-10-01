@@ -17,6 +17,8 @@
   POST /plan/nightly           전체 야간 재조정 (매일 03:00, X-Batch-Key)
   PATCH  /plan/blocks/{id}     블록 옮기기 (로그인)
   DELETE /plan/blocks/{id}     블록 지우기 (로그인)
+  POST /plan/blocks/{id}/postpone  알림에서 미루기 — 다음 날 이후 첫 빈 시간 (로그인)
+  PUT  /plan/{id}/availability     공부 가능 시간 바꾸기 — 앞으로의 블록을 다시 놓음 (로그인)
 
 계획 만들기(decompose·schedule·validate)는 로그인 없이도 된다 — 비회원도 써 보고 가입하게.
 저장부터 로그인이 필요하다.
@@ -457,4 +459,29 @@ def delete_block(block_id: str, user=Depends(get_current_user), db=Depends(get_d
     try:
         replan.delete_block(db, user.id, block_id, replan.now_kst())
     except (replan.ReplanError, replan.BlockNotFound) as exc:
+        _refuse(exc)
+
+
+@router.post("/blocks/{block_id}/postpone", response_model=MoveBlockResponse)
+def postpone_block(block_id: str, user=Depends(get_current_user), db=Depends(get_db)):
+    """FR-ALARM-03 — 알림에서 '미루기'. 다음 날 이후 첫 빈 시간으로 옮긴다 (다른 블록은 그대로)."""
+    try:
+        return replan.postpone_block(db, user.id, block_id, replan.now_kst())
+    except (replan.ReplanError, replan.BlockNotFound) as exc:
+        _refuse(exc)
+
+
+class AvailabilityChangeResponse(BaseModel):
+    moved: int   # 새 시간으로 옮긴 블록 수
+    left: int    # 항상 0 — 자리가 모자라면 바꾸지 않고 409 로 알린다
+
+
+@router.put("/{plan_id}/availability", response_model=AvailabilityChangeResponse)
+def change_availability(plan_id: str, req: Availability, user=Depends(get_current_user), db=Depends(get_db)):
+    """FR-MY-01 — 공부 가능 시간을 바꾸고, 아직 안 한 앞으로의 블록을 새 시간에 다시 놓는다."""
+    try:
+        return replan.change_availability(db, user.id, plan_id, req, replan.now_kst())
+    except replan.PlanNotFound:
+        raise HTTPException(status_code=404, detail="진행 중인 내 계획에서 찾지 못했어요.")
+    except replan.ReplanError as exc:
         _refuse(exc)

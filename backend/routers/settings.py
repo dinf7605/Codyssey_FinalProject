@@ -1,4 +1,8 @@
+from datetime import datetime, timezone
+from typing import Literal
+
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from db import get_supabase_client
 from schemas.user import WithdrawRequest
@@ -30,6 +34,55 @@ def get_my_profile(user=Depends(get_current_user)):
 
     # 3) 프로필 반환
     return response.data[0]
+
+
+# ── 알림 설정 (FR-MY-03 수신 여부 · FR-MY-05 강도·방해금지) ──
+# 저장한 값은 services/alarms.py 가 알림을 보낼 때마다 읽는다.
+
+class NotificationSettings(BaseModel):
+    enabled: bool = True
+    reminder_minutes_before: int = Field(default=10, ge=1, le=120)
+    quiet_start: str | None = None   # "22:00" — 한국 시각. 둘 다 있어야 방해금지가 켜진다
+    quiet_end: str | None = None
+    intensity: Literal["low", "normal", "high"] = "normal"
+
+    @field_validator("quiet_start", "quiet_end", mode="before")
+    @classmethod
+    def _hhmm(cls, value):
+        if value in (None, ""):
+            return None
+        text = str(value)[:5]
+        hh, _, mm = text.partition(":")
+        if not (hh.isdigit() and mm.isdigit() and 0 <= int(hh) <= 23 and 0 <= int(mm) <= 59):
+            raise ValueError("시간은 HH:MM 형식이어야 합니다")
+        return f"{int(hh):02d}:{int(mm):02d}"
+
+    @model_validator(mode="after")
+    def _both_or_none(self):
+        if (self.quiet_start is None) != (self.quiet_end is None):
+            raise ValueError("방해금지 시작·끝 시간을 함께 넣어 주세요")
+        return self
+
+
+@router.get("/notifications", response_model=NotificationSettings)
+def get_notification_settings(user=Depends(get_current_user)):
+    rows = (
+        get_supabase_client().table("user_notification_settings")
+        .select("enabled,reminder_minutes_before,quiet_start,quiet_end,intensity")
+        .eq("user_id", user.id)
+        .limit(1)
+        .execute()
+    ).data
+    return NotificationSettings(**rows[0]) if rows else NotificationSettings()
+
+
+@router.put("/notifications", response_model=NotificationSettings)
+def save_notification_settings(req: NotificationSettings, user=Depends(get_current_user)):
+    get_supabase_client().table("user_notification_settings").upsert(
+        {"user_id": str(user.id), **req.model_dump(), "updated_at": datetime.now(timezone.utc).isoformat()},
+        on_conflict="user_id",
+    ).execute()
+    return req
 
 
 # ── 회원 탈퇴 (FR-MY-04) ──

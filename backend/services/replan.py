@@ -557,6 +557,135 @@ def delete_block(db, user_id: str, block_id: str, now: datetime) -> None:
         mark_unit_removed(db, plan["id"], target.unit_id, now)
 
 
+# ── 다시 놓기 공통 (미루기 · 가용 시간 바꾸기) ─────────
+
+def _re_place(db, user_id: str, plan: dict, blocks: list[Block], units: list[StudyUnit], movable: list[Block],
+              availability: Availability, start_day: date) -> tuple[list[tuple[Block, Block]], list[Block]]:
+    """movable 블록을 start_day 부터 빈 시간에 순서대로 다시 놓는다. 저장은 하지 않는다.
+
+    나머지 블록(완료·직접 옮김·이전 블록)과 다른 목표 블록은 그대로 두고 비켜 간다.
+    새로 생기는 규칙 위반이 있으면 ReplanError — 반쯤 바뀐 일정을 만들지 않는다.
+    """
+    deadline = _plan_deadline(plan)
+    moving = {b.id for b in movable}
+    keep = [b for b in blocks if b.id not in moving]
+    others = other_plan_blocks(db, user_id, except_plan_id=plan["id"])
+    moves: list[tuple[Block, Block]] = []
+    left: list[Block] = []
+    after = list(keep)
+    if movable and start_day <= deadline:
+        by_id = {u.id: u for u in units}
+        redo = [by_id[b.unit_id] for b in movable if b.unit_id in by_id]
+        placed = build_schedule(redo, availability, start_day, deadline, fixed_blocks=keep + others)
+        fixed_ids = {b.id for b in keep} | {b.id for b in others}
+        new_by_unit = {b.unit_id: b for b in placed.blocks if b.id not in fixed_ids}
+        for old in movable:
+            new = new_by_unit.get(old.unit_id)
+            if new is None:
+                left.append(old)
+                after.append(old)
+            elif (new.start, new.end) == (old.start, old.end):
+                after.append(old)
+            else:
+                moved = old.model_copy(update={"start": new.start, "end": new.end})
+                moves.append((old, moved))
+                after.append(moved)
+    else:
+        left = list(movable)
+        after += movable
+
+    before = {_key(v) for v in validate_schedule(blocks + others, units, deadline)}
+    locked = {b.id for b in after if b.locked}
+    bad = [
+        v for v in validate_schedule(after + others, units, deadline)
+        if _key(v) not in before and not (v.kind == "prerequisite_violation" and v.block_id in locked)
+    ]
+    if bad:
+        raise ReplanError(
+            f"기한 안에 순서대로 다시 놓을 자리가 없어요 (규칙 {len(bad)}건). "
+            "일정에서 직접 옮기거나 기한을 조정해 주세요."
+        )
+    return moves, left
+
+
+def _save_moves(db, user_id: str, plan: dict, moves: list[tuple[Block, Block]], now: datetime, reason) -> None:
+    for old, new in moves:
+        db.table("plan_blocks").update(
+            {"start_at": to_db_time(new.start), "end_at": to_db_time(new.end)}
+        ).eq("id", old.id).eq("plan_id", plan["id"]).execute()
+    if moves:
+        db.table("plan_changes").insert([
+            {
+                "user_id": user_id, "plan_id": plan["id"], "block_id": old.id,
+                "origin": "manual", "change_type": "move", "title": old.title,
+                "before_start": to_db_time(old.start), "before_end": to_db_time(old.end),
+                "after_start": to_db_time(new.start), "after_end": to_db_time(new.end),
+                "reason": reason(old, new), "created_at": to_db_time(now),
+            }
+            for old, new in moves
+        ]).execute()
+
+
+# ── 알림에서 미루기 (FR-ALARM-03) ─────────────────────
+
+def postpone_block(db, user_id: str, block_id: str, now: datetime) -> dict:
+    """블록을 '다음 날 이후 첫 빈 시간' 으로 미룬다.
+
+    학습 단위는 앞뒤 순서가 있어서 이 블록만 옮기면 뒤 단원이 앞 단원보다 먼저 오게 된다.
+    그래서 이 블록 뒤에 놓인, 아직 안 한 블록(직접 옮긴 것 제외)도 함께 순서대로 뒤로 민다.
+    """
+    plan, blocks, target = _load_for_edit(db, user_id, block_id)
+    if target.done:
+        raise ReplanError("완료한 블록은 미룰 수 없어요.")
+    availability = availability_of(plan, blocks)
+    if availability is None:
+        raise ReplanError("빈 시간표가 없어 미룰 수 없어요.")
+    movable = [target] + [b for b in blocks
+                          if b.id != target.id and not b.done and not b.locked and b.start > target.start]
+    start_day = max(_place_from(availability, now), target.start.date() + timedelta(days=1))
+    moves, _ = _re_place(db, user_id, plan, blocks, plan_units(db, plan["id"]), movable, availability, start_day)
+    moved = next((new for old, new in moves if old.id == target.id), None)
+    if moved is None:
+        raise ReplanError("기한 안에 미룰 빈 시간이 없어요. 일정에서 직접 옮기거나 기한을 조정해 주세요.")
+
+    _save_moves(db, user_id, plan, moves, now, lambda old, new: (
+        f"알림에서 미뤄 {_when(new.start)}로 옮겼어요." if old.id == target.id
+        else f"앞 단원을 미뤄서, 순서를 지키려고 {_when(new.start)}로 옮겼어요."
+    ))
+    return {"applied": True, "forceable": True, "violations": [], "block": moved, "moved": len(moves)}
+
+
+# ── 가용 시간 바꾸기 (FR-MY-01) ───────────────────────
+
+def change_availability(db, user_id: str, plan_id: str, availability: Availability, now: datetime) -> dict:
+    """계획의 빈 시간표를 바꾸고, 아직 안 한 앞으로의 블록을 새 시간에 다시 놓는다.
+
+    완료한 블록·직접 옮긴 블록(locked)·이미 지난 블록은 그대로 둔다 (지난 것은 야간 재조정 몫).
+    새 시간표로 다 넣을 수 없거나 규칙을 어기게 되면 아무것도 바꾸지 않는다 (일부만 옮기지 않는다).
+    """
+    plan = next((p for p in active_plan_rows(db, user_id) if p["id"] == str(plan_id)), None)
+    if plan is None:
+        raise PlanNotFound(plan_id)
+    if not availability.slots:
+        raise ReplanError("공부할 수 있는 시간을 하루 이상 넣어 주세요.")
+    blocks = plan_blocks(db, plan["id"])
+    movable = [b for b in blocks if not b.done and not b.locked and b.start >= now]
+    moves, left = _re_place(db, user_id, plan, blocks, plan_units(db, plan["id"]), movable,
+                            availability, _place_from(availability, now))
+    if left:
+        # 일부만 옮기면 새 시간표 밖에 블록이 남는다 — 다 들어갈 때만 바꾼다
+        raise ReplanError(
+            f"새 시간으로는 블록 {len(left)}개를 기한 안에 넣을 수 없어요. 시간을 더 넣거나 기한을 늘려 주세요."
+        )
+
+    db.table("study_plans").update({"availability": availability.model_dump()}).eq("id", plan["id"]).eq(
+        "user_id", user_id
+    ).execute()
+    _save_moves(db, user_id, plan, moves, now,
+                lambda old, new: f"공부 가능 시간을 바꿔 {_when(new.start)}로 옮겼어요.")
+    return {"moved": len(moves), "left": len(left)}
+
+
 # ── 완료 취소 (FR-STUDY-02) ───────────────────────────
 
 def cancel_done(db, user_id: str, block_id: str, now: datetime) -> None:
