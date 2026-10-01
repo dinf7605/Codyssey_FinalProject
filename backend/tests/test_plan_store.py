@@ -220,6 +220,9 @@ def test_누적_통계는_저장된_기록으로_계산한다(client):
 
     assert stats["total_minutes"] == 150
     assert stats["studied_days"] == 2
+    # 대시보드 학습 잔디 · 시간대 패턴도 같은 기록에서 나온다
+    assert len(stats["history"]) == 140
+    assert {h["label"]: h["value"] for h in stats["hours"]}["18시"] == 2
 
 
 # ── AI 호출 기록 ───────────────────────────────────────

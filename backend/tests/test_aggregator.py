@@ -1,8 +1,16 @@
 """학습 집계·레벨·스트릭 테스트 (FR-STUDY-03 / FR-STUDY-04)."""
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
-from services.aggregator import daily_totals, level_of, streak_days, summarize, week_minutes
+from services.aggregator import (
+    daily_history,
+    daily_totals,
+    hour_pattern,
+    level_of,
+    streak_days,
+    summarize,
+    week_minutes,
+)
 
 TODAY = date(2026, 9, 14)  # 월요일
 
@@ -52,6 +60,26 @@ def test_이번_주는_월요일부터_센다():
         wednesday: 40,
     }
     assert week_minutes(totals, wednesday) == 100
+
+
+def test_날짜별_기록은_안_한_날을_0으로_채우고_오늘로_끝난다():
+    history = daily_history({TODAY: 40, TODAY - timedelta(days=2): 25}, TODAY, days=5)
+    assert [d["minutes"] for d in history] == [0, 0, 25, 0, 40]
+    assert history[-1]["date"] == TODAY.isoformat()
+
+
+def test_시간대_패턴은_시작_시각으로_세고_5분_미만은_뺀다():
+    starts = [
+        (datetime(2026, 9, 14, 21, 10), 60),
+        (datetime(2026, 9, 14, 23, 50), 30),  # 21시 칸 (21~24시)
+        (datetime(2026, 9, 15, 2, 0), 40),    # 새벽은 0시 칸
+        (datetime(2026, 9, 15, 9, 0), 3),     # 5분 미만 — 세지 않는다
+    ]
+    counts = {h["label"]: h["value"] for h in hour_pattern(starts)}
+    assert counts["21시"] == 2
+    assert counts["0시"] == 1
+    assert counts["9시"] == 0
+    assert [h["label"] for h in hour_pattern([])] == ["6시", "9시", "12시", "15시", "18시", "21시", "0시"]
 
 
 def test_요약이_화면에_필요한_값을_모두_준다():

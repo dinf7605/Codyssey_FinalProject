@@ -5,9 +5,11 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { AiBadge, AiNotice } from '@/components/AiNotice';
 import EmptyState from '@/components/EmptyState';
-import { interestTags as fallbackTags } from '@/lib/mock';
 import { api, getToken } from '@/lib/api';
 import { getAnonSessionId, saveExploration } from '@/lib/goalSession';
+
+// /goal/tags 를 받기 전·받지 못했을 때 보여줄 관심분야 칩. 받으면 카탈로그 태그로 바뀐다
+const FALLBACK_TAGS = ['IT·개발', '데이터분석', '디자인', '마케팅', '기획', '금융', '어학', '공모전', '포트폴리오'];
 
 // 파이프라인 0 — 목표 탐색 (담당 B, FR-GOAL-01~13)
 //
@@ -66,7 +68,7 @@ export default function OnboardingPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
-  const [availableTags, setAvailableTags] = useState(fallbackTags);
+  const [availableTags, setAvailableTags] = useState(FALLBACK_TAGS);
   const [tags, setTags] = useState([]);
   const [freeText, setFreeText] = useState('');
 

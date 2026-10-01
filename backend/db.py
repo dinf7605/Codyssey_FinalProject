@@ -4,7 +4,7 @@
 
   get_supabase_client()  서비스 키(Service Role). 테이블 읽기·쓰기, 토큰 확인, 관리자 작업(계정 삭제).
                          RLS 를 통과하므로 "본인 것만" 조건(.eq("user_id", user.id))을 코드에서 반드시 건다.
-                         한 번 만들어 재사용한다.
+                         스레드마다 하나 만들어 재사용한다 (아래 주석 — 동시 요청에서 연결이 꼬이지 않게).
 
   new_auth_client()      공개 키(anon). 가입·로그인 전용. 요청마다 새로 만든다.
                          로그인하면 클라이언트가 그 사용자의 세션을 품는다 — 공유 클라이언트로 로그인하면
@@ -17,7 +17,7 @@
 from __future__ import annotations
 
 import os
-from functools import lru_cache
+import threading
 from typing import Any
 
 import config  # noqa: F401 - .env 를 먼저 읽는다
@@ -35,13 +35,37 @@ def _require(*names: str) -> list[str]:
     return values
 
 
-@lru_cache(maxsize=1)
+# 서비스 키 클라이언트는 **스레드마다 하나씩** 만들어 재사용한다.
+#
+# FastAPI 는 일반 함수 엔드포인트를 여러 스레드에서 동시에 돌린다. 클라이언트 하나를 모두가 나눠 쓰면
+# 같은 HTTP/2 연결을 여러 스레드가 동시에 읽다가 httpx.ReadError(WinError 10035)로 500 이 난다
+# (10-01 실측: 대시보드가 /settings/profile 과 /study/stats 를 동시에 부를 때 둘 다 실패).
+# 스레드 풀 크기만큼만 생기므로(기본 40) 연결 수가 늘어나도 문제 없다.
+_local = threading.local()
+_generation = 0  # cache_clear() 가 올리면 모든 스레드가 다음 호출에서 새로 만든다
+
+
 def get_supabase_client() -> Any:
     """서비스 키 클라이언트 — 테이블·관리자 작업용. 절대 로그인에 쓰지 않는다."""
+    cached = getattr(_local, "client", None)
+    if cached is not None and cached[0] == _generation:
+        return cached[1]
     url, key = _require("SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY")
     from supabase import create_client
 
-    return create_client(url, key)
+    client = create_client(url, key)
+    _local.client = (_generation, client)
+    return client
+
+
+def _cache_clear() -> None:
+    """예전 lru_cache 의 cache_clear 와 같은 역할 — 테스트가 환경변수를 바꾼 뒤 부른다."""
+    global _generation
+    _generation += 1
+    _local.__dict__.pop("client", None)
+
+
+get_supabase_client.cache_clear = _cache_clear
 
 
 def get_db() -> Any:

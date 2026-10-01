@@ -1,8 +1,6 @@
 import { Gowun_Batang, IBM_Plex_Sans_KR, IBM_Plex_Mono } from 'next/font/google';
 import './globals.css';
-import { levelOf } from '@/lib/growth';
 import { densityForLevel } from '@/lib/ui';
-import { user } from '@/lib/mock';
 
 // next/font는 빌드 시점에 폰트를 가져와 같은 도메인에서 내려준다.
 // 외부 스타일시트를 부르지 않아 첫 화면이 늦게 뜨거나 글자가 튀는 일이 없다.
@@ -46,7 +44,9 @@ export const viewport = {
 
 export default function RootLayout({ children }) {
   // FR-UI-01 / FR-UI-02 — 누적 학습시간이 레벨을, 레벨이 테마와 밀도를 정한다.
-  const level = levelOf(user.totalMinutes).level;
+  // 서버는 사용자의 기록을 모르므로 레벨 1로 그리고, 로그인한 화면에서
+  // components/AdaptiveTheme.js 가 실제 레벨로 바꾼다.
+  const level = 1;
   const density = densityForLevel(level);
 
   return (

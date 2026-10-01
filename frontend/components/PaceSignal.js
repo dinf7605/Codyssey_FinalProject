@@ -5,7 +5,7 @@ import { paceView, dday } from '@/lib/ui';
 
 export default function PaceSignal({ goal, pace }) {
   const view = paceView(pace.state, Math.abs(pace.diffDays));
-  const percent = Math.round((goal.unitsDone / goal.unitsTotal) * 100);
+  const percent = goal.unitsTotal ? Math.round((goal.unitsDone / goal.unitsTotal) * 100) : 0;
 
   return (
     <section className="sec">

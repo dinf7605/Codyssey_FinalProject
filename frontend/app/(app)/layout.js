@@ -1,4 +1,5 @@
 import { CurrentAccountProvider, AccountNavigation } from '@/components/CurrentAccount';
+import AdaptiveTheme from '@/components/AdaptiveTheme';
 
 import BottomNav from '@/components/BottomNav';
 
@@ -14,6 +15,7 @@ export default function AppLayout({ children }) {
 
   return (
     <CurrentAccountProvider>
+    <AdaptiveTheme />
     <div className="app">
       <AccountNavigation position="side" />
       <div className="app-body">

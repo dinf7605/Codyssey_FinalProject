@@ -1,61 +1,91 @@
+'use client';
+
+import Link from 'next/link';
 import { AccountName } from '@/components/CurrentAccount';
 import ContestInterestMemory from '@/components/ContestInterestMemory';
 import AccountMemories from '@/components/AccountMemories';
 import SectionTitle from '@/components/SectionTitle';
 import StudyGrass from '@/components/StudyGrass';
 import AccountSettings from '@/components/AccountSettings';
-import { levelOf, nextUnlock, LEVELS, UNLOCK_LABEL } from '@/lib/growth';
-import { user, goal, studyHistory } from '@/lib/mock';
+import { nextUnlock, LEVELS, UNLOCK_LABEL } from '@/lib/growth';
+import { ddayOf, kstToday } from '@/lib/planView';
+import { dday } from '@/lib/ui';
+import { usePlan } from '@/lib/usePlan';
+import { useStats } from '@/lib/useStats';
 
 // FR-MEM-01 메모리 조회 / FR-MEM-02 메모리 삭제 / FR-MY-01~05
+// 통계·기록은 저장된 학습 기록(/study/stats), 목표는 진행 중 계획(/plan/active)에서 온다.
 
 export default function MyPage() {
-  const current = levelOf(user.totalMinutes);
-  const next = nextUnlock(user.totalMinutes);
-  const hours = Math.round(user.totalMinutes / 60);
+  const stats = useStats();
+  const plan = usePlan();
+  const today = kstToday();
+
+  if (stats.status === 'anon') {
+    return (
+      <>
+        <header className="stack" style={{ gap: 6 }}>
+          <h1 className="title">마이페이지</h1>
+          <p className="hint">
+            로그인하면 학습 기록과 목표, 저장된 학습 정보를 볼 수 있어요.{' '}
+            <Link href="/login?next=/mypage">로그인하기</Link>
+          </p>
+        </header>
+      </>
+    );
+  }
+
+  const s = stats.data;
+  const current = s ? { level: s.level, name: s.level_name } : null;
+  const next = s ? nextUnlock(s.total_minutes) : null;
+  const plans = plan.status === 'ready' ? [...plan.plans].sort((a, b) => a.deadline.localeCompare(b.deadline)) : [];
 
   return (
     <>
       <header className="stack" style={{ gap: 6 }}>
-        <p className="tiny dim">예시 레벨 {current.level} · {current.name}</p>
+        <p className="tiny dim">{current ? `레벨 ${current.level} · ${current.name}` : ' '}</p>
         <h1 className="title"><AccountName /></h1>
-        <p className="hint">학습 통계·기록·설정은 예시입니다. 저장된 학습 정보와 계정 정보는 아래에서 확인할 수 있습니다.</p>
+        {stats.status === 'error' && <p className="hint hint-error">학습 기록을 불러오지 못했어요. {stats.error}</p>}
       </header>
 
-      <section className="sec">
-        <div className="stats">
-          <div className="stat">
-            <span className="stat-label">누적</span>
-            <span className="stat-value">{hours}<small>시간</small></span>
-          </div>
-          <div className="stat">
-            <span className="stat-label">연속</span>
-            <span className="stat-value">{user.streakDays}<small>일</small></span>
-          </div>
-          <div className="stat">
-            <span className="stat-label">레벨</span>
-            <span className="stat-value">{current.level}<small>/5</small></span>
-          </div>
-        </div>
-
-        {next && (
-          <div className="next-level">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-              <span className="tiny" style={{ fontWeight: 600 }}>{next.remainingHours}시간 남음</span>
-              <span className="micro dim mono">레벨 {next.level} · {next.name}</span>
+      {s && (
+        <section className="sec">
+          <div className="stats">
+            <div className="stat">
+              <span className="stat-label">누적</span>
+              <span className="stat-value">{Math.round(s.total_minutes / 60)}<small>시간</small></span>
             </div>
-            <div className="bar">
-              <div className="bar-fill" style={{ width: next.percent + '%' }} />
+            <div className="stat">
+              <span className="stat-label">연속</span>
+              <span className="stat-value">{s.streak_days}<small>일</small></span>
             </div>
-            <p className="micro dim">{next.items.join(' · ')}이(가) 열립니다</p>
+            <div className="stat">
+              <span className="stat-label">레벨</span>
+              <span className="stat-value">{s.level}<small>/5</small></span>
+            </div>
           </div>
-        )}
-      </section>
 
-      <section className="sec">
-        <SectionTitle>학습 기록 (예시)</SectionTitle>
-        <StudyGrass history={studyHistory} weeks={20} />
-      </section>
+          {next && (
+            <div className="next-level">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                <span className="tiny" style={{ fontWeight: 600 }}>{next.remainingHours}시간 남음</span>
+                <span className="micro dim mono">레벨 {next.level} · {next.name}</span>
+              </div>
+              <div className="bar">
+                <div className="bar-fill" style={{ width: next.percent + '%' }} />
+              </div>
+              <p className="micro dim">{next.items.join(' · ')}이(가) 열립니다</p>
+            </div>
+          )}
+        </section>
+      )}
+
+      {s?.history?.length > 0 && (
+        <section className="sec">
+          <SectionTitle>학습 기록</SectionTitle>
+          <StudyGrass history={s.history} weeks={20} />
+        </section>
+      )}
 
       <section className="sec">
         <SectionTitle>레벨별로 열리는 것</SectionTitle>
@@ -63,7 +93,7 @@ export default function MyPage() {
           {LEVELS.map((l) => (
             <div className="row" key={l.level}>
               <div className="row-main">
-                <b style={{ color: l.level <= current.level ? 'var(--ink)' : 'var(--ink-3)' }}>
+                <b style={{ color: current && l.level <= current.level ? 'var(--ink)' : 'var(--ink-3)' }}>
                   레벨 {l.level} · {l.name}
                 </b>
                 <span>{l.unlocks.length ? l.unlocks.map((u) => UNLOCK_LABEL[u]).join(' · ') : '오늘의 학습'}</span>
@@ -76,32 +106,33 @@ export default function MyPage() {
       </section>
 
       <section className="sec">
-        <SectionTitle>학습 설정 (예시)</SectionTitle>
+        <SectionTitle moreHref="/schedule">진행 중인 목표</SectionTitle>
+        {plan.status === 'loading' ? (
+          <p className="hint" role="status">불러오는 중…</p>
+        ) : plans.length === 0 ? (
+          <p className="hint">
+            진행 중인 목표가 없어요. <Link href="/schedule">계획 만들기</Link>
+          </p>
+        ) : (
+          <div className="rows">
+            {plans.map((p) => (
+              <div className="row" key={p.plan_id}>
+                <div className="row-main">
+                  <b>{p.goal_title}</b>
+                  <span>기한 {p.deadline} · 블록 {p.blocks.filter((b) => b.done).length}/{p.blocks.length} 완료</span>
+                </div>
+                <span className="mono tiny dim">{dday(ddayOf(p.deadline, today))}</span>
+              </div>
+            ))}
+          </div>
+        )}
         <div className="rows">
           <div className="row">
             <div className="row-main">
-              <b>가용 시간</b>
-              <span>주 {goal.weeklyHours}시간 · 다음 재조정부터 반영</span>
-            </div>
-          </div>
-          <div className="row">
-            <div className="row-main">
-              <b>목표 관리</b>
-              <span>{goal.title} · 기한 {goal.dueDate}</span>
-            </div>
-          </div>
-          <div className="row">
-            <div className="row-main">
               <b>구글 캘린더 연동</b>
-              <span>빈 시간대만 읽습니다 · 제목·참석자 미저장</span>
+              <span>아직 지원하지 않아요. 지금은 직접 입력한 가용시간으로 일정을 만듭니다.</span>
             </div>
-            <span className="pill">예시: 연동됨</span>
-          </div>
-          <div className="row">
-            <div className="row-main">
-              <b>알림 강도</b>
-              <span>보통 · 방해금지 23:00~07:00</span>
-            </div>
+            <span className="pill">준비 중</span>
           </div>
         </div>
       </section>

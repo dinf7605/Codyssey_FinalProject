@@ -9,7 +9,10 @@ import { dday } from '@/lib/ui';
 
 export default function ProfileSummary({ user, goal, levelName, weekMinutes }) {
   const weekHours = Math.round((weekMinutes / 60) * 10) / 10;
-  const weekPercent = Math.min(100, Math.round((weekMinutes / 60 / goal.weeklyHours) * 100));
+  // 이번 주 목표 = 이번 주 달력에 놓인 블록 시간. 놓인 블록이 없으면 비율을 만들지 않는다
+  const weekPercent = goal.weeklyHours > 0
+    ? Math.min(100, Math.round((weekMinutes / 60 / goal.weeklyHours) * 100))
+    : 0;
   const totalHours = Math.round(user.totalMinutes / 60);
 
   return (

@@ -15,9 +15,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from db import get_db
-from services.aggregator import MIN_RECORDED_MINUTES, summarize
+from services.aggregator import MIN_RECORDED_MINUTES, daily_history, daily_totals, hour_pattern, summarize
 from services import replan
-from services.plan_store import KST, active_plan_rows, plan_blocks, record_session, session_events, study_notes
+from services.plan_store import KST, active_plan_rows, plan_blocks, record_session, session_starts, study_notes
 from services.study_memory import refresh_study_memories
 from utils.auth import get_current_user
 
@@ -104,7 +104,15 @@ def record(req: SessionRequest, user=Depends(get_current_user), db=Depends(get_d
 def my_stats(user=Depends(get_current_user), db=Depends(get_db)) -> dict:
     """FR-STUDY-03 / FR-STUDY-04 — 저장된 기록으로 누적·주간·연속·레벨을 계산한다 (한국 날짜 기준)."""
     today = datetime.now(KST).date()
-    return {**summarize(session_events(db, user.id), today), **week_progress(db, user.id, today)}
+    starts = session_starts(db, user.id)
+    events = [(started.date(), minutes) for started, minutes in starts]
+    return {
+        **summarize(events, today),
+        **week_progress(db, user.id, today),
+        # 대시보드·마이페이지의 학습 잔디와 '언제 잘 되나요' (목업 대신 실제 기록)
+        "history": daily_history(daily_totals(events), today),
+        "hours": hour_pattern(starts),
+    }
 
 
 def week_progress(db, user_id: str, today: date) -> dict:

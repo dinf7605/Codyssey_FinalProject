@@ -36,6 +36,11 @@ export function CurrentAccountProvider({ children }) {
   );
 }
 
+// 로그인한 계정의 프로필 (닉네임 등). 비회원이거나 아직 못 읽었으면 null
+export function useAccount() {
+  return useContext(AccountContext);
+}
+
 export function AccountName() {
   const account = useContext(AccountContext);
   return account?.nickname ? `${account.nickname}님` : '내 계정';

@@ -363,6 +363,15 @@ def session_events(db, user_id: str) -> list[tuple[date, int]]:
     return [(from_db_time(r["started_at"]).date(), r["minutes"]) for r in rows]
 
 
+def session_starts(db, user_id: str) -> list[tuple[datetime, int]]:
+    """(시작 한국 시각, 분) 목록 — 날짜별 기록·시간대 패턴(대시보드)을 한 번의 조회로 만든다."""
+    rows = (
+        db.table("study_sessions").select("started_at, minutes")
+        .eq("user_id", user_id).execute().data
+    )
+    return [(from_db_time(r["started_at"]), r["minutes"]) for r in rows]
+
+
 # ── AI 호출 기록 ───────────────────────────────────────
 
 def log_ai_call(

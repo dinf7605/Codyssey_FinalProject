@@ -9,7 +9,7 @@
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 MIN_RECORDED_MINUTES = 5   # 이보다 짧으면 기록하지 않는다
 STREAK_MIN_MINUTES = 20    # 이 이상 해야 연속이 유지된다
@@ -68,6 +68,34 @@ def week_minutes(totals: dict[date, int], today: date) -> int:
     """이번 주(월~일) 학습 분."""
     monday = today - timedelta(days=today.weekday())
     return sum(m for d, m in totals.items() if monday <= d <= today)
+
+
+HISTORY_DAYS = 20 * 7  # 학습 잔디 — 마이페이지가 20주를 그린다
+
+# 시간대 패턴 (대시보드 '언제 잘 되나요'). 시작 시각이 [시작, 다음 시작) 에 들면 그 칸.
+# 0~6시는 한 칸으로 묶는다 — 새벽 공부는 드물어서 3시간씩 나누면 대부분 비어 보인다.
+HOUR_BANDS = [(6, "6시"), (9, "9시"), (12, "12시"), (15, "15시"), (18, "18시"), (21, "21시"), (0, "0시")]
+
+
+def daily_history(totals: dict[date, int], today: date, days: int = HISTORY_DAYS) -> list[dict]:
+    """오래된 날 → 오늘 순으로 날짜별 학습 분. 안 한 날은 0 으로 채운다 (잔디 칸이 비지 않게)."""
+    first = today - timedelta(days=days - 1)
+    return [
+        {"date": (first + timedelta(days=i)).isoformat(), "minutes": totals.get(first + timedelta(days=i), 0)}
+        for i in range(days)
+    ]
+
+
+def hour_pattern(starts: list[tuple[datetime, int]]) -> list[dict]:
+    """시작 시각대별 학습 횟수. 5분 미만 기록은 세지 않는다 (집계와 같은 기준)."""
+    counts = {label: 0 for _, label in HOUR_BANDS}
+    for started, minutes in starts:
+        if minutes < MIN_RECORDED_MINUTES:
+            continue
+        h = started.hour
+        label = "0시" if h < 6 else HOUR_BANDS[min((h - 6) // 3, 5)][1]
+        counts[label] += 1
+    return [{"label": label, "value": counts[label]} for _, label in HOUR_BANDS]
 
 
 def summarize(events: list[tuple[date, int]], today: date) -> dict:
