@@ -24,6 +24,10 @@ MAX_ACTIVE_GOALS = 2               # FR-GOAL-07
 NONMEMBER_DAILY_LIMIT = 3          # FR-GOAL-12
 NONMEMBER_LIMIT_WINDOW_HOURS = 24  # FR-GOAL-12
 COLD_HISTORY_MONTHS = 12           # FR-GOAL-11 12개월 지난 태그는 제외
+# FR-GOAL-08 — "관심없음"으로 남긴 목표를 추천에서 빼 두는 기간. 배치로 지우는 게
+# 아니라 조회 시점에 created_at 기준으로만 거른다 — 기간이 지나면 별도 삭제 없이도
+# 자동으로 다시 추천 대상에 포함된다 (당시엔 관심없었지만 나중엔 생길 수 있는 경우 대응).
+FEEDBACK_DISMISS_COOLDOWN_DAYS = 30
 
 
 class GoalCandidate(BaseModel):

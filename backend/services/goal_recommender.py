@@ -59,8 +59,12 @@ def _make_client():
     return client, llm.model("fast")
 
 
-def recommend_goals(tags: list[str], weekly_hours: float):
+def recommend_goals(tags: list[str], weekly_hours: float, exclude_ids: frozenset[str] = frozenset()):
     """FR-GOAL-05 — 관심 태그 + 가용시간으로 추천 카드 3~5개를 만든다.
+
+    exclude_ids — FR-GOAL-08: 최근(FEEDBACK_DISMISS_COOLDOWN_DAYS일 이내) "관심없음"으로
+    남긴 goal_id 집합. 호출부(router)가 goal_feedback 조회 결과를 넘겨준다 — 이 함수
+    자체는 DB를 모른다. 기간이 지나 더 이상 넘어오지 않으면 자동으로 다시 섞인다.
 
     반환값: (추천 목록, 실제 검색에 쓴 값 "tags"/"fallback_popular", 전부 기한초과 여부,
              기한을 못 맞춰 빠진 후보 목록)
@@ -72,6 +76,9 @@ def recommend_goals(tags: list[str], weekly_hours: float):
     if not candidates:
         query_used = "fallback_popular"
         candidates = popular_goals(k=RECOMMEND_MAX)
+
+    if exclude_ids:
+        candidates = [c for c in candidates if c.goal_id not in exclude_ids]
 
     evaluated = evaluate_all(candidates, weekly_hours)
     feasible = [c for c in evaluated if c.feasible]

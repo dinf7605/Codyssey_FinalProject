@@ -8,7 +8,7 @@
     ...
     db.rows("study_plans")   # 저장된 행 확인
 
-지원: table().select(count='exact')/insert/upsert/update/delete · eq · in_ · lt · order · limit · range · execute
+지원: table().select(count='exact')/insert/upsert/update/delete · eq · in_ · lt · gte · order · limit · range · execute
 기본값: id 자동 생성(uuid), study_plans.status='active', created_at 은 넣은 순서대로 증가
 """
 
@@ -91,6 +91,10 @@ class _Query:
         self.filters.append((column, _Lt(value)))
         return self
 
+    def gte(self, column, value):
+        self.filters.append((column, _Gte(value)))
+        return self
+
     def order(self, column, desc=False):
         self._order = (column, desc)
         return self
@@ -105,7 +109,9 @@ class _Query:
         return self
 
     def _matches(self, row):
-        return all(v.has(row.get(c)) if isinstance(v, (_In, _Lt)) else row.get(c) == v for c, v in self.filters)
+        return all(
+            v.has(row.get(c)) if isinstance(v, (_In, _Lt, _Gte)) else row.get(c) == v for c, v in self.filters
+        )
 
     def execute(self):
         table = self.db.tables.setdefault(self.name, [])
@@ -173,3 +179,13 @@ class _Lt:
 
     def has(self, value):
         return value is not None and value < self.value
+
+
+class _Gte:
+    def __init__(self, value):
+        self.value = value
+
+    def has(self, value):
+        # ISO-8601 문자열은 사전식 비교가 시간순 비교와 같아서 날짜 필터(created_at
+        # 등)에 그대로 쓸 수 있다.
+        return value is not None and value >= self.value

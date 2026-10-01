@@ -268,6 +268,11 @@ export const api = {
         session_id: sessionId,
       }),
 
+    // FR-GOAL-08 — "관심없음" 피드백 취소. 회원이면 토큰으로, 비회원이면 sessionId로
+    // 본인 기록만 지운다(백엔드가 확인).
+    cancelFeedback: ({ goalId, sessionId }) =>
+      del(`/goal/feedback/${encodeURIComponent(goalId)}?session_id=${encodeURIComponent(sessionId)}`),
+
     manualCheck: ({ title, dueDate, weeklyHours }) =>
       post('/goal/manual/check', {
         title,

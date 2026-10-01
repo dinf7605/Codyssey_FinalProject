@@ -5,8 +5,10 @@
   POST /goal/suggest             유사 분야 추천 (FR-GOAL-11) · AI 호출 한도 적용
   POST /goal/match               목표 후보 매칭 (FR-GOAL-03) · AI 호출 한도 적용
   POST /goal/recommend           목표 추천 카드 (FR-GOAL-05) · AI 호출 한도 적용
+                                  · 최근 "관심없음"은 제외 (FR-GOAL-08, 30일 뒤 자동 재포함)
   POST /goal/feasibility         기간 적합성 판정 (FR-GOAL-04 · FR-GOAL-09) · LLM 미사용
   POST /goal/feedback            추천 피드백 (FR-GOAL-08)
+  DELETE /goal/feedback/{goal_id} 추천 피드백 취소 (FR-GOAL-08)
   POST /goal/manual/check        기한 실현가능성 경고 (FR-GOAL-10)
   POST /goal/confirm             목표 확정 (FR-GOAL-07)
 
@@ -39,6 +41,7 @@ from schemas.goal import (
 )
 from services.goal_catalog import all_tags, popular_goals, search_catalog, suggest_tags_from_history
 from services.goal_feasibility import evaluate_all, evaluate_candidates, manual_goal_warning
+from services.goal_feedback import recently_dismissed_goal_ids
 from services.goal_limiter import RateLimitExceeded, consume, usage_for
 from services.goal_recommender import recommend_goals
 from utils.auth import get_optional_user
@@ -102,14 +105,22 @@ def match(req: MatchRequest) -> MatchResponse:
 
 
 @router.post("/recommend", response_model=RecommendResponse)
-def recommend(req: RecommendRequest) -> RecommendResponse:
-    """FR-GOAL-05 — 목표 추천 카드. 태그 매칭 + 기간 계산 + 추천 이유를 한 번에 묶는다."""
+def recommend(req: RecommendRequest, user=Depends(get_optional_user)) -> RecommendResponse:
+    """FR-GOAL-05 — 목표 추천 카드. 태그 매칭 + 기간 계산 + 추천 이유를 한 번에 묶는다.
+
+    FR-GOAL-08 — 최근(FEEDBACK_DISMISS_COOLDOWN_DAYS일 이내) "관심없음"으로 남긴
+    목표는 이 추천에서 뺀다. 별도로 지우지 않아도 그 기간이 지나면 조회 조건에서
+    자연히 빠져 다시 추천 대상에 포함된다.
+    """
     try:
         usage = consume(req.session_id, req.is_member)
     except RateLimitExceeded as exc:
         raise HTTPException(status_code=429, detail=exc.message) from exc
 
-    top, query_used, all_exceeded, excluded = recommend_goals(req.tags, req.weekly_hours)
+    dismissed = recently_dismissed_goal_ids(req.session_id, user.id if user else None)
+    top, query_used, all_exceeded, excluded = recommend_goals(
+        req.tags, req.weekly_hours, exclude_ids=dismissed
+    )
     return RecommendResponse(
         candidates=top,
         query_used=query_used,
@@ -160,6 +171,33 @@ def feedback(req: FeedbackRequest, user=Depends(get_optional_user)) -> FeedbackR
     except Exception:  # noqa: BLE001 - DB 미설정·일시 장애여도 추천 흐름을 막지 않는다
         pass
     return FeedbackResponse(ok=True, message="피드백을 받았습니다. 다음 추천에 반영할게요.")
+
+
+@router.delete("/feedback/{goal_id}", response_model=FeedbackResponse)
+def delete_feedback(
+    goal_id: str, session_id: str | None = None, user=Depends(get_optional_user)
+) -> FeedbackResponse:
+    """FR-GOAL-08 — 남긴 "관심없음" 피드백을 취소(삭제)한다.
+
+    마이페이지 같은 별도 관리 화면이 없어도, 방금 "관심없음"을 누른 자리에서 바로
+    "취소"할 수 있게 하기 위한 용도다. 회원이면 user_id로, 비회원이면 session_id로만
+    자기 기록을 지운다 — 다른 사람 세션의 기록은 지울 수 없다. DB가 없거나 실패해도
+    (POST /goal/feedback과 동일하게) 화면 흐름은 막지 않는다.
+    """
+    try:
+        query = get_supabase_client().table("goal_feedback").delete().eq("goal_id", goal_id)
+        if user:
+            query = query.eq("user_id", user.id)
+        elif session_id:
+            query = query.eq("session_id", session_id)
+        else:
+            raise HTTPException(status_code=400, detail="session_id가 필요합니다.")
+        query.execute()
+    except HTTPException:
+        raise
+    except Exception:  # noqa: BLE001 - DB 미설정·일시 장애여도 흐름을 막지 않는다
+        pass
+    return FeedbackResponse(ok=True, message="피드백을 취소했어요.")
 
 
 @router.post("/confirm", response_model=ConfirmResponse)

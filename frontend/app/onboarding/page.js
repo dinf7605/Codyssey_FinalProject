@@ -87,6 +87,10 @@ export default function OnboardingPage() {
   const [excludedCandidates, setExcludedCandidates] = useState([]);
   const [feedbackDone, setFeedbackDone] = useState({}); // goal_id -> true (제출 후 카드 숨김)
   const [reasonPromptFor, setReasonPromptFor] = useState(null);
+  // "관심없음" 직후 잠깐 보여주는 취소 배너 — 마이페이지 같은 별도 관리 화면이 아직
+  // 없어서(FR-MY, 다른 담당 영역), 누른 자리에서 바로 되돌릴 수 있게 해 둔다.
+  const [lastDismissed, setLastDismissed] = useState(null); // { goalId, title } | null
+  const dismissTimerRef = useRef(null);
 
   const [manualGoal, setManualGoal] = useState({ title: '', dueDate: '', weeklyHours: '' });
   const [manualWarning, setManualWarning] = useState(null);
@@ -125,6 +129,13 @@ export default function OnboardingPage() {
     }
     window.addEventListener('pageshow', handlePageShow);
     return () => window.removeEventListener('pageshow', handlePageShow);
+  }, []);
+
+  // 언마운트 시 취소 배너 타이머 정리.
+  useEffect(() => {
+    return () => {
+      if (dismissTimerRef.current) clearTimeout(dismissTimerRef.current);
+    };
   }, []);
 
   function toggleTag(tag) {
@@ -308,6 +319,10 @@ export default function OnboardingPage() {
     // 돌아왔을 때 방금 고른 카드까지 사라지면 안 되므로 숨김 처리는 하지 않는다.
     if (!interested) {
       setFeedbackDone((prev) => ({ ...prev, [candidate.goal_id]: true }));
+      // 잠깐 "취소" 배너를 보여준다 — 이전 배너가 떠 있었으면 타이머부터 정리.
+      if (dismissTimerRef.current) clearTimeout(dismissTimerRef.current);
+      setLastDismissed({ goalId: candidate.goal_id, title: candidate.title });
+      dismissTimerRef.current = setTimeout(() => setLastDismissed(null), 8000);
     }
     setReasonPromptFor(null);
     try {
@@ -319,6 +334,22 @@ export default function OnboardingPage() {
       });
     } catch {
       /* 저장 실패로 흐름을 막지 않는다 — FR-GOAL-08 세부사항: 로컬 큐 대신 조용히 넘어간다 */
+    }
+  }
+
+  // "관심없음" 취소 — 카드를 다시 보여주고, 서버에 저장된 피드백 기록도 지운다.
+  async function undoFeedback(goalId) {
+    if (dismissTimerRef.current) clearTimeout(dismissTimerRef.current);
+    setLastDismissed(null);
+    setFeedbackDone((prev) => {
+      const next = { ...prev };
+      delete next[goalId];
+      return next;
+    });
+    try {
+      await api.goal.cancelFeedback({ goalId, sessionId: getAnonSessionId() });
+    } catch {
+      /* 취소 요청이 실패해도 화면은 이미 복구했다 — 조용히 넘어간다 */
     }
   }
 
@@ -648,6 +679,29 @@ export default function OnboardingPage() {
               />
             ) : (
               <>
+                {lastDismissed && (
+                  <div
+                    className="hint"
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      gap: 8,
+                      background: 'var(--surface-2)',
+                      borderRadius: 8,
+                      padding: '10px 12px',
+                    }}
+                  >
+                    <span style={{ fontSize: 13 }}>'{lastDismissed.title}'을(를) 관심없음으로 처리했어요.</span>
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-quiet btn-quiet-hover"
+                      onClick={() => undoFeedback(lastDismissed.goalId)}
+                    >
+                      취소
+                    </button>
+                  </div>
+                )}
                 {excludedCandidates.length > 0 && (
                   <div
                     className="hint"
