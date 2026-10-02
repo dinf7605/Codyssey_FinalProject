@@ -11,6 +11,18 @@ import { showNewAlerts } from '@/lib/browserAlerts';
 // 브라우저 알림을 허용했으면 새로 온 알림을 브라우저 알림으로도 띄운다 (FR-ALARM-01, lib/browserAlerts.js).
 
 const POLL_MS = 60 * 1000;
+// 머리글·사이드바 두 곳에 이 링크가 있어 같은 목록을 두 번 부르지 않게 잠깐 같이 쓴다
+const SHARE_MS = 5 * 1000;
+let shared = { token: null, at: 0, promise: null };
+
+function loadShared(token) {
+  const now = Date.now();
+  if (!shared.promise || shared.token !== token || now - shared.at > SHARE_MS) {
+    shared = { token, at: now, promise: api.notifications.list() };
+    shared.promise.catch(() => { shared = { token: null, at: 0, promise: null }; });
+  }
+  return shared.promise;
+}
 
 export default function NotificationLink({ position }) {
   const pathname = usePathname();
@@ -23,7 +35,7 @@ export default function NotificationLink({ position }) {
 
     async function load() {
       try {
-        const rows = await api.notifications.list();
+        const rows = await loadShared(token);
         if (alive && getToken() === token) {
           setState({ token, unread: rows.filter((r) => !r.is_read).length });
           showNewAlerts(rows);

@@ -328,7 +328,8 @@ export default function OnboardingPage() {
       const weeksLeft = deadlineWeeksLeft(c);
       return (
         `'${c.title}'은(는) 보통 ${c.standard_hours}시간(약 ${c.min_weeks}주)이 필요해요.` +
-        (c.deadline ? ` 다음 응시 가능일(${c.deadline})까지 남은 기간은 약 ${weeksLeft}주라 부족해요.` : '')
+        // 공모전은 '응시'가 아니라 '마감' — 자격증만 다음 응시 가능일이라고 부른다
+        (c.deadline ? ` ${c.kind === 'contest' ? '접수 마감일' : '다음 응시 가능일'}(${c.deadline})까지 남은 기간은 약 ${weeksLeft}주라 부족해요.` : '')
       );
     }
     const titles = list.map((c) => c.title).join(', ');
