@@ -33,7 +33,8 @@ app.include_router(goal.router)    # FR-GOAL-* (담당 B)
 
 # ── CORS 설정 (프론트-백엔드 도메인 통신 허가) ──
 # .env의 FRONTEND_ORIGIN 값을 읽고, 없으면 로컬 기본값 사용
-frontend_origin = os.getenv("FRONTEND_ORIGIN", "http://localhost:3000")
+# 끝의 / 는 뗀다 — 브라우저가 보내는 Origin 에는 / 가 없어서, 붙여 넣으면 CORS 가 전부 막힌다
+frontend_origin = os.getenv("FRONTEND_ORIGIN", "http://localhost:3000").strip().rstrip("/")
 
 app.add_middleware(
     CORSMiddleware,
