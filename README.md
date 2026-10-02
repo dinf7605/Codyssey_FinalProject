@@ -51,6 +51,32 @@
 
 ---
 
+## 시스템 아키텍처
+
+```mermaid
+flowchart LR
+    user(["사용자"]) --> fe["프론트엔드<br/>Next.js · Vercel"]
+    fe -- "HTTPS · JSON" --> api["백엔드 API<br/>FastAPI · Railway"]
+    fe -- 구글 로그인 --> auth[("Supabase Auth")]
+    subgraph BE["백엔드"]
+        api --> ai["AI 레이어<br/>학습 분해 Agent · RAG ①② · 이유 문장"]
+        api --> rule["결정론 레이어<br/>기간 판정 · 배치 엔진 · 규칙 검증 · 재조정"]
+        worker["알림 워커"]
+    end
+    ai -- "실패 시 템플릿·키워드로 대체" --> rule
+    ai --> llm["Codyssey 게이트웨이<br/>Claude Sonnet 4 · Haiku 4"]
+    api --> db[("Supabase PostgreSQL<br/>RLS")]
+    worker --> db
+    api --> gcal["Google Calendar<br/>바쁜 시간만 1회"]
+    gha["GitHub Actions cron"] -- 배치 API --> api
+    api --> wevity["위비티 공고 수집"]
+```
+
+구성 요소, 4개 파이프라인의 처리 흐름, 데이터 모델, 인증·보안, 자동화, 배포 구성은
+**[docs/architecture.md](docs/architecture.md)** 에 그림과 함께 정리했다.
+
+---
+
 ## 팀원 역할
 
 전원 비전공자이므로 **기술 스택이 아니라 "화면부터 API까지 하나의 기능 묶음"** 으로 나눴다.
@@ -104,6 +130,7 @@
 | [기획서_학습플래너.md](기획서_학습플래너.md) | 문제 정의 · 타겟 · AI 활용 방식 · 기술 접근 · 일정 · 팀 역할 · 리스크 |
 | [backend/README.md](backend/README.md) | 백엔드 실행 · 학습 분해 Agent · 스케줄 배치 엔진 · 규칙 검증기 · API |
 | [frontend/README.md](frontend/README.md) | 프론트엔드 실행 방법 · 폴더 구조 · 화면↔기능 ID 매핑 · 모바일 대응 |
+| [docs/architecture.md](docs/architecture.md) | **시스템 아키텍처** — 구성 요소 · 파이프라인별 흐름 · 데이터 모델 · 인증·보안 · 자동화 · 배포 |
 | [docs/학습로드맵.md](docs/학습로드맵.md) | 팀 보유 기술(Vercel·Make·Python) 기준 **추가 학습 항목** · 스택 조정 근거 · 역할별 학습 순서 |
 | `기능명세서_학습플래너.xlsx` | 기능 69개 상세 명세 + AI 기능 명세(Agent 도구표, RAG 파라미터, 폴백 정책, 평가 방법) |
 | `-1.png` | 4개 파이프라인 다이어그램 |
