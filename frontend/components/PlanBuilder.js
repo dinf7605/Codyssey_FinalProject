@@ -8,7 +8,7 @@ import { clearContestPlanning, loadContestPlanning } from '@/lib/contest-plannin
 import { planInput, slotsHours, weeksBetween } from '@/lib/planInput';
 import { clearDraft, draftKey, loadDraft, saveDraft } from '@/lib/planDraft';
 import { clearBusy, loadBusy, startCalendarConnect } from '@/lib/calendarBusy';
-import { notifyPlanChanged } from '@/lib/usePlan';
+import { notifyPlanChanged, usePlan } from '@/lib/usePlan';
 import { AiBadge, AiNotice } from './AiNotice';
 import EmptyState from './EmptyState';
 
@@ -94,6 +94,7 @@ export default function PlanBuilder() {
   }, [saved]);
   // 사용자가 고친 기한 — 목표가 바뀌면 버린다. 보관본에 있으면 이어받는다
   const [deadlineEdit, setDeadlineEdit] = useState(draft?.deadlineEdit ?? null);
+  const active = usePlan();
   const input =
     baseInput && deadlineEdit && deadlineEdit.goal === baseInput.goalTitle
       ? { ...baseInput, deadline: deadlineEdit.value, deadlineSource: 'user' }
@@ -251,6 +252,11 @@ export default function PlanBuilder() {
   }
 
   const weeklyHours = slotsHours(input.availability.slots);
+  const full =
+    active.status === 'ready' &&
+    active.maxPlans > 0 &&
+    active.plans.length >= active.maxPlans &&
+    !active.plans.some((p) => p.goal_title === input.goalTitle);
   const deadlineValid = input.deadline > input.startDay;
   // 확정한 뒤에는 고치지 않는다 — 저장된 계획은 일정 화면에서 다룬다
   const editable = view !== 'running' && saveState.state !== 'saved';
@@ -318,7 +324,7 @@ export default function PlanBuilder() {
           <span>
             {DEADLINE_LABEL[input.deadlineSource]} {input.deadline}
             {deadlineValid && ` (${weeksBetween(input.startDay, input.deadline)}주)`} · 주 {weeklyHours}시간 ·{' '}
-            {input.fromOnboarding ? '온보딩에서 고른 시간' : '기본값: 평일 저녁'}
+            {input.fromContest ? '공모전 화면에서 정한 시간' : input.fromOnboarding ? '온보딩에서 고른 시간' : '기본값: 평일 저녁'}
           </span>
         </div>
         {view === 'done' && (
@@ -379,9 +385,17 @@ export default function PlanBuilder() {
         </div>
       )}
 
+      {/* 진행 중 목표가 이미 가득 찼으면 1분 걸려 만든 뒤 저장에서 막히지 않게 미리 알린다 (같은 목표를 다시 만드는 건 교체라 괜찮다) */}
+      {full && (
+        <p className="hint hint-error" role="alert">
+          진행 중인 목표가 {active.maxPlans}개라 새 목표의 계획은 저장할 수 없어요.{' '}
+          <Link href="/mypage#goal-settings">목표 관리</Link>에서 하나를 끝내면 만들 수 있어요.
+        </p>
+      )}
+
       {view === 'idle' && (
         <>
-          <button type="button" className="btn btn-primary" onClick={run} disabled={!deadlineValid}>
+          <button type="button" className="btn btn-primary" onClick={run} disabled={!deadlineValid || full}>
             AI로 학습 계획 만들기
           </button>
           <p className="hint">

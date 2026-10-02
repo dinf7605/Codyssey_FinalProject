@@ -6,3 +6,6 @@
 .keywords button:disabled { opacity: .5; cursor: not-allowed; }
 .actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .actions > button, .actions > a { min-height: 48px; }
+.add { display: flex; gap: 8px; }
+.add input { flex: 1; min-width: 0; }
+.add button { min-height: 48px; flex-shrink: 0; }

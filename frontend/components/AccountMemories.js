@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import { useAuthToken } from '@/lib/auth-token';
-import { clearContestInterests } from '@/lib/contest-interest-memory';
+import { ACCOUNT_MEMORY_EVENT, clearContestInterests, notifyAccountMemories } from '@/lib/contest-interest-memory';
 import SectionTitle from '@/components/SectionTitle';
 
 const LABELS = {
@@ -30,12 +30,21 @@ export default function AccountMemories() {
   const signedIn = Boolean(token);
   const rows = loaded?.owner === token ? loaded.rows : null;
 
+  const [version, setVersion] = useState(0);
+
+  // 위 '저장된 관심 키워드'에서 추가·삭제하면 다시 읽는다
+  useEffect(() => {
+    const reload = () => setVersion((v) => v + 1);
+    window.addEventListener(ACCOUNT_MEMORY_EVENT, reload);
+    return () => window.removeEventListener(ACCOUNT_MEMORY_EVENT, reload);
+  }, []);
+
   useEffect(() => {
     if (token) api.memories.list().then((result) => setLoaded({ owner: token, rows: result })).catch((err) => {
       setLoaded({ owner: token, rows: [] });
       setMessage(err.message);
     });
-  }, [token]);
+  }, [token, version]);
 
   async function remove(id) {
     try {
@@ -45,6 +54,7 @@ export default function AccountMemories() {
       }
       setLoaded((previous) => ({ owner: token, rows: previous.rows.filter((row) => row.id !== id) }));
       setMessage('저장된 정보를 삭제했습니다.');
+      notifyAccountMemories();
     } catch (err) { setMessage(err.message); }
   }
 
@@ -54,6 +64,7 @@ export default function AccountMemories() {
       try { clearContestInterests(); } catch { /* 서버 삭제는 이미 완료됨 */ }
       setLoaded({ owner: token, rows: [] });
       setMessage('저장된 정보를 모두 삭제했습니다.');
+      notifyAccountMemories();
     } catch (err) { setMessage(err.message); }
   }
 

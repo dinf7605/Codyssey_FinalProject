@@ -141,7 +141,16 @@ export default function DashboardPage() {
   const hasPlan = plan.status === 'ready' && plan.plans.length > 0;
   const plans = hasPlan ? [...plan.plans].sort((a, b) => a.deadline.localeCompare(b.deadline)) : [];
   // 계획에 저장한 휴식 요일(0=월 … 6=일). 예전 계획처럼 없으면 기본 일요일
-  const restDay = plans.some((p) => (p.availability?.rest_weekday ?? 6) === weekdayMon(today));
+  // null 은 '쉬는 날 없음'(일요일까지 공부 시간으로 고름)이다 — ?? 로 기본값을 씌우면 일요일로 잘못 읽는다
+  const restDay = plans.some((p) => {
+    const rest = p.availability && 'rest_weekday' in p.availability ? p.availability.rest_weekday : 6;
+    return rest !== null && rest === weekdayMon(today);
+  });
+  // 오늘이 어느 계획에서도 공부 시간으로 고른 요일이 아니다 — '미뤄서 비었다'고 하면 틀린 말이 된다 (10-02 실사용: 금요일)
+  const offDay = plans.length > 0 && plans.every((p) => {
+    const slots = p.availability?.slots || [];
+    return slots.length > 0 && !slots.some((slot) => slot.weekday === weekdayMon(today));
+  });
   const primary = plans[0];
 
   const todayBlocks = plan.blocks
@@ -202,6 +211,12 @@ export default function DashboardPage() {
                 <EmptyState
                   title="오늘은 쉬는 날이에요"
                   description="주 1일은 휴식일로 비워 둡니다. 다음 블록은 일정에서 확인할 수 있어요."
+                  action={<Link className="btn btn-green btn-sm" href="/schedule">일정 보기</Link>}
+                />
+              ) : offDay ? (
+                <EmptyState
+                  title="오늘은 공부 시간으로 고른 날이 아니에요"
+                  description="고른 요일에만 블록을 놓아요. 요일을 바꾸려면 마이페이지의 목표 관리에서 가용시간을 고칠 수 있어요."
                   action={<Link className="btn btn-green btn-sm" href="/schedule">일정 보기</Link>}
                 />
               ) : (

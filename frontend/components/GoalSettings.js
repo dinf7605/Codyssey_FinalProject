@@ -114,8 +114,14 @@ export default function GoalSettings({ plans }) {
     setEnding(plan.plan_id);
     setError('');
     try {
-      await api.plan.archive(plan.plan_id);
-      setMessage(`'${plan.goal_title}' 목표를 종료했어요.`);
+      const res = await api.plan.archive(plan.plan_id);
+      // 이 목표에 들어 있던 관심 공모전 준비 블록이 어디로 갔는지 함께 알린다
+      const prep = res?.contest_prep || {};
+      const notes = [
+        prep.moved ? `관심 공모전 준비 블록은 남은 목표 일정으로 옮겼어요(${prep.moved}건).` : '',
+        prep.unplaced ? `관심 공모전 ${prep.unplaced}건은 넣을 목표가 없어 준비 블록 없이 관심 등록만 남겼어요.` : '',
+      ].filter(Boolean);
+      setMessage([`'${plan.goal_title}' 목표를 종료했어요.`, ...notes].join(' '));
       notifyPlanChanged();
     } catch (err) {
       setError(err.message || '목표를 종료하지 못했어요.');

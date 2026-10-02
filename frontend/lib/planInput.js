@@ -108,6 +108,15 @@ export function plannedWeeks(picked) {
   return weeks ? Math.ceil(weeks) : null;
 }
 
+/** 쉬는 요일 — 기본은 일요일(6). 사용자가 일요일을 공부 시간으로 골랐으면 고르지 않은 다른 요일로, 7일을 다 골랐으면 두지 않는다.
+ *  (10-02 실사용: 일요일 오전을 골랐는데 기본 휴식일이 일요일이라 그 시간에 블록이 하나도 놓이지 않았다.
+ *   마이페이지 '공부 시간 바꾸기'(GoalSettings)도 일요일을 고르면 휴식일을 두지 않는다) */
+export function restWeekdayFor(slots) {
+  const used = new Set(slots.map((s) => s.weekday));
+  for (const weekday of [6, 5, 4, 3, 2, 1, 0]) if (!used.has(weekday)) return weekday;
+  return null;
+}
+
 export function planInput(saved = loadExploration(), now = new Date(), contest = loadContestPlanning()) {
   const today = toISODate(now);
   if (contest) {
@@ -140,7 +149,7 @@ export function planInput(saved = loadExploration(), now = new Date(), contest =
     goalTitle: picked?.title || null,
     // 온보딩은 목표 ID를 넘기지 않는다. 'custom' 이면 에이전트가 카탈로그에서 찾아본다.
     goalId: 'custom',
-    availability: { slots },
+    availability: { slots, rest_weekday: restWeekdayFor(slots) },
     today,
     startDay,
     deadline,

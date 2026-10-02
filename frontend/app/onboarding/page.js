@@ -106,6 +106,7 @@ export default function OnboardingPage() {
   const [manualWarning, setManualWarning] = useState(null);
 
   const [picked, setPicked] = useState(null); // 확정할 목표 (추천 카드 또는 직접 입력)
+  const [needsClosing, setNeedsClosing] = useState(false); // 진행 중 목표 2개 제한에 걸림
   const [limitMessage, setLimitMessage] = useState('');
   const [limitOrigin, setLimitOrigin] = useState('interest'); // 한도에 걸리기 직전 화면 — "이전" 복귀용
   const [provisionalPick, setProvisionalPick] = useState(null); // 인기 목표 목록에서 직접 고른 후보
@@ -454,6 +455,7 @@ export default function OnboardingPage() {
       const res = await api.goal.confirm({ goalTitle: picked.title, isMember, activeGoalCount });
       if (res.requires_closing_goal) {
         setError(res.message);
+        setNeedsClosing(true);
         return;
       }
       // FR-GOAL-13 — 가입(또는 재방문) 후 이어받을 수 있도록 세션에 저장해 둔다 (30분 유효)
@@ -521,7 +523,18 @@ export default function OnboardingPage() {
           </header>
         )}
 
-        {error && <p className="hint hint-error">{error}</p>}
+        {error && (
+          <p className="hint hint-error">
+            {error}
+            {/* 목표 2개 제한에 걸렸으면 종료하는 곳으로 바로 보낸다 — 문구만 있고 갈 길이 없었다 (10-02 실사용) */}
+            {needsClosing && view === 'confirm' && (
+              <>
+                {' '}
+                <Link href="/mypage#goal-settings">목표 관리에서 종료하기</Link>
+              </>
+            )}
+          </p>
+        )}
 
         {/* ── FR-GOAL-01 ── */}
         {view === 'interest' && (

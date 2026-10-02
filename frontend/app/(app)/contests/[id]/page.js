@@ -218,7 +218,9 @@ export default function ContestDetailPage() {
           이 공모전 준비 일정 만들기
         </button>
         <p className="hint" style={{ marginTop: 6, textAlign: 'center' }}>
-          {signedIn ? '계획 만들기에서 공모전 이름을 목표로 넣어 주세요' : '일정 저장에는 가입이 필요합니다 · 계획 만들기에서 공모전 이름을 목표로 넣어 주세요'}
+          {signedIn
+            ? '이 공모전을 목표로, 마감일과 위 주당 시간으로 계획 만들기에 채워 드려요'
+            : '이 공모전을 목표로 계획 만들기에 채워 드려요 · 일정 저장에는 가입이 필요합니다'}
         </p>
       </section>
     </>

@@ -100,9 +100,12 @@ def preview(db, user_id: str, contest_id: str, now: datetime) -> dict:
                 break
         if new is None:
             same_day = sorted((b for b in fixed if b.start.date() == day), key=lambda b: b.start)
+            # 그날만 보면 '공부 가능 시간이 없다'고 잘못 말했다 — 앞 이틀에 공부 시간이 있는데 차 있었던 경우 (10-02 실사용)
+            tried = [day - timedelta(days=s) for s in range(SHIFT_DAYS + 1)]
+            has_slot = any(slot.weekday == t.weekday() for t in tried for slot in availability.slots)
             conflicts.append({
                 "day": day.isoformat(), "label": f"D-{d} {_label(day)}",
-                "reason": ("그날과 앞 이틀 모두 빈 시간이 없거나 이미 블록이 3개 있어요." if same_day
+                "reason": ("그날과 앞 이틀의 공부 시간이 이미 다른 블록으로 차 있어요." if has_slot or same_day
                            else "그날과 앞 이틀 모두 공부 가능 시간이 없어요."),
                 "blocks": [{"title": b.title, "start": b.start.isoformat(), "end": b.end.isoformat()} for b in same_day],
             })
@@ -174,6 +177,31 @@ def unregister(db, user_id: str, contest_id: str) -> dict:
     removed = _remove_prep(db, found.get("plan_id"), list(found.get("unit_keys") or []))
     db.table("contest_interests").delete().eq("id", found["id"]).eq("user_id", user_id).execute()
     return {"removed_blocks": removed}
+
+
+def move_after_archive(db, user_id: str, plan_id: str, now: datetime) -> dict:
+    """목표를 끝낸 뒤, 그 계획에 넣어 둔 관심 공모전 준비 블록을 남은 목표로 다시 놓는다.
+
+    준비 블록은 계획(plan_id)에 묶여 있어 목표를 끝내면 말없이 함께 사라졌다 (10-02 실사용).
+    다시 놓을 목표·자리가 없으면 관심 등록은 남기고(블록 없이) 몇 건인지 돌려준다 — 화면이 알린다.
+    """
+    rows = (
+        db.table("contest_interests").select("*")
+        .eq("user_id", user_id).eq("plan_id", plan_id).execute().data
+    )
+    moved = unplaced = 0
+    for r in rows:
+        _remove_prep(db, plan_id, list(r.get("unit_keys") or []))
+        db.table("contest_interests").delete().eq("id", r["id"]).eq("user_id", user_id).execute()
+        try:
+            register(db, user_id, str(r["contest_id"]), now)
+            moved += 1
+        except ReplanError:
+            db.table("contest_interests").insert({
+                "user_id": user_id, "contest_id": r["contest_id"], "plan_id": None, "unit_keys": [],
+            }).execute()
+            unplaced += 1
+    return {"moved": moved, "unplaced": unplaced}
 
 
 def list_interests(db, user_id: str) -> list[dict]:

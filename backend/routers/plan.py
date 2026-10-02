@@ -339,7 +339,10 @@ def archive(plan_id: str, user=Depends(get_current_user), db=Depends(get_db)) ->
     """목표 끝내기 — 계획을 보관한다. 학습 기록·통계는 남고, 야간 재조정 대상에서 빠진다."""
     if not archive_plan(db, user.id, plan_id):
         raise HTTPException(status_code=404, detail="진행 중인 내 계획에서 찾지 못했어요.")
-    return {"message": "목표를 끝냈어요. 학습 기록은 그대로 남아요."}
+    # 이 목표에 넣어 둔 관심 공모전 준비 블록은 남은 목표로 옮긴다 (못 옮기면 몇 건인지 알린다)
+    from services import contest_interest
+    contests = contest_interest.move_after_archive(db, str(user.id), plan_id, replan.now_kst())
+    return {"message": "목표를 끝냈어요. 학습 기록은 그대로 남아요.", "contest_prep": contests}
 
 
 class PlaceUnplacedResponse(BaseModel):

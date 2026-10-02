@@ -97,6 +97,30 @@ def test_해제해도_끝낸_준비_블록은_학습_기록이라_남긴다(clie
     assert [b.unit_id for b in plan_blocks(db, pid) if b.unit_id.startswith("contest-")] == [first["unit_key"]]
 
 
+def test_목표를_끝내면_준비_블록을_남은_목표로_옮긴다(client, db):
+    first = plan_id(db)
+    client.post("/contest-interests", json={"contest_id": "11111111-aaaa"})
+    units = template_units("ADsP")
+    blocks = build_schedule(units, AVAIL, START, DEADLINE).blocks
+    save_plan(db, ME.id, goal_title="ADsP", goal_id="cert-adsp", deadline=DEADLINE,
+              source="template", units=units, blocks=blocks, availability=AVAIL)
+    # 공모전 준비 블록이 든 목표를 끝낸다 → 남은 ADsP 일정으로 옮겨진다
+    body = client.post(f"/plan/{first}/archive").json()
+    assert body["contest_prep"] == {"moved": 1, "unplaced": 0}
+    second = plan_id(db)
+    assert len([b for b in plan_blocks(db, second) if b.unit_id.startswith("contest-")]) == 2
+    assert client.get("/contest-interests").json()["interests"][0]["prep_blocks"] == 2
+
+
+def test_옮길_목표가_없으면_관심_등록만_남긴다(client, db):
+    pid = plan_id(db)
+    client.post("/contest-interests", json={"contest_id": "11111111-aaaa"})
+    body = client.post(f"/plan/{pid}/archive").json()
+    assert body["contest_prep"] == {"moved": 0, "unplaced": 1}
+    interest = client.get("/contest-interests").json()["interests"][0]
+    assert interest["prep_blocks"] == 0 and interest["plan_id"] is None
+
+
 def fill_evening(db, pid, day):
     for hour in (19, 20, 21):
         db.table("plan_blocks").insert({

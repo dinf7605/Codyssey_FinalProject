@@ -6,6 +6,14 @@ export const INTEREST_MEMORY_KEY = 'studypace.demo.contest-interests.v1';
 const CHANGE_EVENT = 'studypace:contest-interests-changed';
 const UNAVAILABLE = '__storage_unavailable__';
 
+// 계정 메모리(/memories)가 바뀌었다는 신호 — 마이페이지의 '저장된 관심 키워드'와 '저장된 학습 정보'가
+// 같은 값을 따로 불러와, 한쪽에서 추가·삭제해도 다른 쪽이 옛 값을 보여 줬다 (10-02 실사용)
+export const ACCOUNT_MEMORY_EVENT = 'studypace:account-memories-changed';
+
+export function notifyAccountMemories() {
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event(ACCOUNT_MEMORY_EVENT));
+}
+
 export function normalizeInterestKeywords(value) {
   if (typeof value !== 'string' || value.length > 200) {
     throw new Error('관심 키워드는 200자 이내로 입력해 주세요.');

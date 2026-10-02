@@ -141,9 +141,10 @@ export default function MyPage() {
           <div className="row">
             <div className="row-main">
               <b>구글 캘린더 연동</b>
-              <span>계획을 만들 때 &lsquo;구글 캘린더에서 바쁜 시간 가져오기&rsquo;를 누르면 그 시간을 피해서 놓아요. 바쁜 시간대만 한 번 읽고 권한은 바로 돌려드려요. 학습 일정은 위 &lsquo;내 캘린더에 넣기&rsquo;로 캘린더에 넣을 수 있어요.</span>
+              <span>계획을 만들 때 &lsquo;구글 캘린더에서 바쁜 시간 가져오기&rsquo;를 누르면 그 시간을 피해서 놓아요. 바쁜 시간대만 한 번 읽고 권한은 바로 돌려드려요. 학습 일정은 아래 목표 관리의 &lsquo;내 캘린더에 넣기&rsquo;로 캘린더에 넣을 수 있어요.</span>
             </div>
-            <Link className="btn btn-sm" href="/schedule#plan-builder">계획 만들기</Link>
+            {/* 긴 설명 옆에서 버튼이 한 글자씩 세로로 꺾이지 않게 */}
+            <Link className="btn btn-sm" style={{ flexShrink: 0, whiteSpace: 'nowrap' }} href="/schedule#plan-builder">계획 만들기</Link>
           </div>
         </div>
       </section>

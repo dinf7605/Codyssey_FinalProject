@@ -368,12 +368,12 @@ a.btn[href="/contests"], a.btn[href^="/contests/"],
 .stepper-dot { height: 3px; flex: 1; border-radius: 999px; background: var(--rule-2); }
 .stepper-dot.on { background: var(--ink); }
 
-.slots { display: grid; grid-template-columns: 40px repeat(7, 1fr); gap: 4px; }
+.slots { display: grid; grid-template-columns: 58px repeat(7, 1fr); gap: 4px; }
 .slot-head { font-size: 14px; color: var(--ink-3); text-align: center; }
 .slot { aspect-ratio: 1 / 1.15; border-radius: 4px; border: 1px solid var(--rule-2); background: var(--surface); min-height: 0; }
 .slot[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 .slot-time { font-size: 14px; color: var(--ink-3); display: grid; place-content: center; text-align: center; line-height: 1.3; }
-.slot-time .micro { font-size: 14px; }
+.slot-time .micro { font-size: 13px; white-space: nowrap; }
 
 /* ── 주간 일정 ───────────────────────────────────────── */
 .week { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
@@ -589,6 +589,7 @@ a.btn[href="/contests"], a.btn[href^="/contests/"],
   --rule-2: #cbd5e1;
   --accent: #294e80;
   --accent-soft: #eaf0f8;
+  --grow-0: #e3e8ef; /* 진행 막대 바탕 — 어두운 테마 값이 남아 0% 인데 꽉 찬 막대로 보였다 */
   color-scheme: light;
   color: var(--ink);
   background: var(--surface);
