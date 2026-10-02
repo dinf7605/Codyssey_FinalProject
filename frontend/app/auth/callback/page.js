@@ -11,7 +11,8 @@ import { loadExploration } from '@/lib/goalSession';
 // Supabase 가 토큰을 주소의 # 뒤에 붙여 보낸다. 읽자마자 주소창에서 지운다 (기록·공유로 새지 않게).
 // 우리 users 프로필이 없는 첫 방문이면 이메일 가입과 같은 필수 동의 2개를 받는다 (FR-JOIN-02/03).
 
-const AFTER_LOGIN = '/schedule';
+// 대시보드가 실제 계획·기록으로 바뀌어(10-01) 로그인 뒤 첫 화면으로 쓴다 — 계획이 없으면 거기서 목표 정하기로 안내한다
+const AFTER_LOGIN = '/dashboard';
 
 // 개발 모드의 StrictMode 는 effect 를 두 번 돌린다. 두 번째에는 이미 지운 주소를 다시 읽지 않도록 한 번만 읽는다.
 let captured = null;

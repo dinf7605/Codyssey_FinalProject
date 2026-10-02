@@ -28,6 +28,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import queue
 import threading
@@ -59,6 +60,8 @@ from services.scope import check_scope
 from services.scheduler import build_schedule, reschedule_incomplete
 from services.validator import validate_schedule
 from utils.auth import get_current_user, get_optional_user
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/plan", tags=["plan"])
 
@@ -312,6 +315,9 @@ def save(req: SavePlanRequest, user=Depends(get_current_user), db=Depends(get_db
         )
     except PlanLimitReached as exc:
         raise HTTPException(status_code=409, detail=str(exc))
+    except Exception:  # noqa: BLE001 - DB 제약 위반 등. 500 으로 끊기면 화면엔 'Failed to fetch' 만 보였다 (10-02)
+        logger.exception("계획 저장 실패")
+        raise HTTPException(status_code=503, detail="계획을 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.") from None
     return SavePlanResponse(plan_id=plan_id, blocks=len(req.blocks), message="계획을 저장했습니다.")
 
 

@@ -318,6 +318,8 @@ def test_계산과_반대로_말하는_AI_추천_이유는_버린다():
     tight = _candidate(9, 6)   # 9주 필요 · 6주 남음 — 빠듯
     assert not reason_consistent("시간 여유가 충분합니다.", tight)
     assert reason_consistent("시험까지 6주라 빠듯하게 준비해야 해요.", tight)
+    # 빠듯한데 낙관만 하는 문장 (10-02 test05: 4주 필요 · 3주 남음인데 "3주 내 준비 완료가 가능")
+    assert not reason_consistent("주당 18시간 집중 학습하면 6주 내 준비 완료가 가능합니다.", tight)
 
 
 def test_AI_이유가_틀리면_템플릿으로_바꾼다(monkeypatch):

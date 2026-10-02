@@ -14,7 +14,8 @@ import { loadExploration } from '@/lib/goalSession';
 
 // 로그인 뒤 돌아갈 곳. 일정·학습 화면이 /login?next=/study 처럼 보낸다.
 // 우리 사이트 안의 경로만 받는다 — '//evil.com' 같은 주소로 내보내는 데 쓰이지 않게.
-const AFTER_LOGIN = '/schedule';
+// 대시보드가 실제 계획·기록으로 바뀌어(10-01) 로그인 뒤 첫 화면으로 쓴다 — 계획이 없으면 거기서 목표 정하기로 안내한다
+const AFTER_LOGIN = '/dashboard';
 
 function nextPath() {
   const next = new URLSearchParams(window.location.search).get('next');

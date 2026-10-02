@@ -46,6 +46,9 @@ def reason_consistent(text: str, candidate: FeasibleCandidate) -> bool:
         return False
     if tight is True and any(w in text for w in _ROOMY_WORDS):
         return False
+    # 빠듯하면 빠듯하다고 말해야 한다 — "3주 내 준비 완료가 가능합니다"처럼 반대말 없이 낙관만 하면 걸러지지 않았다 (10-02 실사용)
+    if tight is True and not any(w in text for w in _TIGHT_WORDS):
+        return False
     allowed = set()
     if candidate.recommended_weeks > 0:
         allowed.add(math.ceil(candidate.recommended_weeks))
