@@ -436,11 +436,11 @@ def replan_now(user=Depends(get_current_user), db=Depends(get_db)) -> dict:
 def nightly(
     background: BackgroundTasks, x_batch_key: str | None = Header(default=None), db=Depends(get_db)
 ) -> dict:
-    """전체 야간 재조정 — 매일 03:00 스케줄러(Make·cron)가 부른다.
+    """전체 야간 재조정 — 매일 03:00 GitHub Actions(.github/workflows/plan-jobs.yml)가 부른다.
 
     사람이 부르는 API 가 아니라서 로그인 대신 X-Batch-Key 헤더를 확인한다 (.env 의 BATCH_SECRET).
     사용자마다 AI 요약을 부르느라 오래 걸릴 수 있어서 바로 202 로 답하고 뒤에서 돈다 —
-    스케줄러의 HTTP 시간 제한(Make 기본 40초)에 걸려 실패로 보이지 않게. 결과는 batch_runs 에 남는다.
+    호출하는 쪽의 HTTP 시간 제한(워크플로 curl 30초)에 걸려 실패로 보이지 않게. 결과는 batch_runs 에 남는다.
     """
     expected = os.getenv("BATCH_SECRET")
     if not expected:

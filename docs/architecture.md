@@ -42,7 +42,7 @@ flowchart TB
     llm["Codyssey 게이트웨이<br/>Claude Sonnet 4 · Haiku 4"]
     google["Google<br/>OAuth · Calendar FreeBusy"]
     wevity["위비티<br/>공모전 목록·상세"]
-    gha["GitHub Actions<br/>CI · 공고 수집/추천 cron"]
+    gha["GitHub Actions<br/>CI · 공고 수집/추천 · 야간 재조정 cron"]
 
     user --> pages
     admin --> pages
@@ -58,7 +58,7 @@ flowchart TB
     worker --> pg
     api -- "바쁜 시간 1회 읽기 후 토큰 폐기" --> google
     auth -- "OAuth" --> google
-    gha -- "POST /contests/collect · recommend-weekly<br/>(X-Batch-Key)" --> api
+    gha -- "POST /contests/collect · recommend-weekly · /plan/nightly<br/>(X-Batch-Key)" --> api
     api -- "robots.txt 확인 · 3초 간격" --> wevity
 ```
 
@@ -69,7 +69,7 @@ flowchart TB
 | DB · 인증 | Supabase (PostgreSQL + Auth) | 회원·계획·학습 기록·메모리·알림·공고. 백엔드만 서비스 키로 쓴다 |
 | LLM | Codyssey 게이트웨이 → Claude | Sonnet 4: 학습 분해 Agent / Haiku 4: 관련성 판단·추천 이유·요약 |
 | 외부 연동 | Google OAuth · Calendar · 위비티 | 구글 로그인, 바쁜 시간 읽기, 공모전 수집 |
-| 자동화 | GitHub Actions cron · 알림 워커 · 배치 API | 공고 수집·주간 추천, 알림 6종, 야간 재조정 (§5) |
+| 자동화 | GitHub Actions cron · 알림 워커 · 배치 API | 공고 수집·주간 추천·야간 재조정은 GitHub Actions, 분 단위 알림 6종은 워커 (§5) |
 
 ## 2. 설계 원칙 — LLM 을 쓰는 곳과 쓰지 않는 곳을 가른다
 
@@ -211,7 +211,7 @@ flowchart LR
 |---|---|---|---|
 | 공고 수집 | `POST /contests/collect` | 매일 05:00 | GitHub Actions `contest-jobs.yml` (저장소 변수로 켜고 끔) |
 | 주간 공모전 추천 | `POST /contests/recommend-weekly` | 월 09:00 | GitHub Actions `contest-jobs.yml` |
-| 야간 재조정 | `POST /plan/nightly` | 매일 03:00 | **배포 후 연결 예정** (그전에는 일정 화면 '지금 다시 놓기') |
+| 야간 재조정 | `POST /plan/nightly` | 매일 03:00 | GitHub Actions `plan-jobs.yml` (배포 후 저장소 변수로 켬) |
 | 알림 6종 | `POST /batch/alarm/{before-block · after-block · daily-nightly · weekly-summary · replan-result · contest-deadline}` | 1분 ~ 주 1회 | 알림 워커 `workers/notification_worker.py` (APScheduler, 한국 시각) |
 
 알림은 앱 안 알림(`notification_logs`)으로 쌓이고, 사이트를 열어 둔 브라우저는 허락을 받으면 브라우저 알림으로도 띄운다.
@@ -305,7 +305,7 @@ flowchart LR
 | `BATCH_SECRET` | Railway · GitHub Actions | 배치 API 보호 |
 | `AI_DAILY_BUDGET_USD` · `IP_HASH_SALT` | Railway | 비용 한도 · IP 해시 |
 
-배포 후 할 일: 구글 OAuth 클라이언트와 Supabase Redirect URLs 에 배포 주소 추가, `BATCH_SECRET` 설정, 야간 재조정 03:00 연결, 테스트 계정 정리.
+배포 후 할 일: 구글 OAuth 클라이언트와 Supabase Redirect URLs 에 배포 주소 추가, GitHub 저장소 secrets(`STUDYPACE_API_BASE`·`BATCH_SECRET`)와 variables(`CONTEST_COLLECTION_ENABLED`·`CONTEST_RECOMMENDATIONS_ENABLED`·`NIGHTLY_REPLAN_ENABLED`) 설정, 알림 워커 실행, 테스트 계정 정리.
 현재 로컬 실행은 [README 실행 방법](../README.md#실행-방법)을 따른다.
 
 ## 9. 관련 문서

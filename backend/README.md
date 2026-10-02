@@ -293,7 +293,7 @@ pytest -q                     # 테스트
 | 사유 | 블록마다 규칙 문구. 요약 한 줄은 `claude-haiku-4` (15초), 실패하거나 책망하는 말이 섞이면 규칙 문구 |
 | 되돌리기 | 가장 최근 재조정만, 한 번만. 그사이 끝냈거나 직접 옮긴 블록은 두고 나머지만 |
 | 기한 조정 제안 | 블록이 밀린 날이 3일 연속이면 `suggest_extension` |
-| 배치 전체 | 사용자별 순차 실행, 한 사람 실패해도 다음 사람 계속. 결과는 `batch_runs` (관리자 로그). 요청에는 바로 202 — Make 시간 제한에 안 걸리게 |
+| 배치 전체 | 사용자별 순차 실행, 한 사람 실패해도 다음 사람 계속. 결과는 `batch_runs` (관리자 로그). 요청에는 바로 202 — 호출하는 쪽(GitHub Actions)의 시간 제한에 안 걸리게 |
 | 기한이 지난 계획 | 건너뛴다 — 옮길 자리가 없는데 날마다 같은 기록만 쌓이므로 |
 
 **목표 2개 (`FR-GOAL-07`)** — 진행 중인 계획은 목표마다 하나, 최대 2개 (`schemas.goal.MAX_ACTIVE_GOALS`).
@@ -304,7 +304,7 @@ pytest -q                     # 테스트
 **블록 직접 편집 (`FR-PLAN-05`)** — 옮긴 블록은 `locked` 가 되어 재조정에서 빠진다. 이번 이동으로 새로 생긴 위반만 본다.
 겹침·기한 초과는 강행할 수 없고, 선행 순서·하루 상한은 경고 후 사용자가 강행을 고를 수 있다.
 
-**03:00 실행** — `POST /plan/nightly` 를 Make(또는 cron)가 부른다. 헤더 `X-Batch-Key: <BATCH_SECRET>`. 스케줄 연결은 담당 E.
+**03:00 실행** — `POST /plan/nightly` 를 GitHub Actions `.github/workflows/plan-jobs.yml` 이 부른다. 헤더 `X-Batch-Key: <BATCH_SECRET>`. 저장소 secrets `STUDYPACE_API_BASE`·`BATCH_SECRET`, variable `NIGHTLY_REPLAN_ENABLED=true` 로 켠다.
 상태 없는 `/plan/reschedule` 도 남아 있다 — 예외가 나면 받은 블록을 그대로 돌려준다.
 
 ### 테스트
@@ -487,4 +487,4 @@ python -m evals.run_eval --round 4 --no-ai                          # 규칙 경
 - [x] 학습 기록·집계를 DB 로 (`/study/sessions`, `GET /study/stats`)
 - [ ] 로그인 연결 후 실제 계정으로 저장→조회→학습 기록 확인 (담당 E 의 로그인 화면이 선행)
 - [x] 야간 재조정을 저장된 계획에 적용 (`/plan/nightly`, `/plan/replan-now`)
-- [ ] 03:00 에 `/plan/nightly` 부르기 — Make 시나리오 또는 cron + `BATCH_SECRET` 설정 (담당 E)
+- [x] 03:00 에 `/plan/nightly` 부르기 — GitHub Actions `plan-jobs.yml` (10-02) · 배포 후 저장소 secrets·variable 설정만 남음

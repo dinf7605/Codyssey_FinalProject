@@ -1,0 +1,35 @@
+name: Plan jobs
+
+# FR-PLAN-06 야간 재조정 — 매일 03:00 (한국 시각) 지난 미완료 블록을 남은 기간에 다시 놓는다.
+# 실제 일은 백엔드 POST /plan/nightly 가 한다 (바로 202 로 답하고 뒤에서 실행, 이미 도는 중이면 409).
+# 켜는 법: 저장소 Settings → Secrets and variables → Actions
+#   secrets STUDYPACE_API_BASE (배포한 백엔드 주소) · BATCH_SECRET (백엔드 .env 와 같은 값)
+#   variables NIGHTLY_REPLAN_ENABLED = true
+
+on:
+  schedule:
+    - cron: '0 18 * * *'   # 03:00 Asia/Seoul
+  workflow_dispatch:
+
+jobs:
+  nightly-replan:
+    if: vars.NIGHTLY_REPLAN_ENABLED == 'true' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Reschedule missed blocks
+        env:
+          API_BASE: ${{ secrets.STUDYPACE_API_BASE }}
+          BATCH_KEY: ${{ secrets.BATCH_SECRET }}
+        run: |
+          if [ -z "$API_BASE" ] || [ -z "$BATCH_KEY" ]; then
+            echo 'Batch API URL or key is not configured.' >&2
+            exit 1
+          fi
+          status=$(curl --silent --show-error --max-time 30 --output /dev/null --write-out '%{http_code}' \
+            --request POST --header "X-Batch-Key: $BATCH_KEY" \
+            "${API_BASE%/}/plan/nightly")
+          echo "POST /plan/nightly -> $status"
+          # 202 시작함 · 409 이미 실행 중 (같은 날 두 번 불려도 겹쳐 돌지 않는다)
+          if [ "$status" != "202" ] && [ "$status" != "409" ]; then
+            exit 1
+          fi

@@ -1,6 +1,6 @@
 """알림 배치 (FR-ALARM-01~04) — 실제 일은 services/alarms.py 가 한다.
 
-평소에는 workers/notification_worker.py 가 주기적으로 돌린다. 이 API 는 외부 스케줄러(Make·GitHub Actions)나
+평소에는 workers/notification_worker.py 가 주기적으로 돌린다. 이 API 는 외부 스케줄러(GitHub Actions)나
 수동 확인용이다. 사람이 부르는 API 가 아니므로 로그인 대신 X-Batch-Key(.env 의 BATCH_SECRET)를 본다.
 """
 

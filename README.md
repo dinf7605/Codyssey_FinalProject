@@ -11,8 +11,8 @@
 | 개발 기간 | 2026-09-14 ~ 2026-10-18 (5주) · 발표 10-19~20 |
 | 팀 구성 | 5인 · 전원 비전공자 · AI 도구를 활용해 개발 |
 | 핵심 AI 기술 요소 | **AI Agent · RAG · 자동화 워크플로우 · Long-term Memory** (4개) |
-| 기능 규모 | 총 69개 — Must 38 / Should 25 / Could 4 / Won't 2 |
-| 현재 단계 | 2주차 · **백엔드 API·Supabase·Claude 연결 완료, 화면을 목업에서 실제 API로 옮기는 중** ([개발 기록](#개발-기록)) |
+| 기능 규모 | 총 69개 — Must 38 / Should 25 / Could 3 / Won't 3 · 비기능 요구사항 12개 |
+| 현재 단계 | 3주차 (10-02) · **기능 구현과 내부 점검 완료** (백엔드 테스트 약 500개 · 테스트 계정 실사용 점검 9차) · **배포와 실사용자 테스트(10-08~12) 준비 중** ([개발 기록](#개발-기록)) |
 
 ---
 
@@ -115,7 +115,7 @@ flowchart LR
 | 검색 (RAG ①②) | Claude Haiku 4 관련성 판단 — **임베딩 없음** (09-29 결정) | 과정 제공 키만 사용. 목표는 카탈로그 전체, 공고는 제목 최대 20건을 넣고 0~1 점수. 실패 시 목표는 태그 겹침, 공고는 제목 키워드 |
 | DB · 인증 | Supabase (PostgreSQL + Auth) | 업무 데이터·메모리와 가입/로그인 관리. pgvector 확장은 켜져 있으나 쓰지 않음 |
 | 실시간 집계 | PostgreSQL (1차) → Redis (확장 시) | 실사용자 5~10명 규모에서는 테이블 집계로 충분 · 배울 기술을 하나 줄임 |
-| 자동화 | **Make** | **팀이 이미 쓸 줄 아는 도구** · 반복은 Python에서 돌리고 Make는 트리거만 담당 |
+| 자동화 | **GitHub Actions** (+ Python 알림 워커) | 저장소에 워크플로가 코드로 남아 버전 관리된다 · 정해진 시각에 배치 API 를 부르기만 하고 실제 로직은 Python · 분 단위 알림은 GitHub Actions 주기(최소 5분·지연 가능)가 맞지 않아 APScheduler 워커로 (10-02 Make 에서 변경) |
 | 배포 | **Vercel** (프론트) · Railway (백엔드) | GitHub 연동 자동 배포 · **Vercel 경험 활용** |
 | CI | GitHub Actions | PR 시 lint · test |
 
@@ -131,7 +131,7 @@ flowchart LR
 | [backend/README.md](backend/README.md) | 백엔드 실행 · 학습 분해 Agent · 스케줄 배치 엔진 · 규칙 검증기 · API |
 | [frontend/README.md](frontend/README.md) | 프론트엔드 실행 방법 · 폴더 구조 · 화면↔기능 ID 매핑 · 모바일 대응 |
 | [docs/architecture.md](docs/architecture.md) | **시스템 아키텍처** — 구성 요소 · 파이프라인별 흐름 · 데이터 모델 · 인증·보안 · 자동화 · 배포 |
-| [docs/학습로드맵.md](docs/학습로드맵.md) | 팀 보유 기술(Vercel·Make·Python) 기준 **추가 학습 항목** · 스택 조정 근거 · 역할별 학습 순서 |
+| [docs/학습로드맵.md](docs/학습로드맵.md) | 팀 보유 기술(Vercel·Python 등) 기준 **추가 학습 항목** · 스택 조정 근거 · 역할별 학습 순서 |
 | `기능명세서_학습플래너.xlsx` | 기능 69개 상세 명세 + AI 기능 명세(Agent 도구표, RAG 파라미터, 폴백 정책, 평가 방법) |
 | `-1.png` | 4개 파이프라인 다이어그램 |
 
@@ -435,7 +435,7 @@ test01: 온보딩 → 목표 추천 → AI 계획 생성·확정 → 타이머 5
 - **공용 DB 에서 실제 계정으로 끝까지 (E·전원)** — 10-01 테스트 계정으로 목표 → 계획 → 학습 → 대시보드까지 확인(7차). 앱 가입 → 탈퇴 → 보관본 확인은 아직
 - ~~임베딩 (D·B)~~ ✅ 09-29 — OpenAI 없이 Claude 로만 하기로 결정. RAG ①(목표, `services/goal_claude.py`) ②(공고, `services/contest_claude.py`) 모두 Claude Haiku 관련성 판단. 남은 것: 정답셋으로 임계값 0.60/0.62 확인 (A 품질 평가와 함께)
 - **배포 (E)** — 실사용자 테스트(10-08~)가 여기 걸려 있음
-- **03:00 야간 재조정 스케줄 (E)** — `POST /plan/nightly` 를 Make·cron 으로 부르고 `BATCH_SECRET` 설정. 그전까지는 일정 화면의 "지금 다시 놓기"로 확인
+- **03:00 야간 재조정 스케줄 (E)** — GitHub Actions `plan-jobs.yml` 이 부른다 (10-02 추가). 배포 후 저장소 secrets `STUDYPACE_API_BASE`·`BATCH_SECRET` 과 variable `NIGHTLY_REPLAN_ENABLED=true` 만 넣으면 된다. 그전까지는 일정 화면의 "지금 다시 놓기"로 확인
 - ~~마이그레이션 005~007 정리 후 적용 (E·B)~~ ✅ 09-28 — 007 적용, 005·006 은 014 로 대체해 적용. 팀 코드가 쓰는 테이블은 이제 공용 DB 에 모두 있다
 - `ai_call_logs` 의 테스트 흔적 1건(id 2, `source=template`) 삭제 여부
 
