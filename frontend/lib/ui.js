@@ -35,6 +35,17 @@ export function subjectParticle(word) {
   return code % 28 ? '이' : '가';
 }
 
+// 블록 하나의 최대 길이 — backend/schemas/plan.py MAX_BLOCK_MINUTES 와 같아야 한다
+const MAX_BLOCK_MINUTES = 120;
+
+/** 학습 단위 시간 → '90분' 또는 '6시간 · 블록 3개' (120분이 넘는 단위는 블록 여러 개로 나뉘어 놓인다) */
+export function unitLength(minutes) {
+  if (minutes <= MAX_BLOCK_MINUTES) return `${minutes}분`;
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return `${h}시간${m ? ` ${m}분` : ''} · 블록 ${Math.ceil(minutes / MAX_BLOCK_MINUTES)}개`;
+}
+
 /** 남은 일수 → 'D-12' 형태 (FR-MAIN-04: 기한이 지나면 D+) */
 export function dday(days) {
   if (days === 0) return 'D-DAY';

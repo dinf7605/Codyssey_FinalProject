@@ -15,14 +15,18 @@ from pydantic import BaseModel, Field, field_validator
 
 # 기능명세서에서 정한 값들. 코드 여기저기 흩어지지 않게 한곳에 둔다.
 MIN_UNIT_MINUTES = 30
-MAX_UNIT_MINUTES = 120
+# 학습 단위(주제) 하나의 최대 시간. 배치할 때 MAX_BLOCK_MINUTES 이하 블록 여러 개로 나눠 놓는다.
+# 예전엔 단위 = 블록(최대 120분)이라 단위 25개 × 120분 = 계획 전체 50시간이 상한이었다 —
+# 정보처리기사(120시간)·토익 900+(100시간) 같은 목표를 담지 못했다 (10-02 결정: 단위와 블록 분리)
+MAX_UNIT_MINUTES = 600
+MAX_BLOCK_MINUTES = 120       # 블록 하나 = 한 번 앉아서 공부하는 시간
 MAX_BLOCKS_PER_DAY = 3
 MAX_CONTINUOUS_MINUTES = 120  # 연속 2시간 초과 금지
 BREAK_MINUTES = 10            # 블록 사이 최소 쉬는 시간
 
 
 class StudyUnit(BaseModel):
-    """학습 단위 하나. 30~120분짜리로 쪼갠 결과물."""
+    """학습 단위(주제) 하나. 30~600분 — 120분을 넘으면 배치할 때 블록 여러 개로 나뉜다."""
 
     id: str
     title: str

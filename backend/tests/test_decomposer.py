@@ -149,7 +149,7 @@ def test_예산이_바닥나면_API를_부르지_않는다():
 
 
 def test_스키마가_틀리면_1회_재시도하고_partial이_된다():
-    bad = json.dumps({"units": [{"id": "u01", "title": "너무 김", "estimated_minutes": 500}]})
+    bad = json.dumps({"units": [{"id": "u01", "title": "너무 김", "estimated_minutes": 900}]})
     client = FakeClient([
         respond("end_turn", text(bad)),
         respond("end_turn", text(FINAL_JSON)),
@@ -182,7 +182,7 @@ def test_설명에_다른_JSON_조각이_있어도_units_객체를_답으로_고
 
 
 def test_형식만_틀려_재시도했으면_일부만이라고_하지_않는다():
-    bad = json.dumps({"units": [{"id": "u01", "title": "너무 김", "estimated_minutes": 500}]})
+    bad = json.dumps({"units": [{"id": "u01", "title": "너무 김", "estimated_minutes": 900}]})
     client = FakeClient([respond("end_turn", text(bad)), respond("end_turn", text(FINAL_JSON))])
 
     result = decompose_goal("목표", "g", client=client, model="m")

@@ -34,7 +34,7 @@ from services.plan_store import (
     to_db_time,
     unplaced_units,
 )
-from services.scheduler import blocks_to_redo, build_schedule
+from services.scheduler import blocks_to_redo, build_schedule, place_blocks
 from services.validator import validate_schedule
 
 NIGHTLY_JOB = "plan.nightly_reschedule"
@@ -140,17 +140,16 @@ def compute_replan(
 
     redo_ids = {b.id for b in redo_blocks}
     keep = [b for b in blocks if b.id not in redo_ids]
-    by_id = {u.id: u for u in units}
-    redo = [by_id[b.unit_id] for b in redo_blocks if b.unit_id in by_id]
-    placed = build_schedule(redo, availability, _place_from(availability, now), deadline,
-                            fixed_blocks=keep + list(others))
+    # 블록은 id·길이 그대로 자리만 옮긴다 — 단위 하나가 블록 여러 개일 수 있어 블록 id 로 짝짓는다
+    placed = place_blocks(redo_blocks, units, availability, _place_from(availability, now), deadline,
+                          fixed_blocks=keep + list(others))
 
     keep_ids = {b.id for b in keep} | {b.id for b in others}
-    new_by_unit = {b.unit_id: b for b in placed.blocks if b.id not in keep_ids}
+    new_by_id = {b.id: b for b in placed.blocks if b.id not in keep_ids}
 
     result = Replan(blocks=list(keep), today=today)
     for old in redo_blocks:
-        new = new_by_unit.get(old.unit_id)
+        new = new_by_id.get(old.id)
         if new is None:
             # 뒤 블록이 자리를 못 찾으면 원래 자리에 남는다 — 순서가 어긋나면 아래 검증이 막는다
             if old.start.date() < today:
@@ -576,13 +575,11 @@ def _re_place(db, user_id: str, plan: dict, blocks: list[Block], units: list[Stu
     left: list[Block] = []
     after = list(keep)
     if movable and start_day <= deadline:
-        by_id = {u.id: u for u in units}
-        redo = [by_id[b.unit_id] for b in movable if b.unit_id in by_id]
-        placed = build_schedule(redo, availability, start_day, deadline, fixed_blocks=keep + others)
+        placed = place_blocks(movable, units, availability, start_day, deadline, fixed_blocks=keep + others)
         fixed_ids = {b.id for b in keep} | {b.id for b in others}
-        new_by_unit = {b.unit_id: b for b in placed.blocks if b.id not in fixed_ids}
+        new_by_id = {b.id: b for b in placed.blocks if b.id not in fixed_ids}
         for old in movable:
-            new = new_by_unit.get(old.unit_id)
+            new = new_by_id.get(old.id)
             if new is None:
                 left.append(old)
                 after.append(old)
@@ -779,4 +776,5 @@ def place_unplaced(db, user_id: str, plan_id: str, now: datetime) -> dict:
         for row, b in zip(saved, new)
     ]).execute()
     placed = [b.model_copy(update={"id": str(row["id"])}) for row, b in zip(saved, new)]
-    return {"placed": len(placed), "left": len(waiting) - len(placed), "blocks": placed}
+    placed_units = {b.unit_id for b in new}  # 단위 하나가 블록 여러 개일 수 있다 — 화면은 '단원 N개'로 센다
+    return {"placed": len(placed_units), "left": len(waiting) - len(placed_units), "blocks": placed}

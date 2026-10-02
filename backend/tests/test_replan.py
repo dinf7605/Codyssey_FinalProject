@@ -76,6 +76,25 @@ def test_지난_미완료_블록을_남은_기간으로_옮기고_기록한다(d
     assert all(c["origin"] == "nightly" for c in db.rows("plan_changes"))
 
 
+def test_블록이_여러_개인_단위도_블록마다_그대로_옮긴다():
+    """단위 하나 = 블록 여러 개 (10-02) — 예전엔 단위 id 로 짝지어 둘째 블록부터 덮어썼다."""
+    db = FakeSupabase()
+    units = [StudyUnit(id="u01", title="기출 반복", estimated_minutes=360),
+             StudyUnit(id="u02", title="오답 정리", estimated_minutes=60, prerequisites=["u01"])]
+    blocks = build_schedule(units, AVAIL, START, DEADLINE).blocks
+    save_plan(db, ME.id, goal_title="SQLD", goal_id="cert-sqld", deadline=DEADLINE,
+              source="agent", units=units, blocks=blocks, availability=AVAIL)
+    before = {b.id: b for b in blocks_of(db)}
+
+    replan.run_for_plan(db, plan_of(db), NIGHT, use_ai=False)
+
+    after = blocks_of(db)
+    assert {b.id for b in after} == set(before)          # 블록이 늘거나 줄지 않는다
+    assert all(b.minutes == before[b.id].minutes for b in after)
+    assert all(b.start >= NIGHT for b in after if not b.done)
+    assert validate_schedule(after, plan_units(db, plan_of(db)["id"]), DEADLINE) == []
+
+
 def test_앞_단원이_밀리면_기대는_뒤_블록도_함께_밀린다(db):
     replan.run_for_plan(db, plan_of(db), NIGHT, use_ai=False)
 

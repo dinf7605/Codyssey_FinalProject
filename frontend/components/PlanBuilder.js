@@ -11,6 +11,7 @@ import { clearBusy, loadBusy, startCalendarConnect } from '@/lib/calendarBusy';
 import { notifyPlanChanged, usePlan } from '@/lib/usePlan';
 import { AiBadge, AiNotice } from './AiNotice';
 import EmptyState from './EmptyState';
+import { unitLength } from '@/lib/ui';
 
 // FR-PLAN-02 학습 분해(AI Agent) → FR-PLAN-03 배치 → 규칙 검증
 //
@@ -447,7 +448,7 @@ export default function PlanBuilder() {
             <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
               {isAi ? <AiBadge /> : <span className="pill">기본 계획</span>}
               <span className="tag">
-                학습 단위 {result.units.length}개
+                학습 단위 {result.units.length}개 · 총 {Math.round(result.units.reduce((sum, u) => sum + u.estimated_minutes, 0) / 60)}시간
                 {estimatedCount > 0 && ` · 추정 ${estimatedCount}개`}
                 {result.tool_calls > 0 && ` · 자료 확인 ${result.tool_calls}회`}
               </span>
@@ -464,7 +465,7 @@ export default function PlanBuilder() {
                 <div className="row-main">
                   <b>{u.title}</b>
                   <span>
-                    {u.estimated_minutes}분
+                    {unitLength(u.estimated_minutes)}
                     {u.prerequisites.length > 0 && ' · 앞 단위를 끝낸 뒤'}
                   </span>
                 </div>

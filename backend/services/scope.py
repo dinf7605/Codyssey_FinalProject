@@ -13,8 +13,8 @@ from __future__ import annotations
 import math
 from datetime import date, timedelta
 
-from schemas.plan import BREAK_MINUTES, MAX_BLOCKS_PER_DAY, MAX_UNIT_MINUTES, Availability, StudyUnit
-from services.scheduler import topological_order
+from schemas.plan import BREAK_MINUTES, MAX_BLOCK_MINUTES, MAX_BLOCKS_PER_DAY, Availability, StudyUnit
+from services.scheduler import split_minutes, topological_order
 
 OVER_RATIO = 1.5
 
@@ -31,8 +31,8 @@ def _fit(slot: int, length: int) -> tuple[int, int]:
     return n, n * length
 
 
-def daily_capacity(availability: Availability, lengths: tuple[int, int] = (MAX_UNIT_MINUTES, MAX_UNIT_MINUTES)) -> dict[int, int]:
-    """요일별로 실제로 들어가는 공부 분. lengths = (평균 단위 길이, 가장 짧은 단위 길이).
+def daily_capacity(availability: Availability, lengths: tuple[int, int] = (MAX_BLOCK_MINUTES, MAX_BLOCK_MINUTES)) -> dict[int, int]:
+    """요일별로 실제로 들어가는 공부 분. lengths = (평균 블록 길이, 가장 짧은 블록 길이).
 
     칸마다 평균 길이로 채운 경우와 가장 짧은 단위로 채운 경우 중 큰 쪽을 쓴다 —
     1시간 칸에 평균 90분 단위는 안 들어가도 60분 단위는 들어간다.
@@ -55,7 +55,7 @@ def daily_capacity(availability: Availability, lengths: tuple[int, int] = (MAX_U
 
 def available_minutes(
     availability: Availability, start: date, deadline: date,
-    lengths: tuple[int, int] = (MAX_UNIT_MINUTES, MAX_UNIT_MINUTES),
+    lengths: tuple[int, int] = (MAX_BLOCK_MINUTES, MAX_BLOCK_MINUTES),
 ) -> int:
     cap = daily_capacity(availability, lengths)
     total, day = 0, start
@@ -67,7 +67,9 @@ def available_minutes(
 
 def check_scope(units: list[StudyUnit], availability: Availability, start: date, deadline: date) -> dict:
     total = sum(u.estimated_minutes for u in units)
-    lengths = (round(total / len(units)), min(u.estimated_minutes for u in units)) if units else (MAX_UNIT_MINUTES,) * 2
+    # 칸에 들어가는 건 단위가 아니라 블록이다 — 긴 단위는 120분 이하 블록 여러 개로 나뉘어 놓인다
+    parts = [m for u in units for m in split_minutes(u.estimated_minutes)]
+    lengths = (round(sum(parts) / len(parts)), min(parts)) if parts else (MAX_BLOCK_MINUTES,) * 2
     available = available_minutes(availability, start, deadline, lengths)
     ratio = round(total / available, 2) if available else None
     over = available == 0 or total > available * OVER_RATIO

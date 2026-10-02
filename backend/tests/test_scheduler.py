@@ -6,7 +6,7 @@
 from datetime import date, datetime
 
 from schemas.plan import Availability, Block, StudyUnit, TimeSlot
-from services.scheduler import build_schedule, reschedule_incomplete, topological_order
+from services.scheduler import build_schedule, place_blocks, reschedule_incomplete, split_minutes, topological_order
 from services.validator import validate_schedule
 
 # 월·수·금 저녁, 일요일은 휴식
@@ -129,3 +129,41 @@ def test_고정_블록과_시간이_겹치지_않는다():
     us = units(5, 60)
     plan = build_schedule(us, AVAIL, START, DEADLINE, fixed_blocks=fixed)
     assert validate_schedule(plan.blocks, us, DEADLINE) == []
+
+
+# ── 단위와 블록 분리 (10-02) — 긴 단위는 120분 이하 블록 여러 개로 ─────
+
+def test_120분이_넘는_단위는_고르게_나눈다():
+    assert split_minutes(90) == [90]
+    assert split_minutes(250) == [85, 85, 80]
+    assert all(m <= 120 for m in split_minutes(600)) and sum(split_minutes(600)) == 600
+
+
+def test_긴_단위는_블록_여러_개로_순서대로_놓고_규칙을_지킨다():
+    long = [StudyUnit(id="u01", title="기출 반복", estimated_minutes=360),
+            StudyUnit(id="u02", title="오답 정리", estimated_minutes=60, prerequisites=["u01"])]
+    plan = build_schedule(long, AVAIL, START, DEADLINE)
+
+    parts = [b for b in plan.blocks if b.unit_id == "u01"]
+    assert [b.title for b in parts] == ["기출 반복 (1/3)", "기출 반복 (2/3)", "기출 반복 (3/3)"]
+    assert sum(b.minutes for b in parts) == 360 and all(b.minutes <= 120 for b in parts)
+    assert parts == sorted(parts, key=lambda b: b.start)
+    # 뒤 단위는 앞 단위의 마지막 블록이 끝난 뒤에 시작한다
+    after = next(b for b in plan.blocks if b.unit_id == "u02")
+    assert after.start >= parts[-1].end
+    assert validate_schedule(plan.blocks, long, DEADLINE) == []
+
+
+def test_조각_하나라도_못_넣으면_단위를_통째로_미배치로_남긴다():
+    tight = date(2026, 9, 16)  # 월·수 저녁 2시간씩 = 블록 2개뿐
+    plan = build_schedule([StudyUnit(id="u01", title="큰 단위", estimated_minutes=360)], AVAIL, START, tight)
+    assert plan.blocks == [] and [u.id for u in plan.unplaced] == ["u01"]
+
+
+def test_다시_놓기는_블록_id와_길이를_그대로_두고_자리만_옮긴다():
+    long = [StudyUnit(id="u01", title="기출 반복", estimated_minutes=240)]
+    first = build_schedule(long, AVAIL, START, DEADLINE).blocks
+    moved = place_blocks(first, long, AVAIL, date(2026, 9, 21), DEADLINE).blocks
+    assert sorted(b.id for b in moved) == sorted(b.id for b in first)
+    assert [b.minutes for b in moved] == [b.minutes for b in first]
+    assert min(b.start for b in moved).date() >= date(2026, 9, 21)

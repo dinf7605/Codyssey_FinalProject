@@ -6,6 +6,7 @@ import EmptyState from './EmptyState';
 import PlanDayBlocks from './PlanDayBlocks';
 import SectionTitle from './SectionTitle';
 import { api } from '@/lib/api';
+import { unitLength } from '@/lib/ui';
 import { notifyPlanChanged, usePlan } from '@/lib/usePlan';
 import {
   VIOLATION_LABEL, WEEKDAY_MON, addDays, addMonths, blockState, blocksByDay, dayKey, dayNum, ddayOf,
@@ -289,7 +290,7 @@ export default function PlanCalendar() {
           </p>
           <ul className="unplaced-list">
             {p.unplaced.slice(0, UNPLACED_PREVIEW).map((u) => (
-              <li key={u.id}><i className="dot dot-unplaced" aria-hidden="true" />{u.title}<span className="dim tiny">{u.estimated_minutes}분</span></li>
+              <li key={u.id}><i className="dot dot-unplaced" aria-hidden="true" />{u.title}<span className="dim tiny">{unitLength(u.estimated_minutes)}</span></li>
             ))}
             {p.unplaced.length > UNPLACED_PREVIEW && (
               <li className="dim tiny">외 {p.unplaced.length - UNPLACED_PREVIEW}개</li>

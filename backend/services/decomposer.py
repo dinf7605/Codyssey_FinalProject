@@ -61,12 +61,16 @@ SYSTEM_PROMPT = """너는 학습 계획을 세우는 커리큘럼 설계자다.
   주어진 목표를 공부할 수 있는 단위로 쪼갠다.
 
 지켜야 할 것
-  - 각 단위는 30분 이상 120분 이하로 만든다
+  - 단위는 하나의 공부 주제다. 각 단위는 30분 이상 600분 이하로 만든다
+  - 120분이 넘는 단위는 배치할 때 120분 이하 블록 여러 개로 나뉜다. 같은 주제를 여러 번 앉아서
+    공부해야 하면(기출 반복, 파트별 문제 풀이 등) 단위를 잘게 쪼개지 말고 estimated_minutes 를 늘린다
+  - 사용자가 "목표 표준 학습시간"을 알려주면 단위 estimated_minutes 의 합을 그 시간에 맞춘다
   - 앞 단위를 끝내야 할 수 있는 것은 prerequisites 에 적는다
   - search_curriculum 으로 찾은 범위 안에서 만든다
   - 검색 범위 밖의 내용을 넣어야 하면 그 단위의 estimated 를 true 로 표시한다
-  - 단위는 최대 25개. 짧은 항목은 같은 과목끼리만, 묶은 항목의 minutes 합이 120 이하일 때만 한 단위로 묶는다
-  - 커리큘럼에 minutes 가 있으면 그대로 쓴다. estimate_effort 는 커리큘럼에 없는 단위에만 쓴다
+  - 단위는 최대 25개. 짧은 항목은 같은 과목끼리만, 묶은 항목의 minutes 합이 600 이하일 때만 한 단위로 묶는다
+  - 커리큘럼 minutes 는 한 번 앉아서 공부할 시간이다. 표준 학습시간이 더 크면 반복·문제 풀이로 늘려 맞춘다.
+    estimate_effort 는 커리큘럼에 없는 단위에만 쓴다
   - 첫 턴에 search_curriculum 과 get_available_slots 를 함께 부른다
   - 모르는 것을 아는 것처럼 쓰지 않는다
   - 날짜가 필요하면 사용자가 알려준 오늘 날짜를 기준으로 한다
@@ -116,6 +120,18 @@ def parse_units(payload: dict) -> list[StudyUnit]:
     return [StudyUnit(**item) for item in raw]
 
 
+def standard_minutes(goal_title: str) -> int | None:
+    """카탈로그의 표준 학습시간(분). 카탈로그에 없는 목표(공모전·직접 입력)는 None.
+
+    이게 없으면 AI 가 단위를 얼마나 크게 잡을지 기준이 없어, 토익 900+(표준 100시간)를
+    24시간짜리 계획으로 만들었다 (10-02 실사용).
+    """
+    from services.goal_catalog import find_by_title  # goal_catalog 는 llm 을 쓰지 않는다 — 가볍다
+
+    found = find_by_title(goal_title)
+    return found.standard_hours * 60 if found and found.standard_hours > 0 else None
+
+
 def _is_timeout(exc: Exception) -> bool:
     return "Timeout" in type(exc).__name__
 
@@ -147,7 +163,7 @@ def decompose_goal(
     def fallback(message: str, tool_calls: int = 0) -> DecomposeResult:
         emit({"type": "fallback", "message": message})
         return DecomposeResult(
-            units=template_units(goal_title),
+            units=template_units(goal_title, target_minutes=standard_minutes(goal_title)),
             source="template",
             message=message,
             tool_calls=tool_calls,
@@ -167,6 +183,7 @@ def decompose_goal(
             f"{'월화수목금토일'[s.weekday]} {s.start}~{s.end}" for s in availability.slots
         )
 
+    target = standard_minutes(goal_title)
     messages: list[dict] = [
         {
             "role": "user",
@@ -174,7 +191,8 @@ def decompose_goal(
                 f"오늘 날짜: {today.isoformat()}\n"
                 f"목표: {goal_title} (goal_id: {goal_id})\n"
                 f"주간 가용 시간: {slot_text}\n"
-                f"단위는 {MIN_UNIT_MINUTES}~{MAX_UNIT_MINUTES}분으로 쪼개 주세요."
+                + (f"목표 표준 학습시간: 약 {target // 60}시간 — 단위 시간의 합을 여기에 맞춰 주세요.\n" if target else "")
+                + f"단위는 {MIN_UNIT_MINUTES}~{MAX_UNIT_MINUTES}분으로 만들어 주세요 (120분이 넘으면 블록 여러 개로 나눠 놓습니다)."
             ),
         }
     ]

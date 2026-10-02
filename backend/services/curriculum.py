@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from schemas.plan import MAX_UNIT_MINUTES, MIN_UNIT_MINUTES
+from schemas.plan import MAX_BLOCK_MINUTES, MIN_UNIT_MINUTES
 
 NO_CURRICULUM_NOTE = (
     "이 목표의 표준 커리큘럼이 아직 없습니다. 일반적인 학습 순서로 나누고 모든 단위를 estimated=true 로 표시하세요."
@@ -68,7 +68,8 @@ def _norm(text: str) -> str:
 
 
 def _clamp(minutes: float) -> int:
-    return int(min(MAX_UNIT_MINUTES, max(MIN_UNIT_MINUTES, round(minutes / 10) * 10)))
+    # 한 번 앉아서 공부할 시간이라 블록 길이(120분)로 자른다. 단위 전체 시간은 에이전트가 합쳐서 정한다
+    return int(min(MAX_BLOCK_MINUTES, max(MIN_UNIT_MINUTES, round(minutes / 10) * 10)))
 
 
 def estimate(db, units: list[str], level: str = "intermediate", goal_id: str = "", goal_title: str = "") -> list[dict]:
