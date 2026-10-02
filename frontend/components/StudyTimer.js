@@ -269,6 +269,7 @@ export default function StudyTimer({ blockId = null }) {
       await api.study.cancelDone(id);
       setResult({ state: 'cancelled' });
       notifyPlanChanged();
+      loadStats(); // 완료율이 취소 전 숫자로 남아 있었다
     } catch (err) {
       setResult({ state: 'error', message: err.message });
     }

@@ -32,9 +32,12 @@ export default function ContestInterestMemory({ draftKeywords, onApply, disabled
 
   const [version, setVersion] = useState(0);
 
-  // 다른 곳(저장된 학습 정보)에서 지우면 다시 읽는다
+  // 다른 곳(저장된 학습 정보)에서 지우면 다시 읽는다 — 이 영역의 지난 안내('추가했습니다')도 지운다
   useEffect(() => {
-    const reload = () => setVersion((v) => v + 1);
+    const reload = (event) => {
+      setVersion((v) => v + 1);
+      if (event.detail?.source !== 'keywords') setFeedback(''); // 내가 바꾼 거면 방금 띄운 안내는 둔다
+    };
     window.addEventListener(ACCOUNT_MEMORY_EVENT, reload);
     return () => window.removeEventListener(ACCOUNT_MEMORY_EVENT, reload);
   }, []);
@@ -67,7 +70,7 @@ export default function ContestInterestMemory({ draftKeywords, onApply, disabled
       if (account) {
         const row = await api.memories.saveInterests(keywords);
         setAccountState({ owner: token, row });
-        notifyAccountMemories();
+        notifyAccountMemories('keywords');
       } else {
         saveContestInterests(draftKeywords);
       }
@@ -89,7 +92,7 @@ export default function ContestInterestMemory({ draftKeywords, onApply, disabled
       if (account) {
         if (merged.length > ACCOUNT_LIMIT) throw new Error(`관심 키워드는 ${ACCOUNT_LIMIT}개까지 저장할 수 있어요. 하나를 지우고 추가해 주세요.`);
         setAccountState({ owner: token, row: await api.memories.saveInterests(merged) });
-        notifyAccountMemories();
+        notifyAccountMemories('keywords');
       } else {
         saveContestInterests(merged.join(', '));
       }
@@ -106,7 +109,7 @@ export default function ContestInterestMemory({ draftKeywords, onApply, disabled
       if (account) {
         if (remaining.length) setAccountState({ owner: token, row: await api.memories.saveInterests(remaining) });
         else if (accountMemory) { await api.memories.remove(accountMemory.id); setAccountState({ owner: token, row: null }); }
-        notifyAccountMemories();
+        notifyAccountMemories('keywords');
       } else if (remaining.length) saveContestInterests(remaining.join(', '));
       else clearContestInterests();
       onApply?.(remaining.join(', '));

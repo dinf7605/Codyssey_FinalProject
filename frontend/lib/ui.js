@@ -46,6 +46,13 @@ export function unitLength(minutes) {
   return `${h}시간${m ? ` ${m}분` : ''} · 블록 ${Math.ceil(minutes / MAX_BLOCK_MINUTES)}개`;
 }
 
+/** 받침에 맞는 목적격 조사 — '관심 분야를', '학습 기록을' / 한글이 아니면 '을(를)' */
+export function objectParticle(word) {
+  const code = (word || '').trim().slice(-1).charCodeAt(0) - 0xac00;
+  if (Number.isNaN(code) || code < 0 || code > 11171) return '을(를)';
+  return code % 28 ? '을' : '를';
+}
+
 /** 남은 일수 → 'D-12' 형태 (FR-MAIN-04: 기한이 지나면 D+) */
 export function dday(days) {
   if (days === 0) return 'D-DAY';

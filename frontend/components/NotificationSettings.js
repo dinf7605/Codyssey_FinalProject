@@ -10,8 +10,10 @@ import { browserAlertState, requestBrowserAlerts } from '@/lib/browserAlerts';
 
 const INTENSITY = [
   { value: 'low', label: '약', help: '블록 시작 알림만' },
-  { value: 'normal', label: '보통', help: '+ 주간 요약 · 재조정 결과 (기본)' },
-  { value: 'high', label: '강', help: '+ 학습 독촉 (끝내지 못한 블록 · 밤 9시 하루 마감)' },
+  // 재조정 결과·학습 독촉은 강도로 '받을 수 있게' 될 뿐, 아래 선택 알림에서 켜야 온다 —
+  // 예전 문구는 기본으로 오는 것처럼 읽혀 체크가 꺼져 있는 게 어긋나 보였다 (10-02 test05)
+  { value: 'normal', label: '보통', help: '+ 주간 요약 (기본) · 아래에서 켜면 재조정 결과' },
+  { value: 'high', label: '강', help: '+ 아래에서 켜면 학습 독촉 (끝내지 못한 블록 · 밤 9시 하루 마감)' },
 ];
 const MINUTES = [5, 10, 15, 30, 60];
 

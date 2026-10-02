@@ -10,8 +10,8 @@ const UNAVAILABLE = '__storage_unavailable__';
 // 같은 값을 따로 불러와, 한쪽에서 추가·삭제해도 다른 쪽이 옛 값을 보여 줬다 (10-02 실사용)
 export const ACCOUNT_MEMORY_EVENT = 'studypace:account-memories-changed';
 
-export function notifyAccountMemories() {
-  if (typeof window !== 'undefined') window.dispatchEvent(new Event(ACCOUNT_MEMORY_EVENT));
+export function notifyAccountMemories(source = '') {
+  if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(ACCOUNT_MEMORY_EVENT, { detail: { source } }));
 }
 
 export function normalizeInterestKeywords(value) {

@@ -5,6 +5,7 @@ import { api } from '@/lib/api';
 import { useAuthToken } from '@/lib/auth-token';
 import { ACCOUNT_MEMORY_EVENT, clearContestInterests, notifyAccountMemories } from '@/lib/contest-interest-memory';
 import SectionTitle from '@/components/SectionTitle';
+import { objectParticle } from '@/lib/ui';
 
 const LABELS = {
   preferred_study_time: '선호 학습 시간대',
@@ -69,7 +70,7 @@ export default function AccountMemories() {
   }
 
   function confirmDelete(id, label) {
-    if (!window.confirm(`${label}을(를) 삭제할까요? 삭제한 정보는 복구할 수 없습니다. 새 학습 기록을 저장하면 학습 통계는 다시 계산될 수 있습니다.`)) return;
+    if (!window.confirm(`${label}${objectParticle(label)} 삭제할까요? 삭제한 정보는 복구할 수 없습니다. 새 학습 기록을 저장하면 학습 통계는 다시 계산될 수 있습니다.`)) return;
     if (id) remove(id);
     else clear();
   }
