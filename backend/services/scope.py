@@ -31,7 +31,19 @@ def _fit(slot: int, length: int) -> tuple[int, int]:
     return n, n * length
 
 
-def daily_capacity(availability: Availability, lengths: tuple[int, int] = (MAX_BLOCK_MINUTES, MAX_BLOCK_MINUTES)) -> dict[int, int]:
+def _fill(slot: int) -> tuple[int, int]:
+    """긴 단위는 빈칸 길이에 맞춰 나눠 놓는다(scheduler._fill_unit) → 칸을 거의 다 쓴다. (블록 수, 분)."""
+    if slot <= MAX_BLOCK_MINUTES:
+        return (1, slot) if slot > 0 else (0, 0)
+    n = math.ceil((slot + BREAK_MINUTES) / (MAX_BLOCK_MINUTES + BREAK_MINUTES))
+    return n, slot - (n - 1) * BREAK_MINUTES
+
+
+def daily_capacity(
+    availability: Availability,
+    lengths: tuple[int, int] = (MAX_BLOCK_MINUTES, MAX_BLOCK_MINUTES),
+    flexible: bool = False,
+) -> dict[int, int]:
     """요일별로 실제로 들어가는 공부 분. lengths = (평균 블록 길이, 가장 짧은 블록 길이).
 
     칸마다 평균 길이로 채운 경우와 가장 짧은 단위로 채운 경우 중 큰 쪽을 쓴다 —
@@ -43,7 +55,7 @@ def daily_capacity(availability: Availability, lengths: tuple[int, int] = (MAX_B
         if availability.rest_weekday is not None and s.weekday == availability.rest_weekday:
             continue
         slot = _slot_minutes(s.start, s.end)
-        n, m = max((_fit(slot, length) for length in lengths), key=lambda fit: fit[1])
+        n, m = _fill(slot) if flexible else max((_fit(slot, length) for length in lengths), key=lambda fit: fit[1])
         blocks[s.weekday] = blocks.get(s.weekday, 0) + n
         minutes[s.weekday] = minutes.get(s.weekday, 0) + m
     # 하루 3블록 상한
@@ -56,8 +68,9 @@ def daily_capacity(availability: Availability, lengths: tuple[int, int] = (MAX_B
 def available_minutes(
     availability: Availability, start: date, deadline: date,
     lengths: tuple[int, int] = (MAX_BLOCK_MINUTES, MAX_BLOCK_MINUTES),
+    flexible: bool = False,
 ) -> int:
-    cap = daily_capacity(availability, lengths)
+    cap = daily_capacity(availability, lengths, flexible)
     total, day = 0, start
     while day <= deadline:
         total += cap.get(day.weekday(), 0)
@@ -70,7 +83,9 @@ def check_scope(units: list[StudyUnit], availability: Availability, start: date,
     # 칸에 들어가는 건 단위가 아니라 블록이다 — 긴 단위는 120분 이하 블록 여러 개로 나뉘어 놓인다
     parts = [m for u in units for m in split_minutes(u.estimated_minutes)]
     lengths = (round(sum(parts) / len(parts)), min(parts)) if parts else (MAX_BLOCK_MINUTES,) * 2
-    available = available_minutes(availability, start, deadline, lengths)
+    # 공부량 대부분이 120분 넘는 단위면 빈칸에 맞춰 나눠 놓으니(scheduler._fill_unit) 칸을 거의 다 쓴다
+    flexible = total > 0 and sum(u.estimated_minutes for u in units if u.estimated_minutes > MAX_BLOCK_MINUTES) * 2 >= total
+    available = available_minutes(availability, start, deadline, lengths, flexible)
     ratio = round(total / available, 2) if available else None
     over = available == 0 or total > available * OVER_RATIO
 
@@ -102,7 +117,7 @@ def check_scope(units: list[StudyUnit], availability: Availability, start: date,
     result["drop_unit_ids"] = [u.id for u in units if u.id not in keep]
 
     # 축소안 2 — 지금 빈 시간으로 전부 하려면 며칠이 필요한가
-    per_week = sum(daily_capacity(availability, lengths).values())
+    per_week = sum(daily_capacity(availability, lengths, flexible).values())
     if per_week:
         days_needed = math.ceil(total / (per_week / 7))
         result["suggested_deadline"] = (start + timedelta(days=days_needed)).isoformat()

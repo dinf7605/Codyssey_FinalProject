@@ -167,3 +167,19 @@ def test_다시_놓기는_블록_id와_길이를_그대로_두고_자리만_옮�
     assert sorted(b.id for b in moved) == sorted(b.id for b in first)
     assert [b.minutes for b in moved] == [b.minutes for b in first]
     assert min(b.start for b in moved).date() >= date(2026, 9, 21)
+
+
+def test_긴_단위는_빈칸_길이에_맞춰_나눠_3시간_칸에_두_블록을_넣는다():
+    friday = Availability(slots=[TimeSlot(weekday=4, start="19:00", end="22:00")])
+    plan = build_schedule([StudyUnit(id="u01", title="문제 풀이", estimated_minutes=170)], friday, START, DEADLINE)
+    assert [b.minutes for b in plan.blocks] == [85, 85]           # 같은 금요일 19:00 · 20:35
+    assert plan.blocks[0].start.date() == plan.blocks[1].start.date()
+    assert validate_schedule(plan.blocks, [StudyUnit(id="u01", title="x", estimated_minutes=170)], DEADLINE) == []
+
+
+def test_공부량_점검은_긴_단위가_많으면_칸을_채우는_만큼_센다():
+    from services.scope import check_scope
+    friday = Availability(slots=[TimeSlot(weekday=4, start="19:00", end="22:00")])
+    long = [StudyUnit(id="u01", title="x", estimated_minutes=600)]
+    # 4주 금요일 4번 × (85 + 85) = 680분 — 120분 하나씩만 센다면 480분이라 넣을 수 있는 걸 못 넣는다고 했다
+    assert check_scope(long, friday, START, DEADLINE)["available_minutes"] == 680

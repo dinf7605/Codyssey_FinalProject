@@ -18,6 +18,7 @@ from schemas.plan import (
     BREAK_MINUTES,
     MAX_BLOCK_MINUTES,
     MAX_BLOCKS_PER_DAY,
+    MIN_UNIT_MINUTES,
     Availability,
     Block,
     SchedulePlan,
@@ -164,22 +165,17 @@ def build_schedule(
 
     has_block = {b.unit_id for b in fixed_blocks}
     pieces: dict[str, list[_Piece]] = {}
+    flex: dict[str, int] = {}  # 120분이 넘는 단위 → 순번. 빈칸 길이에 맞춰 나눈다 (_fill_unit)
     for seq, unit in enumerate(topological_order(units), start=1):
         if unit.id in has_block:
             continue  # 고정 블록으로 이미 배치됨
-        parts = split_minutes(unit.estimated_minutes)
-        n = len(parts)
-        pieces[unit.id] = [
-            _Piece(
-                unit=unit,
-                block_id=f"blk-{unit.id}-{seq}" if n == 1 else f"blk-{unit.id}-{seq}-{k}",
-                title=unit.title if n == 1 else f"{unit.title} ({k}/{n})",
-                minutes=minutes,
-            )
-            for k, minutes in enumerate(parts, start=1)
-        ]
+        if unit.estimated_minutes > MAX_BLOCK_MINUTES:
+            flex[unit.id] = seq
+            continue
+        pieces[unit.id] = [_Piece(unit=unit, block_id=f"blk-{unit.id}-{seq}", title=unit.title,
+                                  minutes=unit.estimated_minutes)]
 
-    placed, unplaced = _place_pieces(pieces, units, windows, start_day, fixed_blocks, whole_units=True)
+    placed, unplaced = _place_pieces(pieces, units, windows, start_day, fixed_blocks, whole_units=True, flex=flex)
     blocks = sorted(list(fixed_blocks) + placed, key=lambda b: b.start)
 
     notes: list[str] = []
@@ -227,10 +223,12 @@ def _place_pieces(
     start_day: date,
     fixed_blocks: list[Block],
     whole_units: bool,
+    flex: dict[str, int] | None = None,
 ) -> tuple[list[Block], list[StudyUnit]]:
     """조각들을 선행 순서대로 놓는다. (놓은 블록, 못 놓은 단위).
 
     whole_units=True 면 한 단위의 조각을 전부 놓거나 하나도 놓지 않는다 (처음 배치 — 반쪽 단위를 만들지 않는다).
+    flex 의 단위는 미리 자르지 않고 빈칸 길이에 맞춰 나눈다 (_fill_unit).
     """
     day_blocks: dict[date, list[Block]] = {}
     finish_at: dict[str, datetime] = {}
@@ -243,9 +241,10 @@ def _place_pieces(
     placed: list[Block] = []
     unplaced: list[StudyUnit] = []
 
+    flex = flex or {}
     for unit in topological_order(units):
         todo = pieces.get(unit.id)
-        if not todo:
+        if not todo and unit.id not in flex:
             continue
 
         earliest = datetime.combine(start_day, time.min)
@@ -260,6 +259,16 @@ def _place_pieces(
         if missing_prereq:
             failed.add(unit.id)
             unplaced.append(unit)
+            continue
+
+        if unit.id in flex:
+            filled = _fill_unit(unit, flex[unit.id], windows, day_blocks, earliest)
+            if filled is None:
+                failed.add(unit.id)
+                unplaced.append(unit)
+                continue
+            placed.extend(filled)
+            finish_at[unit.id] = max([finish_at.get(unit.id, filled[-1].end)] + [b.end for b in filled])
             continue
 
         mine: list[Block] = []
@@ -287,6 +296,97 @@ def _place_pieces(
             finish_at[unit.id] = max(finish_at.get(unit.id, block.end), block.end)
 
     return placed, unplaced
+
+
+MIN_PIECE_MINUTES = 60  # 긴 단위를 나눌 때 조각 최소 길이 (마지막 조각은 남은 만큼)
+
+
+def _free_gaps(
+    win_start: datetime, win_end: datetime, today: list[Block], earliest: datetime
+) -> list[tuple[datetime, datetime]]:
+    """창 안에서 블록을 놓을 수 있는 빈 구간 — 앞뒤 블록과는 10분 휴식을 둔다."""
+    occupied = sorted((b for b in today if b.start < win_end and b.end > win_start), key=lambda b: b.start)
+    gaps: list[tuple[datetime, datetime]] = []
+    cursor = max(win_start, earliest)
+    for b in occupied:
+        end = b.start - timedelta(minutes=BREAK_MINUTES)
+        if end > cursor:
+            gaps.append((cursor, end))
+        cursor = max(cursor, b.end + timedelta(minutes=BREAK_MINUTES))
+    if win_end > cursor:
+        gaps.append((cursor, win_end))
+    return gaps
+
+
+def _chunk_for(gap: int, remaining: int) -> int:
+    """빈 구간(gap분)에 이번 조각을 몇 분으로 놓을지. 0 이면 이 구간은 건너뛴다.
+
+    같은 길이로 미리 자르면 3시간 칸에 120분 하나만 들어가고 50분이 버려졌다 (10-02 실측: 주 9시간 중 6시간만 쓰임).
+    구간에 두 조각이 들어가면 반씩 나눠 칸을 채운다 — 3시간 칸 → 85분 + 85분.
+    """
+    if remaining <= min(gap, MAX_BLOCK_MINUTES):
+        return remaining
+    if gap >= 2 * MIN_PIECE_MINUTES + BREAK_MINUTES:
+        size = (gap - BREAK_MINUTES) // 2 // 5 * 5
+    else:
+        size = gap // 5 * 5
+    size = min(size, MAX_BLOCK_MINUTES, remaining)
+    left = remaining - size
+    if 0 < left < MIN_UNIT_MINUTES:
+        size = remaining - MIN_UNIT_MINUTES  # 너무 짧은 꼬리 조각을 남기지 않는다
+    return size if size >= MIN_PIECE_MINUTES else 0
+
+
+def _fill_unit(
+    unit: StudyUnit,
+    seq: int,
+    windows: list[tuple[date, datetime, datetime]],
+    day_blocks: dict[date, list[Block]],
+    earliest: datetime,
+) -> list[Block] | None:
+    """120분이 넘는 단위를 빈칸에 맞춰 나눠 놓는다. 다 못 놓으면 하나도 남기지 않고 None."""
+    remaining = unit.estimated_minutes
+    mine: list[Block] = []
+    for day, win_start, win_end in windows:
+        if remaining <= 0:
+            break
+        while remaining > 0:
+            today = day_blocks.setdefault(day, [])
+            if len(today) >= MAX_BLOCKS_PER_DAY:
+                break
+            spot = None
+            for gap_start, gap_end in _free_gaps(win_start, win_end, today, earliest):
+                size = _chunk_for(int((gap_end - gap_start).total_seconds() // 60), remaining)
+                if size:
+                    spot = (gap_start, size)
+                    break
+            if spot is None:
+                break
+            start, size = spot
+            block = Block(id="", unit_id=unit.id, title=unit.title, start=start,
+                          end=start + timedelta(minutes=size), minutes=size)
+            today.append(block)
+            mine.append(block)
+            remaining -= size
+            earliest = block.end + timedelta(minutes=BREAK_MINUTES)  # 같은 단위의 다음 조각은 그 뒤에
+
+    if remaining > 0:
+        for block in mine:
+            day_blocks[block.start.date()].remove(block)
+        return None
+
+    n = len(mine)
+    out = [
+        b.model_copy(update={
+            "id": f"blk-{unit.id}-{seq}" if n == 1 else f"blk-{unit.id}-{seq}-{k}",
+            "title": unit.title if n == 1 else f"{unit.title} ({k}/{n})",
+        })
+        for k, b in enumerate(mine, start=1)
+    ]
+    for old, new in zip(mine, out):  # 하루 목록 안의 임시 블록을 이름 붙인 블록으로 바꾼다
+        lst = day_blocks[old.start.date()]
+        lst[lst.index(old)] = new
+    return out
 
 
 def _place_one(

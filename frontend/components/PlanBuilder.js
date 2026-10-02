@@ -112,6 +112,8 @@ export default function PlanBuilder() {
   const [saveState, setSaveState] = useState({ state: 'idle', message: '' });
   // FR-PLAN-02 — 공부량이 가용시간의 1.5배를 넘으면 범위 축소안. used 는 지금 배치에 쓴 단위·기한
   const [scope, setScope] = useState(draft?.scope ?? null);
+  // 공부량 점검(1.5배)엔 안 걸렸는데 실제 배치에서 못 넣은 단위가 있을 때의 선택지 — 그대로 놓았을 때 기준으로 고정해 둔다
+  const [rescue, setRescue] = useState(draft?.rescue ?? null);
   const [used, setUsed] = useState(draft?.used ?? null); // { mode: 'as-is' | 'trim' | 'extend', units, deadline }
   const [placing, setPlacing] = useState(false);
   // FR-PLAN-01 구글 캘린더에서 가져온 바쁜 시간 (이 탭에 30분) — lib/calendarBusy.js
@@ -131,8 +133,8 @@ export default function PlanBuilder() {
   // 범위 줄이기·기한 바꾸기로 다시 놓으면 그 결과로 덮어쓴다. 확정하면 지운다.
   useEffect(() => {
     if (view !== 'done' || !key || !result || !plan || saveState.state === 'saved') return;
-    saveDraft(key, { result, plan, violations, scope, used, deadlineEdit });
-  }, [view, key, result, plan, violations, scope, used, deadlineEdit, saveState.state]);
+    saveDraft(key, { result, plan, violations, scope, used, deadlineEdit, rescue });
+  }, [view, key, result, plan, violations, scope, used, deadlineEdit, rescue, saveState.state]);
 
   useEffect(() => {
     if (phase !== 'running') return undefined;
@@ -170,6 +172,7 @@ export default function PlanBuilder() {
     setSaveState({ state: 'idle', message: '' });
     setShowAll(false);
     setScope(null);
+    setRescue(null);
     setUsed(null);
 
     try {
@@ -212,6 +215,7 @@ export default function PlanBuilder() {
     setPlan(placed);
     setViolations(check.violations);
     setUsed({ mode, units, deadline });
+    if (mode === 'as-is') setRescue(rescueFor(placed, units, deadline, current));
     setSaveState({ state: 'idle', message: '' });
   }
 
@@ -219,10 +223,10 @@ export default function PlanBuilder() {
     setPlacing(true);
     try {
       if (mode === 'trim') {
-        const keep = new Set(scope.keep_unit_ids);
+        const keep = new Set(notice.keep_unit_ids);
         await place('trim', result.units.filter((u) => keep.has(u.id)), input.deadline);
       } else if (mode === 'extend') {
-        await place('extend', result.units, scope.suggested_deadline);
+        await place('extend', result.units, notice.suggested_deadline);
       } else {
         await place('as-is', result.units, input.deadline);
       }
@@ -270,6 +274,7 @@ export default function PlanBuilder() {
     const next = { ...input, deadline: value, deadlineSource: 'user' };
     setRestoredKey(null);
     setScope(null);
+    setRescue(null);
     api.plan
       .scope({ units: result.units, availability: next.availability, startDay: next.startDay, deadline: value })
       .then(setScope, () => setScope(null));
@@ -313,6 +318,7 @@ export default function PlanBuilder() {
     }
   }
 
+  const notice = scope?.over ? scope : rescue;
   const isAi = result && result.source !== 'template';
   const units = result ? (showAll ? result.units : result.units.slice(0, PREVIEW_UNITS)) : [];
   const estimatedCount = result ? result.units.filter((u) => u.estimated).length : 0;
@@ -486,8 +492,8 @@ export default function PlanBuilder() {
             </AiNotice>
           )}
 
-          {scope?.over && (
-            <ScopeNotice scope={scope} units={result.units} used={used} busy={placing} onPick={adjust} />
+          {notice && (
+            <ScopeNotice scope={notice} units={result.units} used={used} busy={placing} onPick={adjust} />
           )}
 
           {plan && (
@@ -560,6 +566,28 @@ export default function PlanBuilder() {
 
 const hours = (minutes) => Math.round((minutes / 60) * 10) / 10;
 
+// 실제 배치에서 못 넣은 단위가 있을 때의 선택지 (공부량 점검의 1.5배 기준에는 안 걸린 경우).
+// 빼기: 실제로 못 들어간 단위를 뺀다. 늘리기: 못 넣은 분량을 주간 가용시간(쉬는 틈 감안 80%)으로 채울 만큼 기한을 민다.
+function rescueFor(placed, units, deadline, current) {
+  if (!placed.unplaced?.length) return null;
+  const drop = new Set(placed.unplaced.map((u) => u.id));
+  const missing = placed.unplaced.reduce((sum, u) => sum + u.estimated_minutes, 0);
+  const weekly = slotsHours(current.availability.slots) * 60 * 0.8;
+  let suggested = null;
+  if (weekly > 0) {
+    const d = new Date(`${deadline}T00:00:00`);
+    d.setDate(d.getDate() + Math.ceil((missing / weekly) * 7));
+    suggested = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
+  return {
+    rescue: true,
+    missing_minutes: missing,
+    keep_unit_ids: units.filter((u) => !drop.has(u.id)).map((u) => u.id),
+    drop_unit_ids: [...drop],
+    suggested_deadline: suggested,
+  };
+}
+
 // FR-PLAN-02 — "총 소요시간이 가용시간의 1.5배를 넘으면 범위 축소안을 함께 제시"
 // 고르지 않으면 그대로 배치하고, 못 넣은 단위는 '미배치'로 남는다.
 function ScopeNotice({ scope, units, used, busy, onPick }) {
@@ -571,18 +599,21 @@ function ScopeNotice({ scope, units, used, busy, onPick }) {
   return (
     <div className="progress" role="note" aria-label="공부량 점검">
       <b>
-        {scope.ratio
-          ? `공부량이 기한까지 쓸 수 있는 시간의 ${scope.ratio}배예요`
-          : '기한까지 공부할 수 있는 시간이 없어요'}
+        {scope.rescue
+          ? `기한 안에 넣지 못한 학습 단위가 ${scope.drop_unit_ids.length}개 있어요`
+          : scope.ratio
+            ? `공부량이 기한까지 쓸 수 있는 시간의 ${scope.ratio}배예요`
+            : '기한까지 공부할 수 있는 시간이 없어요'}
       </b>
       <p className="muted tiny">
-        필요 {hours(scope.total_minutes)}시간 · 기한까지 빈 시간 {hours(scope.available_minutes)}시간. 둘 중 하나를
-        고르거나 그대로 두면 못 넣은 단위는 미배치로 남습니다.
+        {scope.rescue
+          ? `못 넣은 공부량 ${hours(scope.missing_minutes)}시간. 범위를 줄이거나 기한을 늘려 다시 놓을 수 있어요. 그대로 두면 미배치로 남습니다.`
+          : `필요 ${hours(scope.total_minutes)}시간 · 기한까지 빈 시간 ${hours(scope.available_minutes)}시간. 둘 중 하나를 고르거나 그대로 두면 못 넣은 단위는 미배치로 남습니다.`}
       </p>
       <div style={{ display: 'flex', gap: 'var(--gap-2)', flexWrap: 'wrap' }}>
         {dropped.length > 0 && (
           <button type="button" className="chip" aria-pressed={mode === 'trim'} disabled={busy} onClick={() => onPick('trim')}>
-            범위 줄이기 · 뒤쪽 {dropped.length}개 빼기
+            범위 줄이기 · {scope.rescue ? '못 넣은' : '뒤쪽'} {dropped.length}개 빼기
           </button>
         )}
         {deadlineText && (
