@@ -363,7 +363,9 @@ def _chunk_for(gap: int, remaining: int) -> int:
     left = remaining - size
     if 0 < left < MIN_UNIT_MINUTES:
         size = remaining - MIN_UNIT_MINUTES  # 너무 짧은 꼬리 조각을 남기지 않는다
-    return size if size >= MIN_PIECE_MINUTES else 0
+    # 꼬리를 맞추느라 줄어든 조각은 30분(단위 최소)까지 받는다 — 60분 칸에 65분 단위가 '60+5'도 '35+30'도
+    # 안 돼 놓이지 않았고, 선행으로 이어진 뒤 단위까지 전부 미배치가 됐다 (10-06 사전 점검 2차, 단원마다 시간 줄이기)
+    return size if size >= MIN_UNIT_MINUTES else 0
 
 
 def _fill_unit(

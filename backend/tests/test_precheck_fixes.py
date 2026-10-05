@@ -80,6 +80,19 @@ def test_칸_시작에_딱_끝나는_앞_블록과도_휴식을_둔다():
     assert validate_schedule(new + other, [], date(2026, 10, 24)) == []
 
 
+def test_칸보다_조금_긴_단위도_30분_꼬리로_나눠_놓는다():
+    """60분 칸에 65분 단위가 '60+5'도 '35+30'도 안 돼 놓이지 않았다 (10-06, 단원마다 시간 줄이기)."""
+    from schemas.plan import Availability, StudyUnit, TimeSlot
+    from services.scheduler import _chunk_for, build_schedule
+
+    assert _chunk_for(60, 65) == 35
+    hour = Availability(slots=[TimeSlot(weekday=w, start="22:00", end="23:00") for w in range(5)], rest_weekday=6)
+    units = [StudyUnit(id=f"u{i}", title="단원", estimated_minutes=65, prerequisites=[f"u{i-1}"] if i else [])
+             for i in range(3)]
+    plan = build_schedule(units, hour, date(2026, 10, 6), date(2026, 10, 24))
+    assert plan.unplaced == [] and sorted({b.minutes for b in plan.blocks}) == [30, 35]
+
+
 def test_세션_연장은_새_토큰을_돌려주고_잘못된_토큰은_401(monkeypatch):
     from types import SimpleNamespace
     from fastapi.testclient import TestClient

@@ -218,6 +218,7 @@ export default function PlanBuilder() {
     setUsed({ mode, units, deadline });
     if (mode === 'as-is') setRescue(rescueFor(placed, units, deadline, current));
     setSaveState({ state: 'idle', message: '' });
+    return placed;
   }
 
   async function adjust(mode) {
@@ -227,7 +228,12 @@ export default function PlanBuilder() {
         const keep = new Set(notice.keep_unit_ids);
         await place('trim', result.units.filter((u) => keep.has(u.id)), input.deadline);
       } else if (mode === 'shrink') {
-        await place('shrink', shrinkUnits(result.units, notice), input.deadline);
+        // 칸 사이 휴식·자투리 때문에 같은 비율로 줄여도 남을 수 있다 — 다 들어갈 때까지 10%씩 더 줄여 본다 (최대 4번)
+        const longest = longestSlot(input.availability);
+        for (let k = 0; k < 4; k += 1) {
+          const placed = await place('shrink', shrinkUnits(result.units, notice, 0.95 - 0.1 * k, longest), input.deadline);
+          if (!placed.unplaced?.length) break;
+        }
       } else if (mode === 'extend') {
         await place('extend', result.units, notice.suggested_deadline);
       } else {
@@ -335,6 +341,12 @@ export default function PlanBuilder() {
         <p className="hint" style={{ margin: 0 }}>
           위 &lsquo;내 학습 일정&rsquo;에 블록 {plan?.blocks.length ?? 0}개가 놓였어요. 공부 시간은 마이페이지 → 목표 관리에서 바꿀 수 있어요.
         </p>
+        {/* 블록 수만 알리면 대부분 미배치로 남은 계획도 확정된 줄 알았다 (10-06 사전 점검 2차) */}
+        {plan?.unplaced?.length > 0 && (
+          <p className="hint hint-error" style={{ margin: 0 }}>
+            기한 안에 못 넣은 단원 {plan.unplaced.length}개는 일정 화면의 &lsquo;미배치&rsquo;에 있어요. 빈 시간이 생기면 거기서 넣어 볼 수 있어요.
+          </p>
+        )}
         <button type="button" className="btn btn-quiet btn-sm" onClick={() => setSavedOpen(true)} style={{ alignSelf: 'flex-start' }}>
           만든 계획 자세히 보기
         </button>
@@ -613,14 +625,23 @@ function rescueFor(placed, units, deadline, current) {
 // (10-06 사전 점검 2차). 모든 단원을 같은 비율로 줄여 빈 시간에 맞춘다. 한 단원은 30분 아래로 줄이지 않는다.
 const MIN_UNIT = 30;
 
-function shrinkUnits(units, notice) {
+const toMin = (hhmm) => Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(3, 5));
+
+function longestSlot(availability) {
+  return Math.max(0, ...(availability?.slots || []).map((s) => toMin(s.end) - toMin(s.start)));
+}
+
+// safety — 목표 시간에 곱하는 여유(0.95 = 5% 여유). longest — 가장 긴 칸(분): 칸보다 조금 긴 단원은 칸에 맞춘다
+// (60분 칸에 65분 단원은 35분 + 30분으로 이틀을 쓴다)
+function shrinkUnits(units, notice, safety = 0.95, longest = 0) {
   const total = units.reduce((sum, u) => sum + u.estimated_minutes, 0);
   const target = notice.rescue ? total - notice.missing_minutes : notice.available_minutes;
-  const ratio = total > 0 ? Math.min(1, Math.max(0, (target * 0.95) / total)) : 1; // 쉬는 틈·자투리를 감안해 5% 여유
-  return units.map((u) => ({
-    ...u,
-    estimated_minutes: Math.max(MIN_UNIT, Math.floor((u.estimated_minutes * ratio) / 5) * 5),
-  }));
+  const ratio = total > 0 ? Math.min(1, Math.max(0, (target * safety) / total)) : 1;
+  return units.map((u) => {
+    let minutes = Math.max(MIN_UNIT, Math.floor((u.estimated_minutes * ratio) / 5) * 5);
+    if (longest >= MIN_UNIT && minutes > longest && minutes <= longest * 1.25) minutes = longest;
+    return { ...u, estimated_minutes: Math.min(minutes, u.estimated_minutes) };
+  });
 }
 
 // FR-PLAN-02 — "총 소요시간이 가용시간의 1.5배를 넘으면 범위 축소안을 함께 제시"
