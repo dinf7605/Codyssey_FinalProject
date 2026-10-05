@@ -22,7 +22,7 @@ import { unitLength } from '@/lib/ui';
 const BUDGET_SECONDS = 60;
 
 const TOOL_LABEL = {
-  search_curriculum: '출제 범위 검색',
+  search_curriculum: '준비 범위 검색',
   get_goal_catalog: '목표 정보 확인',
   get_available_slots: '빈 시간 확인',
   estimate_effort: '공부량 추정',
@@ -226,6 +226,8 @@ export default function PlanBuilder() {
       if (mode === 'trim') {
         const keep = new Set(notice.keep_unit_ids);
         await place('trim', result.units.filter((u) => keep.has(u.id)), input.deadline);
+      } else if (mode === 'shrink') {
+        await place('shrink', shrinkUnits(result.units, notice), input.deadline);
       } else if (mode === 'extend') {
         await place('extend', result.units, notice.suggested_deadline);
       } else {
@@ -505,13 +507,14 @@ export default function PlanBuilder() {
 
           {isAi && (
             <AiNotice>
-              AI가 나눈 학습 단위라 실제 출제 범위와 다를 수 있습니다. ‘추정’은 검색한 자료
+              AI가 나눈 학습 단위라 실제 시험 범위·공모전 요강과 다를 수 있습니다. ‘추정’은 검색한 자료
               밖에서 AI가 짐작한 단위입니다.
             </AiNotice>
           )}
 
           {notice && (
-            <ScopeNotice scope={notice} units={result.units} used={used} busy={placing} onPick={adjust} />
+            <ScopeNotice scope={notice} units={result.units} used={used} busy={placing} onPick={adjust}
+              fixedDeadline={input.deadlineSource === 'contest' || input.fromContest} />
           )}
 
           {plan && (
@@ -606,14 +609,31 @@ function rescueFor(placed, units, deadline, current) {
   };
 }
 
+// 단원마다 시간 줄이기 — 뒤쪽 단원을 통째로 빼면 공모전은 기획서 완성·발표 같은 결과물 단계가 빠졌다
+// (10-06 사전 점검 2차). 모든 단원을 같은 비율로 줄여 빈 시간에 맞춘다. 한 단원은 30분 아래로 줄이지 않는다.
+const MIN_UNIT = 30;
+
+function shrinkUnits(units, notice) {
+  const total = units.reduce((sum, u) => sum + u.estimated_minutes, 0);
+  const target = notice.rescue ? total - notice.missing_minutes : notice.available_minutes;
+  const ratio = total > 0 ? Math.min(1, Math.max(0, (target * 0.95) / total)) : 1; // 쉬는 틈·자투리를 감안해 5% 여유
+  return units.map((u) => ({
+    ...u,
+    estimated_minutes: Math.max(MIN_UNIT, Math.floor((u.estimated_minutes * ratio) / 5) * 5),
+  }));
+}
+
 // FR-PLAN-02 — "총 소요시간이 가용시간의 1.5배를 넘으면 범위 축소안을 함께 제시"
 // 고르지 않으면 그대로 배치하고, 못 넣은 단위는 '미배치'로 남는다.
-function ScopeNotice({ scope, units, used, busy, onPick }) {
+// fixedDeadline — 공모전 마감은 늘릴 수 없으니 '기한 늘리기'를 보이지 않는다 (10-06 사전 점검 2차)
+function ScopeNotice({ scope, units, used, busy, onPick, fixedDeadline = false }) {
   const dropped = units.filter((u) => scope.drop_unit_ids.includes(u.id));
   const mode = used?.mode || 'as-is';
-  const deadlineText = scope.suggested_deadline
+  const deadlineText = scope.suggested_deadline && !fixedDeadline
     ? `${Number(scope.suggested_deadline.slice(5, 7))}/${Number(scope.suggested_deadline.slice(8, 10))}`
     : null;
+  const canShrink = (scope.rescue ? scope.missing_minutes : scope.total_minutes - scope.available_minutes) > 0
+    && (scope.rescue || scope.available_minutes > 0);
   return (
     <div className="progress" role="note" aria-label="공부량 점검">
       <b>
@@ -625,13 +645,18 @@ function ScopeNotice({ scope, units, used, busy, onPick }) {
       </b>
       <p className="muted tiny">
         {scope.rescue
-          ? `못 넣은 공부량 ${hours(scope.missing_minutes)}시간. 범위를 줄이거나 기한을 늘려 다시 놓을 수 있어요. 그대로 두면 미배치로 남습니다.`
+          ? `못 넣은 공부량 ${hours(scope.missing_minutes)}시간. ${fixedDeadline ? '공모전 마감은 바꿀 수 없어 범위나 단원 시간을 줄여' : '범위를 줄이거나 기한을 늘려'} 다시 놓을 수 있어요. 그대로 두면 미배치로 남습니다.`
           : `필요 ${hours(scope.total_minutes)}시간 · 기한까지 빈 시간 ${hours(scope.available_minutes)}시간. 둘 중 하나를 고르거나 그대로 두면 못 넣은 단위는 미배치로 남습니다.`}
       </p>
       <div style={{ display: 'flex', gap: 'var(--gap-2)', flexWrap: 'wrap' }}>
         {dropped.length > 0 && (
           <button type="button" className="chip" aria-pressed={mode === 'trim'} disabled={busy} onClick={() => onPick('trim')}>
             범위 줄이기 · {scope.rescue ? '못 넣은' : '뒤쪽'} {dropped.length}개 빼기
+          </button>
+        )}
+        {canShrink && (
+          <button type="button" className="chip" aria-pressed={mode === 'shrink'} disabled={busy} onClick={() => onPick('shrink')}>
+            단원마다 시간 줄이기
           </button>
         )}
         {deadlineText && (
@@ -647,6 +672,9 @@ function ScopeNotice({ scope, units, used, busy, onPick }) {
       </div>
       {mode === 'trim' && (
         <p className="hint">뺀 단위: {dropped.map((u) => u.title).join(', ')}</p>
+      )}
+      {mode === 'shrink' && (
+        <p className="hint">모든 단원을 같은 비율로 줄였어요. 마지막 단계(결과물 완성·점검)까지 남깁니다.</p>
       )}
     </div>
   );

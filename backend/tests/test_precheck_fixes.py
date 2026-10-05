@@ -63,6 +63,23 @@ def test_가장_긴_칸보다_긴_단위는_칸에_맞춰_나눠_놓는다():
     assert check_scope(units, hour, date(2026, 10, 6), date(2026, 10, 24))["available_minutes"] > 0
 
 
+def test_칸_시작에_딱_끝나는_앞_블록과도_휴식을_둔다():
+    """다른 목표 블록 20:40~22:00 뒤에 22:00~23:00 을 붙여 저장 검증(연속 2시간)에 걸렸다 (10-06)."""
+    from datetime import datetime
+    from schemas.plan import Availability, Block, StudyUnit, TimeSlot
+    from services.scheduler import build_schedule
+    from services.validator import validate_schedule
+
+    night = Availability(slots=[TimeSlot(weekday=w, start="22:00", end="23:00") for w in range(5)], rest_weekday=6)
+    other = [Block(id="o1", unit_id="x", title="다른 목표", start=datetime(2026, 10, 8, 20, 40),
+                   end=datetime(2026, 10, 8, 22, 0), minutes=80)]
+    units = [StudyUnit(id="u0", title="단원", estimated_minutes=60)]
+    plan = build_schedule(units, night, date(2026, 10, 8), date(2026, 10, 24), fixed_blocks=other)
+    new = [b for b in plan.blocks if b.id != "o1"]
+    assert new and new[0].start.date() != date(2026, 10, 8)  # 그날은 10분 쉬면 50분뿐이라 다음 날로
+    assert validate_schedule(new + other, [], date(2026, 10, 24)) == []
+
+
 def test_세션_연장은_새_토큰을_돌려주고_잘못된_토큰은_401(monkeypatch):
     from types import SimpleNamespace
     from fastapi.testclient import TestClient

@@ -320,11 +320,21 @@ def _place_pieces(
 MIN_PIECE_MINUTES = 60  # 긴 단위를 나눌 때 조각 최소 길이 (마지막 조각은 남은 만큼)
 
 
+def _near_window(today: list[Block], win_start: datetime, win_end: datetime) -> list[Block]:
+    """창과 겹치거나 창 앞뒤 휴식 시간 안에 붙어 있는 블록.
+
+    창과 겹치는 블록만 보면, 칸이 시작하는 22:00 에 딱 끝나는 앞 칸(다른 목표·저녁 칸)의 블록을 놓쳐
+    20:40~22:00 다음에 22:00~23:00 을 휴식 없이 붙였다 — 저장 검증(연속 2시간)에 걸려 확정이 막혔다 (10-06 사전 점검 2차).
+    """
+    gap = timedelta(minutes=BREAK_MINUTES)
+    return [b for b in today if b.start < win_end + gap and b.end > win_start - gap]
+
+
 def _free_gaps(
     win_start: datetime, win_end: datetime, today: list[Block], earliest: datetime
 ) -> list[tuple[datetime, datetime]]:
     """창 안에서 블록을 놓을 수 있는 빈 구간 — 앞뒤 블록과는 10분 휴식을 둔다."""
-    occupied = sorted((b for b in today if b.start < win_end and b.end > win_start), key=lambda b: b.start)
+    occupied = sorted(_near_window(today, win_start, win_end), key=lambda b: b.start)
     gaps: list[tuple[datetime, datetime]] = []
     cursor = max(win_start, earliest)
     for b in occupied:
@@ -426,10 +436,7 @@ def _place_one(
         if cursor >= win_end:
             continue
 
-        occupied = sorted(
-            (b for b in today if b.start < win_end and b.end > win_start),
-            key=lambda b: b.start,
-        )
+        occupied = sorted(_near_window(today, win_start, win_end), key=lambda b: b.start)
         for b in occupied:
             if cursor + need <= b.start - timedelta(minutes=BREAK_MINUTES):
                 break  # 앞쪽 빈틈에 들어간다
