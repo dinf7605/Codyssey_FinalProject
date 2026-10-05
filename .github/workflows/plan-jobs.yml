@@ -29,7 +29,7 @@ jobs:
             --request POST --header "X-Batch-Key: $BATCH_KEY" \
             "${API_BASE%/}/plan/nightly")
           echo "POST /plan/nightly -> $status"
-          # 202 시작함 · 409 이미 실행 중 (같은 날 두 번 불려도 겹쳐 돌지 않는다)
+          # 202 시작함 · 409 이미 실행 중 (같은 날 두 번 불려도 겹쳐 돌지 않는다). 200 은 실패 — 주소가 프론트를 가리킨 것
           if [ "$status" != "202" ] && [ "$status" != "409" ]; then
             exit 1
           fi

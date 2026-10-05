@@ -26,9 +26,14 @@ jobs:
             echo 'Batch API URL or key is not configured.' >&2
             exit 1
           fi
-          curl --fail --silent --show-error --max-time 30 \
+          status=$(curl --silent --show-error --max-time 30 --output /dev/null --write-out '%{http_code}' \
             --request POST --header "X-Batch-Key: $BATCH_KEY" \
-            "${API_BASE%/}/contests/collect" >/dev/null
+            "${API_BASE%/}/contests/collect")
+          echo "POST /contests/collect -> $status"
+          # 202 시작함 · 409 이미 실행 중. 그 밖(200 포함)은 실패 — 주소가 프론트를 가리키면 HTML 200 이 온다
+          if [ "$status" != "202" ] && [ "$status" != "409" ]; then
+            exit 1
+          fi
 
   recommend:
     if: vars.CONTEST_RECOMMENDATIONS_ENABLED == 'true' && (github.event.schedule == '0 0 * * 1' || inputs.job == 'recommend')
@@ -43,6 +48,10 @@ jobs:
             echo 'Batch API URL or key is not configured.' >&2
             exit 1
           fi
-          curl --fail --silent --show-error --max-time 30 \
+          status=$(curl --silent --show-error --max-time 30 --output /dev/null --write-out '%{http_code}' \
             --request POST --header "X-Batch-Key: $BATCH_KEY" \
-            "${API_BASE%/}/contests/recommend-weekly" >/dev/null
+            "${API_BASE%/}/contests/recommend-weekly")
+          echo "POST /contests/recommend-weekly -> $status"
+          if [ "$status" != "202" ] && [ "$status" != "409" ]; then
+            exit 1
+          fi
