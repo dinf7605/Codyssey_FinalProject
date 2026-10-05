@@ -10,12 +10,12 @@ flowchart TB
     user(["사용자 · 브라우저"])
     admin(["관리자"])
 
-    subgraph FE["프론트엔드 · Next.js (App Router, JavaScript) — Vercel 배포 예정"]
+    subgraph FE["프론트엔드 · Next.js (App Router, JavaScript) — Vercel"]
         pages["화면<br/>랜딩 · 온보딩 · 대시보드 · 일정 · 학습 · 공모전<br/>마이페이지 · 알림 · 관리자 · 개인정보 처리방침"]
         session["브라우저 저장소<br/>로그인 토큰 · 비회원 탐색 결과(30분)<br/>캘린더 바쁜 시간(30분)"]
     end
 
-    subgraph BE["백엔드 · FastAPI (Python 3.12) — Railway 배포 예정"]
+    subgraph BE["백엔드 · FastAPI (Python 3.12) — Railway"]
         api["API 라우터 15개<br/>auth · goal · plan · study · contests<br/>contest-interests · memories · notifications<br/>settings · calendar · admin · batch"]
         subgraph AIL["AI 레이어 (LLM 사용)"]
             agent["학습 분해 Agent<br/>decomposer · agent_tools"]
@@ -211,7 +211,7 @@ flowchart LR
 |---|---|---|---|
 | 공고 수집 | `POST /contests/collect` | 매일 05:00 | GitHub Actions `contest-jobs.yml` (저장소 변수로 켜고 끔) |
 | 주간 공모전 추천 | `POST /contests/recommend-weekly` | 월 09:00 | GitHub Actions `contest-jobs.yml` |
-| 야간 재조정 | `POST /plan/nightly` | 매일 03:00 | GitHub Actions `plan-jobs.yml` (배포 후 저장소 변수로 켬) |
+| 야간 재조정 | `POST /plan/nightly` | 매일 03:00 | GitHub Actions `plan-jobs.yml` (10-05 연결) |
 | 알림 6종 | `POST /batch/alarm/{before-block · after-block · daily-nightly · weekly-summary · replan-result · contest-deadline}` | 1분 ~ 주 1회 | 알림 워커 `workers/notification_worker.py` (APScheduler, 한국 시각) |
 
 알림은 앱 안 알림(`notification_logs`)으로 쌓이고, 사이트를 열어 둔 브라우저는 허락을 받으면 브라우저 알림으로도 띄운다.
@@ -304,8 +304,12 @@ flowchart LR
 | `GOOGLE_CLIENT_ID` · `GOOGLE_CLIENT_SECRET` | Railway | 캘린더 바쁜 시간 (구글 로그인 키는 Supabase 대시보드) |
 | `BATCH_SECRET` | Railway · GitHub Actions | 배치 API 보호 |
 | `AI_DAILY_BUDGET_USD` · `IP_HASH_SALT` | Railway | 비용 한도 · IP 해시 |
+| `WEVITY_CRAWLING_ENABLED` | Railway | 위비티 수집 허용 (`true`) |
+| `STUDYPACE_API_BASE` | GitHub Actions secret | 배치가 부를 백엔드 주소 (`https://` 포함) |
 
-배포 후 할 일: 구글 OAuth 클라이언트와 Supabase Redirect URLs 에 배포 주소 추가, GitHub 저장소 secrets(`STUDYPACE_API_BASE`·`BATCH_SECRET`)와 variables(`CONTEST_COLLECTION_ENABLED`·`CONTEST_RECOMMENDATIONS_ENABLED`·`NIGHTLY_REPLAN_ENABLED`) 설정, 알림 워커 실행, 테스트 계정 정리.
+**10-05 배포 완료** — 프론트 https://codyssey-final-project.vercel.app · API https://codysseyfinalproject-production.up.railway.app · 알림 워커는 Railway 의 두 번째 서비스.
+Railway 의 API·워커 두 서비스에는 같은 환경변수를 넣는다. 구글 OAuth 리디렉션 URI 와 Supabase Redirect URLs 에 배포 주소가 등록돼 있다.
+배포하며 겪은 문제(주소의 `https://` 누락, Railway Supabase 키 누락, 워크플로의 가짜 성공)는 [README 10차 점검](../README.md#10차--10-05-배포-후-점검-6413175-까지).
 현재 로컬 실행은 [README 실행 방법](../README.md#실행-방법)을 따른다.
 
 ## 9. 관련 문서

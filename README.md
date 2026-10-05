@@ -12,7 +12,8 @@
 | 팀 구성 | 5인 · 전원 비전공자 · AI 도구를 활용해 개발 |
 | 핵심 AI 기술 요소 | **AI Agent · RAG · 자동화 워크플로우 · Long-term Memory** (4개) |
 | 기능 규모 | 총 69개 — Must 38 / Should 25 / Could 3 / Won't 3 · 비기능 요구사항 12개 |
-| 현재 단계 | 3주차 (10-02) · **기능 구현과 내부 점검 완료** (백엔드 테스트 약 500개 · 테스트 계정 실사용 점검 9차) · **배포와 실사용자 테스트(10-08~12) 준비 중** ([개발 기록](#개발-기록)) |
+| 서비스 주소 | **https://codyssey-final-project.vercel.app** · API 문서 https://codysseyfinalproject-production.up.railway.app/docs |
+| 현재 단계 | 4주차 (10-05) · **배포 완료** — 프론트 · API · 알림 워커 · 자동 배치 3종을 배포 주소에서 확인 (점검 10차) · **실사용자 테스트(10-08~12) 준비 중** ([개발 기록](#개발-기록)) |
 
 ---
 
@@ -116,7 +117,7 @@ flowchart LR
 | DB · 인증 | Supabase (PostgreSQL + Auth) | 업무 데이터·메모리와 가입/로그인 관리. pgvector 확장은 켜져 있으나 쓰지 않음 |
 | 실시간 집계 | PostgreSQL (1차) → Redis (확장 시) | 실사용자 5~10명 규모에서는 테이블 집계로 충분 · 배울 기술을 하나 줄임 |
 | 자동화 | **GitHub Actions** (+ Python 알림 워커) | 저장소에 워크플로가 코드로 남아 버전 관리된다 · 정해진 시각에 배치 API 를 부르기만 하고 실제 로직은 Python · 분 단위 알림은 GitHub Actions 주기(최소 5분·지연 가능)가 맞지 않아 APScheduler 워커로 (10-02 Make 에서 변경) |
-| 배포 | **Vercel** (프론트) · Railway (백엔드) | GitHub 연동 자동 배포 · **Vercel 경험 활용** |
+| 배포 | **Vercel** (프론트) · **Railway** (백엔드 API + 알림 워커) | GitHub `main` 에 push 하면 자동 배포 · **Vercel 경험 활용** · 10-05 배포 ([실행 방법 · 배포](#배포)) |
 | CI | GitHub Actions | PR 시 lint · test |
 
 전체 선정 근거는 [기획서 5-2절](기획서_학습플래너.md)을, 팀이 새로 배워야 할 항목은 [학습 로드맵](docs/학습로드맵.md)을 참고.
@@ -347,10 +348,10 @@ E 의 로컬 `.env` 는 여전히 다른 Supabase 프로젝트(`skhtvbx…`)를 
 | 우선 | 담당 | 할 일 | 기한 |
 |---|---|---|---|
 | P0 | E | 로컬 `.env` 를 공용 DB 로 바꾸고, 실제 계정으로 가입 → 로그인 → 탈퇴 한 바퀴 | 09-29 |
-| P0 | E | 배포 (프론트 Vercel · 백엔드 Railway 체험판 30일로 시작, 모자라면 Hobby $5) — M1 에서 밀려 있음 | 10-02 |
+| P0 | E | ~~배포 (프론트 Vercel · 백엔드 Railway 체험판 30일로 시작, 모자라면 Hobby $5) — M1 에서 밀려 있음~~ ✅ 10-05 (10차) | 10-02 |
 | P0 | 전원 | 배포 주소에서 각자 기능을 실제 계정으로 한 번씩 (아래 점검 순서) | 10-04 |
 | P0 | D | ~~`contests`·`preparation_time_standards` 시드, 공모전 화면 목업 걷어내기~~ ✅ 09-28 위비티 수집기 연결(92건), 준비시간 기준 17개, 목록·상세·대시보드 실제 API — 남은 것: 05:00 수집 스케줄 연결(E) | 10-02 |
-| P0 | E·C | 배포 뒤 03:00 `POST /plan/nightly` 호출 연결 (`BATCH_SECRET`) — M3 | 10-04 |
+| P0 | E·C | ~~배포 뒤 03:00 `POST /plan/nightly` 호출 연결 (`BATCH_SECRET`) — M3~~ ✅ 10-05 GitHub Actions `plan-jobs.yml` | 10-04 |
 | P1 | A | 대시보드 목업 → 실제 API (`/plan/active`·`/study/stats` 는 C 가 준비됨) · 진도 계산 FR-PACE-01~03 (백엔드 없음) | 10-05 |
 | P1 | E | ~~005·006 공용 DB 기준으로 고쳐 적용~~ ✅ 09-28 `014_notification_settings` 로 적용 · 방해금지 시간을 한국 시각으로 비교하게 고침(09-28) · 남은 것: `/notifications/test` 삭제 | 10-04 |
 | P1 | B | ~~007 적용~~ ✅ 09-28 `goal_feedback` 생성 (B 요청) · 온보딩 `activeGoalCount` 를 `api.plan.active()` 로 · 마이페이지 목업 | 10-04 |
@@ -389,7 +390,7 @@ test01: 온보딩 → 목표 추천 → AI 계획 생성·확정 → 타이머 5
 **남은 것**
 - ~~test02~05 로 이어서~~ — test02·03 은 팀원이 직접 사용, test04 는 8차에서 진행. 남은 것은 test05(계정 관리)
 - ~~첫 화면이 소개 없이 바로 로그인 화면~~ ✅ 10-01 랜딩 페이지 추가 (`2d6597a`)
-- 대시보드에서 만든 테스트 계정은 프로필 행이 없다(앱 가입 경로가 아니라서) — 화면은 '내 계정'으로 버티게 했지만 **배포 전 test01~05 계정과 기록은 삭제** (비밀번호가 단순하다)
+- 대시보드에서 만든 테스트 계정은 프로필 행이 없다(앱 가입 경로가 아니라서) — 화면은 '내 계정'으로 버티게 했지만 ~~배포 전 test01~05 계정과 기록은 삭제~~ → 10-05 팀 결정으로 **시연·점검용으로 남김**. 비밀번호가 단순하니 발표 뒤 삭제
 
 #### 8차 — 10-02 (test04 처음부터 · 새 기능 포함, `8f3f077` 까지)
 
@@ -430,12 +431,31 @@ test01: 온보딩 → 목표 추천 → AI 계획 생성·확정 → 타이머 5
 
 확인 못 한 것: '오늘 쉬기'·블록 시작 알림(블록 10분 전 알림이 생겨야 보임), 캘린더 내보내기(.ics — 파일 받기라 생략), 실제 탈퇴(확인창까지만).
 
+#### 10차 — 10-05 (배포 후 점검, `6413175` 까지)
+
+프론트를 Vercel, 백엔드 API 와 알림 워커를 Railway 에 올리고 **배포 주소에서** 점검했다. 테스트 **495/495** · lint·build 통과.
+
+확인한 것: 비회원 목표 추천(AI 배지·"빠듯해요") · 공모전 목록 · 대시보드·일정·학습·알림·마이페이지(화면이 부르는 API 모두 200) ·
+AI 학습 분해(ADsP, 에이전트가 단위 25개를 39초에) · 관심 공모전 준비 블록 미리보기 ·
+위비티 수집(GitHub Actions → 새 공고 32건, 실패 0) · 야간 재조정(Plan jobs 수동 실행 성공) · 알림 워커(10분 전 알림이 실제로 도착) ·
+구글 로그인 · 캘린더에서 가져오기 · 비밀번호 재설정 메일(팀원이 직접 확인).
+
+| 우선 | 발견 | 조치 |
+|---|---|---|
+| 높음 | 배포된 프론트의 요청이 **전부 404** — Vercel `NEXT_PUBLIC_API_BASE` 에 `https://` 가 빠져 브라우저가 프론트 안 경로(`vercel.app/<백엔드 주소>/...`)로 읽음. 분야 목록은 기본값이 보여서 처음엔 몰랐음 | `lib/api.js` 가 스킴이 없으면 붙이고 끝 `/` 를 뗌 (`6413175`) · Vercel 값도 `https://` 포함으로 고쳐 **Config** 유형으로 다시 등록(Secret 은 공개 접두사 경고) |
+| 높음 | Railway 에 Supabase 키가 없어 DB 를 쓰는 요청이 전부 503 (`/health` 는 200 이라 서버는 멀쩡해 보임) | API·워커 두 서비스 모두에 `.env` 의 Supabase·Claude·Google 값 추가 |
+| 높음 | 공고 수집 워크플로가 **초록인데 실제로는 수집 안 됨** — 저장소 secret 이 백엔드가 아닌 주소를 가리켜 HTML 200(또는 http→https 리다이렉트)을 성공으로 봄 | 워크플로가 202·409 만 성공으로 보고 응답 코드를 로그에 남김 (`b89d2da`) · secret 을 `https://` 포함 백엔드 주소로 |
+| 중간 | `FRONTEND_ORIGIN` 끝에 `/` 를 붙이면 CORS 가 전부 막힘 (브라우저 Origin 에는 `/` 가 없다) | 끝 `/` 를 떼고 비교 (`df51e86`) |
+| 낮음 | 배포 서버의 Python 버전이 정해져 있지 않음 (CI 는 3.12) | `backend/.python-version` (`df51e86`) |
+
+배운 것: **`/health` 200 과 워크플로 초록은 "연결됨"을 뜻하지 않는다.** DB 를 실제로 읽는 요청(`/contests`)과 DB 에 남은 기록(`batch_runs`)으로 확인해야 한다.
+
 ### 아직 풀지 못한 것
 
 - **공용 DB 에서 실제 계정으로 끝까지 (E·전원)** — 10-01 테스트 계정으로 목표 → 계획 → 학습 → 대시보드까지 확인(7차). 앱 가입 → 탈퇴 → 보관본 확인은 아직
 - ~~임베딩 (D·B)~~ ✅ 09-29 — OpenAI 없이 Claude 로만 하기로 결정. RAG ①(목표, `services/goal_claude.py`) ②(공고, `services/contest_claude.py`) 모두 Claude Haiku 관련성 판단. 남은 것: 정답셋으로 임계값 0.60/0.62 확인 (A 품질 평가와 함께)
-- **배포 (E)** — 실사용자 테스트(10-08~)가 여기 걸려 있음
-- **03:00 야간 재조정 스케줄 (E)** — GitHub Actions `plan-jobs.yml` 이 부른다 (10-02 추가). 배포 후 저장소 secrets `STUDYPACE_API_BASE`·`BATCH_SECRET` 과 variable `NIGHTLY_REPLAN_ENABLED=true` 만 넣으면 된다. 그전까지는 일정 화면의 "지금 다시 놓기"로 확인
+- ~~배포 (E)~~ ✅ 10-05 — 10차 점검 참고
+- ~~03:00 야간 재조정 스케줄 (E)~~ ✅ 10-05 — GitHub Actions `plan-jobs.yml` 수동 실행으로 확인, 매일 03:00 자동
 - ~~마이그레이션 005~007 정리 후 적용 (E·B)~~ ✅ 09-28 — 007 적용, 005·006 은 014 로 대체해 적용. 팀 코드가 쓰는 테이블은 이제 공용 DB 에 모두 있다
 - `ai_call_logs` 의 테스트 흔적 1건(id 2, `source=template`) 삭제 여부
 
@@ -459,6 +479,22 @@ npm run dev                        # http://localhost:3000
 프론트는 `frontend/.env.local`에 `NEXT_PUBLIC_API_BASE`를 넣는다.
 
 자세한 내용은 [frontend/README.md](frontend/README.md) 참고.
+
+### 배포
+
+| 구성 | 주소 · 실행 | 플랫폼 |
+|---|---|---|
+| 프론트 | https://codyssey-final-project.vercel.app | Vercel · Root Directory `frontend` |
+| 백엔드 API | https://codysseyfinalproject-production.up.railway.app (`/docs`, `/health`) | Railway · Root `backend` · `uvicorn main:app --host 0.0.0.0 --port $PORT` |
+| 알림 워커 | 도메인 없음 | Railway 같은 저장소의 두 번째 서비스 · Root `backend` · `python workers/notification_worker.py` |
+| 정해진 시각 배치 | `contest-jobs.yml` 수집 05:00 · 추천 월 09:00 / `plan-jobs.yml` 야간 재조정 03:00 | GitHub Actions — secrets `STUDYPACE_API_BASE` · `BATCH_SECRET`, variables `CONTEST_COLLECTION_ENABLED` · `CONTEST_RECOMMENDATIONS_ENABLED` · `NIGHTLY_REPLAN_ENABLED` |
+
+`main` 에 push 하면 Vercel·Railway 가 자동으로 다시 배포한다. 환경변수 목록은 [아키텍처 문서 8절](docs/architecture.md#8-배포-구성).
+
+- 주소는 **`https://` 를 포함하고 끝에 `/` 없이** 넣는다 (10차 점검에서 빠뜨려 전부 404·가짜 성공이 났다)
+- `NEXT_PUBLIC_API_BASE` 는 빌드할 때 코드에 들어가므로 바꾼 뒤 Vercel 에서 **Redeploy** 해야 반영된다. 공개 값이라 유형은 Config
+- Railway 의 API·워커 두 서비스에 같은 환경변수를 넣는다. 확인은 `/health` 가 아니라 `/contests` (DB 를 실제로 읽는다)
+- 배포 주소를 바꾸면 Railway `FRONTEND_ORIGIN`·`PASSWORD_RESET_REDIRECT_URL`, Supabase Redirect URLs(`/auth/callback`·`/reset-password`), 구글 OAuth 리디렉션 URI(`/calendar/callback`)를 함께 바꾼다
 
 ---
 
