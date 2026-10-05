@@ -132,6 +132,7 @@ flowchart LR
 | [backend/README.md](backend/README.md) | 백엔드 실행 · 학습 분해 Agent · 스케줄 배치 엔진 · 규칙 검증기 · API |
 | [frontend/README.md](frontend/README.md) | 프론트엔드 실행 방법 · 폴더 구조 · 화면↔기능 ID 매핑 · 모바일 대응 |
 | [docs/architecture.md](docs/architecture.md) | **시스템 아키텍처** — 구성 요소 · 파이프라인별 흐름 · 데이터 모델 · 인증·보안 · 자동화 · 배포 |
+| [docs/user-test/](docs/user-test/README.md) | **실사용자 테스트** — 운영 가이드 · 참여자 안내·동의서 · 설문·인터뷰 · 리포트 · 지표 스크립트(`python -m scripts.user_test_metrics`) |
 | [docs/학습로드맵.md](docs/학습로드맵.md) | 팀 보유 기술(Vercel·Python 등) 기준 **추가 학습 항목** · 스택 조정 근거 · 역할별 학습 순서 |
 | `기능명세서_학습플래너.xlsx` | 기능 69개 상세 명세 + AI 기능 명세(Agent 도구표, RAG 파라미터, 폴백 정책, 평가 방법) |
 | `-1.png` | 4개 파이프라인 다이어그램 |

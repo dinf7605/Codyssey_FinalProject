@@ -57,3 +57,6 @@ backend/services/_goal_limiter_state.json
 
 # ── 비회원 "관심없음" 임시 저장 (FR-GOAL-08, 재시작 대비용 — 각자 로컬 상태) ──
 backend/services/_goal_feedback_state.json
+
+# 실사용자 테스트 참여자 이메일 (docs/user-test) — 저장소에 올리지 않는다
+participants*.txt
