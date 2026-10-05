@@ -4,7 +4,16 @@
 // 로컬:  NEXT_PUBLIC_API_BASE=http://localhost:8000
 // 배포: Vercel 프론트에서 접근할 API 주소를 환경변수에 등록
 
-const BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8000';
+// https:// 를 빼고 넣으면 브라우저가 프론트 안의 경로로 읽어 모든 요청이 404 가 난다 (10-05 배포 때 실제로 겪음).
+// 그래서 스킴이 없으면 붙이고(localhost 는 http), 끝의 / 는 뗀다.
+function normalizeBase(raw) {
+  const value = (raw || '').trim().replace(/\/+$/, '');
+  if (!value) return 'http://localhost:8000';
+  if (/^https?:\/\//i.test(value)) return value;
+  return /^(localhost|127\.0\.0\.1)(:|$)/.test(value) ? `http://${value}` : `https://${value}`;
+}
+
+const BASE = normalizeBase(process.env.NEXT_PUBLIC_API_BASE);
 
 // 로그인 토큰 보관 위치
 export const TOKEN_KEY = 'sp_access_token';
