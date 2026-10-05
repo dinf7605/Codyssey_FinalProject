@@ -269,6 +269,7 @@ export default function OnboardingPage() {
             recommendedWeeks: g.recommended_weeks,
             weeklyHours: g.weekly_hours,
             deadline: g.deadline || null, // 다음 시험일 — 일정 화면이 기한으로 이어받는다
+            kind: g.kind, // 공모전이면 '시험' 대신 '마감'이라고 부른다
             source: 'popular_pick',
           });
           setView('confirm');
@@ -399,6 +400,7 @@ export default function OnboardingPage() {
       recommendedWeeks: candidate.recommended_weeks,
       weeklyHours: candidate.weekly_hours,
       deadline: candidate.deadline || null, // 다음 시험일 — 일정 화면이 기한으로 이어받는다
+      kind: candidate.kind, // 공모전이면 '시험' 대신 '마감'이라고 부른다
       source: 'recommend',
     });
     setView('confirm');
@@ -694,7 +696,7 @@ export default function OnboardingPage() {
               ) : visibleCandidates.length > 0 ? (
                 <>
                   입력하신 주 {weeklyHours}시간으로 <b>기한을 못 맞추는 목표는 뺐어요.</b>
-                  {' '}권장 기간보다 시험이 가까운 목표에는 &lsquo;빠듯해요&rsquo;를 붙였어요.
+                  {' '}권장 기간보다 시험·마감이 가까운 목표에는 &lsquo;빠듯해요&rsquo;를 붙였어요.
                   {queryUsed === 'fallback_popular' && ' 딱 맞는 후보가 없어 인기 목록으로 대신 보여드려요.'}
                   {queryUsed === 'popular_pick' && ' 고르신 목표로 기간을 계산했어요.'}
                 </>
@@ -778,12 +780,12 @@ export default function OnboardingPage() {
                             백엔드 이유 프롬프트와 같은 내림 값 */}
                         {g.deadline && (
                           <span className="pill mono">
-                            시험 {g.deadline} · 약 {Math.floor(deadlineWeeksLeft(g))}주 뒤
+                            {dueWord(g)} {g.deadline} · 약 {Math.floor(deadlineWeeksLeft(g))}주 뒤
                           </span>
                         )}
                         {g.deadline &&
                           plannedWeeks({ minWeeks: g.min_weeks, recommendedWeeks: g.recommended_weeks }) >
-                            deadlineWeeksLeft(g) && <span className="pill pill-late">시험까지 빠듯해요</span>}
+                            deadlineWeeksLeft(g) && <span className="pill pill-late">{dueWord(g)}까지 빠듯해요</span>}
                         <span className="pill mono">주 {g.weekly_hours}시간</span>
                       </div>
                       <b style={{ fontSize: '14px' }}>{g.title}</b>
@@ -973,12 +975,12 @@ export default function OnboardingPage() {
                 {plannedWeeks(picked) && <span className="mono tiny muted">준비 약 {plannedWeeks(picked)}주</span>}
                 <span className="mono tiny muted">주 {picked.weeklyHours}시간</span>
                 {picked.deadline && (
-                  <span className="mono tiny muted">{picked.source === 'manual' ? '기한' : '시험일'} {picked.deadline}</span>
+                  <span className="mono tiny muted">{picked.source === 'manual' ? '기한' : `${dueWord(picked)}일`} {picked.deadline}</span>
                 )}
               </div>
               {picked.deadline && plannedWeeks(picked) > deadlineWeeksLeft(picked) && (
                 <p className="hint" style={{ marginTop: 8 }}>
-                  {picked.source === 'manual' ? '기한' : '시험일'}까지 약 {Math.floor(deadlineWeeksLeft(picked))}주라 권장 기간보다 빠듯해요.
+                  {picked.source === 'manual' ? '기한' : `${dueWord(picked)}일`}까지 약 {Math.floor(deadlineWeeksLeft(picked))}주라 권장 기간보다 빠듯해요.
                   일정 화면에서 범위를 줄이거나 기한을 늘릴 수 있어요.
                 </p>
               )}
@@ -1131,6 +1133,11 @@ function backTargetFor(view, picked, pickOrigin, allDismissed = false) {
 }
 
 // 요일 x 시간대 격자의 한 줄
+// 공모전은 '응시'가 아니라 '마감' — 카드·확정 화면이 '시험 2026-10-24'로 보였다 (10-05 사전 점검 2차)
+function dueWord(goal) {
+  return goal?.kind === 'contest' ? '마감' : '시험';
+}
+
 function SlotRow({ label, days, slots, onToggle }) {
   return (
     <>

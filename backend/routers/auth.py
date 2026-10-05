@@ -3,6 +3,7 @@ import os
 from urllib.parse import urlsplit
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
 from db import get_supabase_client, new_auth_client
 from schemas.user import (
     LoginRequest,
@@ -167,6 +168,35 @@ def login(req: LoginRequest):
         "access_token": session.access_token,
         "refresh_token": session.refresh_token,
         "user_id": auth_res.user.id,
+    }
+
+
+class RefreshRequest(BaseModel):
+    refresh_token: str = Field(min_length=1, max_length=2000)
+
+
+SESSION_EXPIRED = "로그인이 만료됐어요. 다시 로그인해 주세요."
+
+
+@router.post("/refresh")
+def refresh(req: RefreshRequest):
+    """로그인 유지 — 1시간이면 끝나는 access token 을 refresh token 으로 새로 받는다.
+
+    예전엔 refresh token 을 저장만 하고 쓰지 않아 한 시간 뒤 말없이 로그아웃됐다 (10-05 사전 점검 2차).
+    refresh token 은 한 번 쓰면 바뀌므로 새 값을 함께 돌려준다 (frontend lib/api.js refreshSession).
+    """
+    auth_client = new_auth_client()
+    try:
+        res = auth_client.auth.refresh_session(req.refresh_token)
+    except Exception:
+        raise HTTPException(status_code=401, detail=SESSION_EXPIRED) from None
+    session = getattr(res, "session", None)
+    if not session:
+        raise HTTPException(status_code=401, detail=SESSION_EXPIRED)
+    return {
+        "access_token": session.access_token,
+        "refresh_token": session.refresh_token,
+        "user_id": res.user.id if res.user else None,
     }
 
 

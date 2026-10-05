@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { api, getToken } from '@/lib/api';
 import { loadExploration } from '@/lib/goalSession';
 import { clearContestPlanning, loadContestPlanning } from '@/lib/contest-planning';
-import { planInput, slotsHours, weeksBetween } from '@/lib/planInput';
+import { daysBetween, planInput, slotsHours } from '@/lib/planInput';
 import { clearDraft, draftKey, loadDraft, saveDraft } from '@/lib/planDraft';
 import { clearBusy, loadBusy, startCalendarConnect } from '@/lib/calendarBusy';
 import { notifyPlanChanged, usePlan } from '@/lib/usePlan';
@@ -347,7 +347,8 @@ export default function PlanBuilder() {
           <b>{input.goalTitle}</b>
           <span>
             {DEADLINE_LABEL[input.deadlineSource]} {input.deadline}
-            {deadlineValid && ` (${weeksBetween(input.startDay, input.deadline)}주)`} · 주 {weeklyHours}시간 ·{' '}
+            {/* 남은 기간은 날짜로 — 주로 반올림하면 추천 카드의 '약 2주 뒤'와 '(3주)'가 어긋났다 (10-05 사전 점검 2차) */}
+            {deadlineValid && ` (${daysBetween(input.startDay, input.deadline)}일)`} · 주 {weeklyHours}시간 ·{' '}
             {input.fromContest ? '공모전 화면에서 정한 시간' : input.fromOnboarding ? '온보딩에서 고른 시간' : '기본값: 평일 저녁'}
           </span>
         </div>
@@ -423,7 +424,7 @@ export default function PlanBuilder() {
             AI로 학습 계획 만들기
           </button>
           <p className="hint">
-            출제 범위를 찾아 공부 단위로 나눈 뒤 빈 시간에 배치합니다. 최대 1분 걸리고,
+            준비 범위를 찾아 공부 단위로 나눈 뒤 빈 시간에 배치합니다. 최대 1분 걸리고,
             넘기면 표준 커리큘럼으로 시작합니다.
           </p>
         </>

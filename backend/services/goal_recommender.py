@@ -59,15 +59,28 @@ def reason_consistent(text: str, candidate: FeasibleCandidate) -> bool:
     return not numbers or numbers <= allowed
 
 
+def _and(word: str) -> str:
+    """받침에 맞는 '와/과' — "'마케팅'와"로 나왔다 (10-05 사전 점검 2차). 한글이 아니면 '와(과)'."""
+    code = ord(word.strip()[-1]) - 0xAC00 if word.strip() else -1
+    if not 0 <= code <= 11171:
+        return "와(과)"
+    return "과" if code % 28 else "와"
+
+
+def _due_word(candidate: FeasibleCandidate) -> str:
+    """공모전은 '시험일'이 아니라 '마감일'이다."""
+    return "마감일" if candidate.kind == "contest" else "시험일"
+
+
 def _template_reason(candidate: FeasibleCandidate, tags: list[str]) -> str:
     overlap = sorted(set(t.lower() for t in tags) & set(candidate.tags))
     if overlap:
-        tag_part = f"관심 태그 '{overlap[0]}'와 가장 유사해요."
+        tag_part = f"관심 태그 '{overlap[0]}'{_and(overlap[0])} 가장 유사해요."
     else:
         tag_part = "지금 인기 있는 목표예요."
     left = _weeks_between(date.today(), candidate.deadline)
     if left is not None and candidate.recommended_weeks > left:
-        time_part = "시험일까지 권장 기간보다 짧아 빠듯하게 준비해야 해요."
+        time_part = f"{_due_word(candidate)}까지 권장 기간보다 짧아 빠듯하게 준비해야 해요."
     elif candidate.min_weeks >= 0 and candidate.min_weeks <= candidate.recommended_weeks:
         time_part = "지금 가용시간이면 기한 안에 준비할 수 있어요."
     else:
@@ -86,9 +99,9 @@ def _ai_reason(candidate: FeasibleCandidate, tags: list[str], client, model: str
         f"사용자가 입력한 관심 단어: {', '.join(tags) or '없음'}\n"
         f"추천 목표: {candidate.title} ({candidate.field})\n"
         + (f"예상 준비 기간: 약 {weeks}주 (주당 {candidate.weekly_hours}시간 기준)\n" if weeks else "")
-        + (f"다음 시험일까지: 약 {math.floor(left)}주\n" if left is not None else "")
-        + ({True: "기간 판정: 빠듯함 (시험일까지 남은 기간이 예상 기간보다 짧다)\n",
-            False: "기간 판정: 여유 있음 (시험일까지 남은 기간이 예상 기간보다 길다) — 빠듯하다고 쓰지 마세요\n"}
+        + (f"다음 {_due_word(candidate)}까지: 약 {math.floor(left)}주\n" if left is not None else "")
+        + ({True: f"기간 판정: 빠듯함 ({_due_word(candidate)}까지 남은 기간이 예상 기간보다 짧다)\n",
+            False: f"기간 판정: 여유 있음 ({_due_word(candidate)}까지 남은 기간이 예상 기간보다 길다) — 빠듯하다고 쓰지 마세요\n"}
            .get(_is_tight(candidate), ""))
         + "위 정보로 이 목표를 추천하는 이유를 2문장 이내, 80자 이내, 한국어 존댓말로 짧게 써 주세요.\n"
         "지킬 것: 관심 단어는 사용자의 관심일 뿐이니 사용자의 실력·경력·보유 지식을 가정하지 마세요. "

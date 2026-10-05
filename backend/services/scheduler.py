@@ -116,6 +116,24 @@ def subtract_busy(
     return out
 
 
+def longest_slot_minutes(availability: Availability) -> int:
+    """가장 긴 공부 칸(분). 칸이 없으면 0."""
+    def minutes(hhmm: str) -> int:
+        t = _parse_hhmm(hhmm)
+        return t.hour * 60 + t.minute
+
+    return max((minutes(s.end) - minutes(s.start) for s in availability.slots), default=0)
+
+
+def needs_split(minutes: int, longest_slot: int) -> bool:
+    """빈칸 길이에 맞춰 나눠 놓을 단위인가 — 120분이 넘거나, 가장 긴 칸에도 통째로 안 들어가면.
+
+    '하루 최대 1시간'을 고른 사람의 1시간 칸에는 90분 단위가 통째로 들어갈 수 없어 하나도 배치되지 않았다
+    (10-05 사전 점검 2차). 그런 단위도 칸에 맞춰 60분 + 30분처럼 나눈다.
+    """
+    return minutes > MAX_BLOCK_MINUTES or (longest_slot > 0 and minutes > longest_slot)
+
+
 def split_minutes(total: int) -> list[int]:
     """단위 시간을 블록(최대 MAX_BLOCK_MINUTES분) 여러 개로 고르게 나눈다. 5분 단위로 맞춘다.
 
@@ -165,11 +183,12 @@ def build_schedule(
 
     has_block = {b.unit_id for b in fixed_blocks}
     pieces: dict[str, list[_Piece]] = {}
-    flex: dict[str, int] = {}  # 120분이 넘는 단위 → 순번. 빈칸 길이에 맞춰 나눈다 (_fill_unit)
+    flex: dict[str, int] = {}  # 나눠 놓을 단위(needs_split) → 순번. 빈칸 길이에 맞춰 나눈다 (_fill_unit)
+    longest = longest_slot_minutes(availability)
     for seq, unit in enumerate(topological_order(units), start=1):
         if unit.id in has_block:
             continue  # 고정 블록으로 이미 배치됨
-        if unit.estimated_minutes > MAX_BLOCK_MINUTES:
+        if needs_split(unit.estimated_minutes, longest):
             flex[unit.id] = seq
             continue
         pieces[unit.id] = [_Piece(unit=unit, block_id=f"blk-{unit.id}-{seq}", title=unit.title,

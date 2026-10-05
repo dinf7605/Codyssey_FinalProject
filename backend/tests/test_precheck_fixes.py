@@ -49,6 +49,45 @@ def test_준비_기간은_날짜로_판정한다():
     assert too_short.verdict == "impossible"  # 22일 < 26.25일
 
 
+# 2차 — '하루 최대 1시간'의 1시간 칸에 90분 단위가 하나도 놓이지 않았다
+def test_가장_긴_칸보다_긴_단위는_칸에_맞춰_나눠_놓는다():
+    from schemas.plan import Availability, StudyUnit, TimeSlot
+    from services.scheduler import build_schedule
+    from services.scope import check_scope
+
+    hour = Availability(slots=[TimeSlot(weekday=w, start="22:00", end="23:00") for w in range(5)], rest_weekday=6)
+    units = [StudyUnit(id=f"u{i}", title=f"단원 {i}", estimated_minutes=90) for i in range(3)]
+    plan = build_schedule(units, hour, date(2026, 10, 6), date(2026, 10, 24))
+    assert plan.unplaced == []
+    assert all(b.minutes <= 60 for b in plan.blocks) and sum(b.minutes for b in plan.blocks) == 270
+    assert check_scope(units, hour, date(2026, 10, 6), date(2026, 10, 24))["available_minutes"] > 0
+
+
+def test_세션_연장은_새_토큰을_돌려주고_잘못된_토큰은_401(monkeypatch):
+    from types import SimpleNamespace
+    from fastapi.testclient import TestClient
+    from main import app
+    from routers import auth
+
+    class FakeAuth:
+        def refresh_session(self, token):
+            if token != "good":
+                raise RuntimeError("invalid")
+            return SimpleNamespace(session=SimpleNamespace(access_token="new-a", refresh_token="new-r"),
+                                   user=SimpleNamespace(id="u1"))
+
+    monkeypatch.setattr(auth, "new_auth_client", lambda: SimpleNamespace(auth=FakeAuth()))
+    client = TestClient(app)
+    res = client.post("/auth/refresh", json={"refresh_token": "good"})
+    assert res.status_code == 200 and res.json() == {"access_token": "new-a", "refresh_token": "new-r", "user_id": "u1"}
+    assert client.post("/auth/refresh", json={"refresh_token": "old"}).status_code == 401
+
+
+def test_추천_이유_조사():
+    from services.goal_recommender import _and
+    assert (_and("마케팅"), _and("데이터"), _and("SQL")) == ("과", "와", "와(과)")
+
+
 # 12번 — AI 가 묶은 단위 이름이 너무 길었다
 def test_묶은_단위_이름을_줄인다():
     long = "관계와 조인의 이해 + Null 속성의 이해 + 본질식별자와 인조식별자 (개념 반복 포함)"

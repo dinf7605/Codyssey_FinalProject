@@ -91,12 +91,50 @@ function authHeaders() {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
+// 로그인 유지 — Supabase access token 은 1시간이면 만료된다. 예전엔 refresh token 을 저장만 하고 쓰지 않아
+// 한 시간 뒤 아무 안내 없이 로그아웃됐다 (10-05 사전 점검 2차). 401 이면 한 번만 연장하고 다시 보낸다.
+// 동시에 여러 요청이 401 을 받아도 연장은 한 번만 한다 (refresh token 은 한 번 쓰면 바뀐다).
+let refreshing = null;
+
+function refreshSession() {
+  const refreshToken = getRefreshToken();
+  if (!refreshToken) return Promise.resolve(false);
+  if (!refreshing) {
+    refreshing = fetch(`${BASE}/auth/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    })
+      .then(async (res) => {
+        if (!res.ok) {
+          clearAuthTokens(); // 연장도 안 되면 로그인이 끝난 것 — 남은 토큰 때문에 회원·비회원 화면이 섞이지 않게
+          return false;
+        }
+        const body = await res.json();
+        setAuthTokens({ accessToken: body.access_token, refreshToken: body.refresh_token, userId: body.user_id });
+        return true;
+      })
+      .catch(() => false) // 네트워크가 끊긴 것이면 토큰은 그대로 둔다
+      .finally(() => {
+        setTimeout(() => { refreshing = null; }, 0);
+      });
+  }
+  return refreshing;
+}
+
+/** 로그인 헤더를 붙여 보내고, 401 이면 세션을 연장해 한 번 더 보낸다 */
+async function authFetch(url, init = {}) {
+  const send = () => fetch(url, { ...init, headers: { ...(init.headers || {}), ...authHeaders() } });
+  let res = await send();
+  if (res.status === 401 && getToken() && (await refreshSession())) res = await send();
+  return res;
+}
+
 async function request(path, options = {}) {
-  const res = await fetch(`${BASE}${path}`, {
+  const res = await authFetch(`${BASE}${path}`, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
-      ...authHeaders(),
       ...(options.headers || {}),
     },
   });
@@ -385,12 +423,11 @@ export const api = {
       { goalTitle, goalId, availability, today, signal },
       onEvent = () => {}
     ) => {
-      const res = await fetch(`${BASE}/plan/decompose/stream`, {
+      const res = await authFetch(`${BASE}/plan/decompose/stream`, {
         method: 'POST',
         signal,
         headers: {
           'Content-Type': 'application/json',
-          ...authHeaders(),
         },
         body: JSON.stringify({
           goal_title: goalTitle,
@@ -495,7 +532,7 @@ export const api = {
     deleteBlock: (blockId) => del(`/plan/blocks/${encodeURIComponent(blockId)}`),
     // FR-PLAN-08 내 캘린더로 내보내기 — .ics 파일(Blob)을 받는다. 화면이 저장 창을 띄운다
     calendarFile: async (planId) => {
-      const res = await fetch(`${BASE}/plan/${encodeURIComponent(planId)}/calendar.ics`, { headers: authHeaders() });
+      const res = await authFetch(`${BASE}/plan/${encodeURIComponent(planId)}/calendar.ics`);
       if (!res.ok) {
         const err = new Error('캘린더 파일을 만들지 못했어요.');
         err.status = res.status;

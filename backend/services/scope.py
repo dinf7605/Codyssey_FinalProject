@@ -14,7 +14,7 @@ import math
 from datetime import date, timedelta
 
 from schemas.plan import BREAK_MINUTES, MAX_BLOCK_MINUTES, MAX_BLOCKS_PER_DAY, Availability, StudyUnit
-from services.scheduler import split_minutes, topological_order
+from services.scheduler import longest_slot_minutes, needs_split, split_minutes, topological_order
 
 OVER_RATIO = 1.5
 
@@ -83,8 +83,10 @@ def check_scope(units: list[StudyUnit], availability: Availability, start: date,
     # 칸에 들어가는 건 단위가 아니라 블록이다 — 긴 단위는 120분 이하 블록 여러 개로 나뉘어 놓인다
     parts = [m for u in units for m in split_minutes(u.estimated_minutes)]
     lengths = (round(sum(parts) / len(parts)), min(parts)) if parts else (MAX_BLOCK_MINUTES,) * 2
-    # 공부량 대부분이 120분 넘는 단위면 빈칸에 맞춰 나눠 놓으니(scheduler._fill_unit) 칸을 거의 다 쓴다
-    flexible = total > 0 and sum(u.estimated_minutes for u in units if u.estimated_minutes > MAX_BLOCK_MINUTES) * 2 >= total
+    # 공부량 대부분이 나눠 놓는 단위(120분 초과 · 가장 긴 칸보다 김)면 빈칸에 맞춰 나눠 놓으니
+    # (scheduler._fill_unit) 칸을 거의 다 쓴다 — 1시간 칸만 있을 때 '빈 시간 0시간'으로 잘못 셌다 (10-05)
+    longest = longest_slot_minutes(availability)
+    flexible = total > 0 and sum(u.estimated_minutes for u in units if needs_split(u.estimated_minutes, longest)) * 2 >= total
     available = available_minutes(availability, start, deadline, lengths, flexible)
     ratio = round(total / available, 2) if available else None
     over = available == 0 or total > available * OVER_RATIO

@@ -146,6 +146,11 @@ const addDays = (iso, days) => {
   return toISODate(d);
 };
 
+/** 시작일부터 기한까지 며칠인지 (최소 0) */
+export function daysBetween(startDay, deadline) {
+  return Math.max(0, Math.round((new Date(`${deadline}T00:00:00`) - new Date(`${startDay}T00:00:00`)) / 86400000));
+}
+
 /** 시작일부터 기한까지 몇 주인지 (반올림, 최소 1) */
 export function weeksBetween(startDay, deadline) {
   const days = (new Date(`${deadline}T00:00:00`) - new Date(`${startDay}T00:00:00`)) / 86400000;
@@ -203,7 +208,7 @@ export function planInput(saved = loadExploration(), now = new Date(), contest =
     today,
     startDay,
     deadline,
-    deadlineSource: known ? (picked.source === 'manual' ? 'manual' : 'exam') : 'estimate',
+    deadlineSource: known ? (picked.source === 'manual' ? 'manual' : picked.kind === 'contest' ? 'contest' : 'exam') : 'estimate',
     tags: Array.isArray(saved?.tags) ? saved.tags : [],
     fromOnboarding: cells.length > 0,
     fromContest: false,
