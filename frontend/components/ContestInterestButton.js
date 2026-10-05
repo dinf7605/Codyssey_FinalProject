@@ -7,7 +7,8 @@ import { ddayOf, kstToday } from '@/lib/planView';
 import { notifyPlanChanged } from '@/lib/usePlan';
 
 // FR-CONT-07 관심 공모전 등록 — 마감 D-7 · D-3 준비 블록을 진행 중인 목표에 넣는다 (backend/services/contest_interest.py)
-// 일정이 바뀌므로 넣기 전에 놓일 자리를 먼저 보여 주고 확인을 받는다. 빈 시간이 모자라면 넣지 않고 그날 일정을 보여 준다.
+// 일정이 바뀌므로 넣기 전에 놓일 자리를 먼저 보여 주고 확인을 받는다. 자리가 없는 날은 그날 일정과 이유를 보여 주고,
+// 자리를 찾은 블록만 넣어(없으면 블록 없이) 관심 등록한다.
 // 관심을 해제하면 아직 안 한 준비 블록도 함께 지운다.
 // 마감이 3일 안이면 준비 블록을 놓을 날이 없으므로 버튼 대신 이유를 보여 준다 (서버도 같은 기준으로 거절한다).
 
@@ -55,7 +56,12 @@ export default function ContestInterestButton({ contestId, deadline }) {
       const res = await api.contestInterests.add(contestId);
       setState({ status: 'ready', interest: { contest_id: contestId, prep_blocks: res.blocks.length } });
       setPreview(null);
-      setMessage({ ok: true, text: `관심 등록했어요. '${res.goal_title}' 일정에 준비 블록 ${res.blocks.length}개를 넣었어요.` });
+      setMessage({
+        ok: true,
+        text: res.blocks.length
+          ? `관심 등록했어요. '${res.goal_title}' 일정에 준비 블록 ${res.blocks.length}개를 넣었어요.`
+          : '관심 등록했어요. 준비 블록은 넣지 않았어요.',
+      });
       notifyPlanChanged();
     } catch (err) {
       setMessage({ ok: false, text: err.message || '등록하지 못했어요.' });
@@ -134,12 +140,23 @@ export default function ContestInterestButton({ contestId, deadline }) {
                   )}
                 </div>
               ))}
-              <p className="hint" style={{ margin: 0 }}>그날 블록을 일정에서 옮기거나 공부 가능 시간을 늘린 뒤 다시 시도해 주세요.</p>
+              <p className="hint" style={{ margin: 0 }}>
+                {preview.blocks.length > 0
+                  ? '자리를 찾은 블록만 넣고 관심 등록할 수 있어요. 나머지도 넣으려면 그날 블록을 옮기거나 공부 가능 시간을 늘린 뒤 다시 시도해 주세요.'
+                  : '준비 블록 없이 관심 등록만 할 수 있어요 — 마감 임박 알림은 받을 수 있어요.'}
+              </p>
             </div>
           )}
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <button type="button" className="btn btn-sm btn-primary" disabled={busy || preview.conflicts.length > 0} onClick={confirmAdd}>
-              {busy ? '넣는 중…' : '이대로 넣기'}
+            {/* 예전엔 하나라도 자리가 없으면 버튼이 꺼져 관심 등록 자체를 못 했다 (10-05 사전 점검 3번) */}
+            <button type="button" className="btn btn-sm btn-primary" disabled={busy} onClick={confirmAdd}>
+              {busy
+                ? '넣는 중…'
+                : preview.conflicts.length === 0
+                ? '이대로 넣기'
+                : preview.blocks.length > 0
+                ? `${preview.blocks.length}개만 넣고 등록`
+                : '블록 없이 관심만 등록'}
             </button>
             <button type="button" className="btn btn-sm btn-quiet" disabled={busy} onClick={() => setPreview(null)}>취소</button>
           </div>

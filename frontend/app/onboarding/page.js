@@ -8,6 +8,8 @@ import EmptyState from '@/components/EmptyState';
 import { api, getToken } from '@/lib/api';
 import { getAnonSessionId, saveExploration } from '@/lib/goalSession';
 import { BANDS, plannedWeeks, weeklyHoursOf } from '@/lib/planInput';
+import DailyCapPicker from '@/components/DailyCapPicker';
+import { topicParticle } from '@/lib/ui';
 
 // /goal/tags 를 받기 전·받지 못했을 때 보여줄 관심분야 칩. 받으면 카탈로그 태그로 바뀐다
 const FALLBACK_TAGS = ['IT·개발', '데이터분석', '디자인', '마케팅', '기획', '금융', '어학', '공모전', '포트폴리오'];
@@ -83,8 +85,9 @@ export default function OnboardingPage() {
   const [popularGoals, setPopularGoals] = useState([]);
 
   const [slots, setSlots] = useState({});
+  const [dailyCap, setDailyCap] = useState(null); // 하루 최대 공부 시간(분) — 칸이 3~4시간이라 따로 묻는다
   // 칸마다 실제 시각(planInput.BANDS)으로 센다 — 일정 화면이 쓰는 값과 같아야 한다
-  const weeklyHours = weeklyHoursOf(slots);
+  const weeklyHours = weeklyHoursOf(slots, dailyCap);
 
   const [candidates, setCandidates] = useState([]);
   const [queryUsed, setQueryUsed] = useState('tags');
@@ -136,6 +139,7 @@ export default function OnboardingPage() {
     function handlePageShow(e) {
       if (e.persisted) {
         setSlots({});
+        setDailyCap(null);
       }
     }
     window.addEventListener('pageshow', handlePageShow);
@@ -322,19 +326,26 @@ export default function OnboardingPage() {
 
   // excluded 후보 목록으로 "왜 기한을 맞추기 어려운지" 문구를 만든다.
   // 후보 1건이면 표준시간·최소기간·마감일까지 구체적으로, 여러 건이면 이름만 나열한다.
-  function excludedDetailText(list) {
-    if (!list || list.length === 0) return '';
+  // 마감이 하루도 안 남은 후보는 고를 수 없으니 이유도 보이지 않는다 — 고르지도 않은 공고가
+  // "약 0주라 부족해요"로 맨 위에 나왔다 (10-05 사전 점검 8번)
+  function shownExcluded(list) {
+    return (list || []).filter((c) => !c.deadline || (new Date(c.deadline) - new Date()) / 86400000 >= 1);
+  }
+
+  function excludedDetailText(all) {
+    const list = shownExcluded(all);
+    if (list.length === 0) return '';
     if (list.length === 1) {
       const c = list[0];
       const weeksLeft = deadlineWeeksLeft(c);
       return (
-        `'${c.title}'은(는) 보통 ${c.standard_hours}시간(약 ${c.min_weeks}주)이 필요해요.` +
+        `'${c.title}'${topicParticle(c.title)} 보통 ${c.standard_hours}시간(약 ${c.min_weeks}주)이 필요해요.` +
         // 공모전은 '응시'가 아니라 '마감' — 자격증만 다음 응시 가능일이라고 부른다
         (c.deadline ? ` ${c.kind === 'contest' ? '접수 마감일' : '다음 응시 가능일'}(${c.deadline})까지 남은 기간은 약 ${weeksLeft}주라 부족해요.` : '')
       );
     }
-    const titles = list.map((c) => c.title).join(', ');
-    return `${titles}은(는) 지금 가용시간으로는 기한 안에 어려워 제외했어요.`;
+    const titles = list.map((c) => `'${c.title}'`).join(', ');
+    return `${titles}${topicParticle(list[list.length - 1].title)} 지금 가용시간으로는 기한 안에 어려워 제외했어요.`;
   }
 
   // ── STEP 3: 추천 카드 피드백 (FR-GOAL-08) ──────────────────
@@ -459,7 +470,7 @@ export default function OnboardingPage() {
         return;
       }
       // FR-GOAL-13 — 가입(또는 재방문) 후 이어받을 수 있도록 세션에 저장해 둔다 (30분 유효)
-      saveExploration({ tags, weeklyHours, slots, picked });
+      saveExploration({ tags, weeklyHours, slots, dailyCap, picked });
       // 이미 로그인된 회원이면 가입을 또 거칠 필요 없이 바로 일정 생성 화면으로 —
       // 그 화면(PlanBuilder)이 방금 저장한 탐색 결과를 그대로 읽는다.
       // 비회원은 가입 → 로그인 뒤 일정 화면으로 돌아오게 next 를 붙인다
@@ -647,6 +658,8 @@ export default function OnboardingPage() {
               ))}
             </div>
 
+            <DailyCapPicker value={dailyCap} onChange={setDailyCap} />
+
             <div className="panel" style={{ padding: 'var(--gap-3) var(--gap-4)', display: 'flex', justifyContent: 'space-between' }}>
               <span className="muted tiny">선택한 주간 학습 시간</span>
               <span className="mono strong">{weeklyHours}시간</span>
@@ -680,7 +693,8 @@ export default function OnboardingPage() {
                 <>보여드린 후보를 모두 넘기셨어요. 관심분야를 다시 고르거나 직접 입력해 보세요.</>
               ) : visibleCandidates.length > 0 ? (
                 <>
-                  입력하신 주 {weeklyHours}시간으로 <b>기한 안에 끝낼 수 있는 목표만</b> 남겼습니다.
+                  입력하신 주 {weeklyHours}시간으로 <b>기한을 못 맞추는 목표는 뺐어요.</b>
+                  {' '}권장 기간보다 시험이 가까운 목표에는 &lsquo;빠듯해요&rsquo;를 붙였어요.
                   {queryUsed === 'fallback_popular' && ' 딱 맞는 후보가 없어 인기 목록으로 대신 보여드려요.'}
                   {queryUsed === 'popular_pick' && ' 고르신 목표로 기간을 계산했어요.'}
                 </>
@@ -712,7 +726,7 @@ export default function OnboardingPage() {
                 title={allExceeded ? '가용시간으로는 기한을 맞추기 어려워요' : '추천할 목표를 찾지 못했어요'}
                 description={
                   allExceeded
-                    ? excludedCandidates.length
+                    ? shownExcluded(excludedCandidates).length
                       ? `${excludedDetailText(excludedCandidates)} 가용시간을 늘리거나, 범위를 줄여 직접 입력해 보세요.`
                       : '가용시간을 늘리거나, 범위를 줄여 직접 입력해 보세요.'
                     : '직접 목표를 입력해 볼 수 있어요.'
@@ -733,7 +747,7 @@ export default function OnboardingPage() {
               />
             ) : (
               <>
-                {excludedCandidates.length > 0 && (
+                {shownExcluded(excludedCandidates).length > 0 && (
                   <div
                     className="hint"
                     style={{ background: 'var(--surface-2)', borderRadius: 8, padding: '10px 12px' }}
@@ -757,10 +771,16 @@ export default function OnboardingPage() {
                         {g.ai_generated ? <AiBadge /> : <span className="pill mono">인기 목표</span>}
                         {plannedWeeks({ minWeeks: g.min_weeks, recommendedWeeks: g.recommended_weeks }) && (
                           <span className="pill mono">
-                            약 {plannedWeeks({ minWeeks: g.min_weeks, recommendedWeeks: g.recommended_weeks })}주
+                            준비 약 {plannedWeeks({ minWeeks: g.min_weeks, recommendedWeeks: g.recommended_weeks })}주
                           </span>
                         )}
-                        {g.deadline && <span className="pill mono">시험일 {g.deadline}</span>}
+                        {/* 추천 이유가 '시험까지 N주'를 말하는데 카드엔 그 숫자가 없어 '약 4주'와 '6주'가 섞여 보였다 (10-05 사전 점검 6번).
+                            백엔드 이유 프롬프트와 같은 내림 값 */}
+                        {g.deadline && (
+                          <span className="pill mono">
+                            시험 {g.deadline} · 약 {Math.floor(deadlineWeeksLeft(g))}주 뒤
+                          </span>
+                        )}
                         {g.deadline &&
                           plannedWeeks({ minWeeks: g.min_weeks, recommendedWeeks: g.recommended_weeks }) >
                             deadlineWeeksLeft(g) && <span className="pill pill-late">시험까지 빠듯해요</span>}
@@ -950,7 +970,7 @@ export default function OnboardingPage() {
             <div className="panel" style={{ padding: 'var(--gap-4)' }}>
               <b style={{ fontSize: '14px' }}>{picked.title}</b>
               <div style={{ display: 'flex', gap: 14, marginTop: 8 }}>
-                {plannedWeeks(picked) && <span className="mono tiny muted">약 {plannedWeeks(picked)}주</span>}
+                {plannedWeeks(picked) && <span className="mono tiny muted">준비 약 {plannedWeeks(picked)}주</span>}
                 <span className="mono tiny muted">주 {picked.weeklyHours}시간</span>
                 {picked.deadline && (
                   <span className="mono tiny muted">{picked.source === 'manual' ? '기한' : '시험일'} {picked.deadline}</span>

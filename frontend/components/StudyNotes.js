@@ -18,6 +18,23 @@ const subscribeNothing = () => () => {};
 const keyOf = (g) => g.plan_id || FREE;
 const nameOf = (g) => g.goal_title || '목표 없이 적은 메모';
 
+// 같은 목표를 끝내고 다시 만들면 이름이 같은 칩이 여러 개 생겼다 ('SQLD' 3개, 10-05 사전 점검 10번).
+// 이름이 겹치면 진행 중·끝낸 목표를 붙이고, 그래도 겹치면 번호를 붙인다
+function chipLabels(groups) {
+  const labels = new Map();
+  const seen = new Map();
+  for (const g of groups) {
+    let label = nameOf(g);
+    if (g.plan_id && groups.filter((o) => nameOf(o) === label).length > 1) {
+      label += g.active ? ' · 진행 중' : ' · 끝낸 목표';
+    }
+    const n = (seen.get(label) || 0) + 1;
+    seen.set(label, n);
+    labels.set(keyOf(g), n > 1 ? `${label} ${n}` : label);
+  }
+  return labels;
+}
+
 export default function StudyNotes() {
   const hasToken = useSyncExternalStore(subscribeNothing, () => Boolean(getToken()), () => false);
   const [groups, setGroups] = useState(null);
@@ -47,6 +64,7 @@ export default function StudyNotes() {
 
   const focusKey = groups.some((g) => keyOf(g) === focus) ? focus : 'all';
   const shown = focusKey === 'all' ? groups : groups.filter((g) => keyOf(g) === focusKey);
+  const chipLabel = chipLabels(groups);
 
   return (
     <section className="sec" aria-label="학습 메모 모아보기">
@@ -58,7 +76,7 @@ export default function StudyNotes() {
           {groups.map((g) => (
             <button key={keyOf(g)} type="button" className="chip" aria-pressed={focusKey === keyOf(g)}
               onClick={() => setFocus(keyOf(g))}>
-              {nameOf(g)}
+              {chipLabel.get(keyOf(g))}
             </button>
           ))}
         </div>

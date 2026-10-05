@@ -27,12 +27,15 @@ def estimate_preparation(
     current_date = today or date.today()
     days_left = max(0, (contest.deadline - current_date).days)
     weeks_left = floor(days_left / 7)
-    weeks_needed = ceil(standard.hours / weekly_hours)
+    weeks_needed = ceil(standard.hours / weekly_hours)  # 화면에 보이는 주 수 (올림)
+    # 판정은 날짜로 한다 — 주 수를 올린 값(28일)으로 비교하면 30시간 ÷ 주 8시간 = 26.25일인데
+    # 27일 남은 공고를 "어렵습니다"로 봤다 (10-05 사전 점검 4번)
+    days_needed = ceil(standard.hours / weekly_hours * 7)
 
-    if days_left < weeks_needed * 7:
+    if days_left < days_needed:
         verdict = "impossible"
         message = "이번 회차는 어렵습니다. 다음 회차 또는 유사 공고를 확인해 주세요."
-    elif days_left < ceil(weeks_needed * 7 * TIGHT_BUFFER_RATIO):
+    elif days_left < ceil(days_needed * TIGHT_BUFFER_RATIO):
         verdict = "tight"
         message = "준비 기간이 빠듯합니다. 주당 투입 시간을 확보해 주세요."
     else:

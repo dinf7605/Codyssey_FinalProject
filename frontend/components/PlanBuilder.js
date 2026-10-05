@@ -110,6 +110,7 @@ export default function PlanBuilder() {
   const [showAll, setShowAll] = useState(false);
   // 확정 — idle | saving | saved | login | error
   const [saveState, setSaveState] = useState({ state: 'idle', message: '' });
+  const [savedOpen, setSavedOpen] = useState(false); // 확정 뒤 만든 계획 자세히 보기
   // FR-PLAN-02 — 공부량이 가용시간의 1.5배를 넘으면 범위 축소안. used 는 지금 배치에 쓴 단위·기한
   const [scope, setScope] = useState(draft?.scope ?? null);
   // 공부량 점검(1.5배)엔 안 걸렸는데 실제 배치에서 못 넣은 단위가 있을 때의 선택지 — 그대로 놓았을 때 기준으로 고정해 둔다
@@ -323,6 +324,22 @@ export default function PlanBuilder() {
   const units = result ? (showAll ? result.units : result.units.slice(0, PREVIEW_UNITS)) : [];
   const estimatedCount = result ? result.units.filter((u) => u.estimated).length : 0;
 
+  // 확정한 뒤에는 만들기 화면을 접는다 — 저장 후에도 미리보기와 '다시 만들기'가 그대로 있어
+  // 확정됐는지 헷갈리고, 다시 만들면 방금 저장한 계획이 보관된다 (10-05 사전 점검 13번)
+  if (saveState.state === 'saved' && !savedOpen) {
+    return (
+      <div className="panel stack" style={{ padding: 'var(--gap-4)', gap: 8 }} role="status">
+        <b>&lsquo;{input.goalTitle}&rsquo; 계획을 확정했어요</b>
+        <p className="hint" style={{ margin: 0 }}>
+          위 &lsquo;내 학습 일정&rsquo;에 블록 {plan?.blocks.length ?? 0}개가 놓였어요. 공부 시간은 마이페이지 → 목표 관리에서 바꿀 수 있어요.
+        </p>
+        <button type="button" className="btn btn-quiet btn-sm" onClick={() => setSavedOpen(true)} style={{ alignSelf: 'flex-start' }}>
+          만든 계획 자세히 보기
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="stack plan-builder" style={{ gap: 'var(--gap-4)' }}>
       <div className="row" style={{ borderBottom: 0, paddingBottom: 0 }}>
@@ -334,7 +351,7 @@ export default function PlanBuilder() {
             {input.fromContest ? '공모전 화면에서 정한 시간' : input.fromOnboarding ? '온보딩에서 고른 시간' : '기본값: 평일 저녁'}
           </span>
         </div>
-        {view === 'done' && (
+        {view === 'done' && saveState.state !== 'saved' && (
           <button type="button" className="btn btn-quiet btn-sm" onClick={run}>
             다시 만들기
           </button>

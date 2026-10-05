@@ -12,6 +12,7 @@ import {
   VIOLATION_LABEL, WEEKDAY_MON, addDays, addMonths, blockState, blocksByDay, dayKey, dayNum, ddayOf,
   hhmm, kstToday, monthGrid, monthLabel, weekOf, whenLabel,
 } from '@/lib/planView';
+import { unitProgress } from '@/lib/pace';
 
 // FR-PLAN-04 일정 조회 — 확정한 계획을 주·월 단위로 본다 (담당 C)
 // FR-PLAN-05 블록 수동 편집 — 날짜 칸으로 끌어다 놓거나(PC) 블록 메뉴로 옮기기·지우기
@@ -221,7 +222,8 @@ export default function PlanCalendar() {
     <div className="stack" style={{ gap: 'var(--gap-4)' }}>
       <ul className="rows" aria-label="진행 중인 목표">
         {plans.map((p) => {
-          const done = p.blocks.filter((b) => b.done).length;
+          // 진도는 대시보드와 같은 '단원' 기준 — 블록(0/28)과 단원(0/25)이 화면마다 달라 헷갈렸다 (10-05 사전 점검 9번)
+          const progress = unitProgress(p);
           const dday = ddayOf(p.deadline, today);
           return (
             <li className="row" key={p.plan_id}>
@@ -231,7 +233,7 @@ export default function PlanCalendar() {
                   {p.goal_title}
                 </b>
                 <span>
-                  {dday >= 0 ? `D-${dday}` : `기한 ${-dday}일 지남`} · 블록 {done}/{p.blocks.length} 완료
+                  {dday >= 0 ? `D-${dday}` : `기한 ${-dday}일 지남`} · 단원 {progress.done}/{progress.total} 완료
                   {p.unplaced?.length ? ` · 미배치 ${p.unplaced.length}` : ''}
                 </span>
               </div>

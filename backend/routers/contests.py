@@ -145,7 +145,7 @@ def recommend_contests(
         previous_ids = {str(row["contest_id"]) for row in previous}
         dates = [date.fromisoformat(row["deadline"]) for row in plans if row.get("deadline")]
         goal_deadline = max(dates) if dates else None
-    candidates, _ = repository.search(ContestSearch(sort="latest", limit=20))
+    candidates = recommendation_candidates(repository, interests)
     def log_call(source: str, latency_ms: int, message: str) -> None:
         # 관리자 AI 통계(FR-ADMIN-02)에 공고 추천 호출도 보이게 한다. 게스트는 user_id 없이 남긴다.
         log_ai_call(
@@ -174,6 +174,31 @@ def recommend_contests(
         method=method,
         message=None if ranked else "관심 키워드와 일치하는 공고를 찾지 못했습니다.",
     )
+
+
+CANDIDATE_LIMIT = 20  # contest_claude.MAX_CANDIDATES 와 같다 — 그 이상은 Claude 가 보지 않는다
+KEYWORD_CANDIDATES = 12  # 키워드가 들어간 공고를 먼저 이만큼, 나머지는 최신 공고로 채운다
+
+
+def recommendation_candidates(repository, interests: list[str]) -> list:
+    """추천 후보 — 관심 키워드가 제목·주최·요약에 든 공고를 먼저, 남는 자리는 최신 공고.
+
+    예전엔 최신 20건만 봐서, 공고가 147건으로 늘자 '데이터'로 검색하면 나오는 데이터 분석 공모전 2건을
+    추천이 놓치고 무관한 1건만 냈다 (10-05 사전 점검 2번).
+    """
+    picked: dict[str, object] = {}
+    for word in interests[:5]:
+        matches, _ = repository.search(ContestSearch(query=word, sort="deadline", limit=KEYWORD_CANDIDATES))
+        for contest in matches:
+            if len(picked) >= KEYWORD_CANDIDATES:
+                break
+            picked.setdefault(contest.id, contest)
+    latest, _ = repository.search(ContestSearch(sort="latest", limit=CANDIDATE_LIMIT))
+    for contest in latest:
+        if len(picked) >= CANDIDATE_LIMIT:
+            break
+        picked.setdefault(contest.id, contest)
+    return list(picked.values())
 
 
 def run_weekly_recommendations(db, at: datetime) -> None:

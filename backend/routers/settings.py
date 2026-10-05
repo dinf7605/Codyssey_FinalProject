@@ -48,7 +48,7 @@ class NotificationSettings(BaseModel):
     intensity: Literal["low", "normal", "high"] = "normal"  # 약: 시작 알림만 · 보통 · 강: 독촉 포함
     # FR-MY-03 — 재조정 결과 · 마감 임박(관심 공모전 마감 24시간 전, 전체 끄기와 별개) · 학습 독촉
     # 저장한 적 없으면 가입 때 '학습 알림 수신(선택)' 동의를 따른다 (기본 꺼짐)
-    notify_replan: bool = False
+    notify_replan: bool = True  # 재조정 결과는 기본으로 켠다 (services/alarms.DEFAULTS)
     notify_deadline: bool = False
     notify_nudge: bool = False
 

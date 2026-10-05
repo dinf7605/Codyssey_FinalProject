@@ -3,8 +3,9 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { api } from '@/lib/api';
-import { BANDS, slotsFromExploration, slotsHours } from '@/lib/planInput';
+import { BANDS, cellsFromSlots, slotsFromExploration, slotsHours } from '@/lib/planInput';
 import { notifyPlanChanged } from '@/lib/usePlan';
+import DailyCapPicker from '@/components/DailyCapPicker';
 
 // FR-MY-01 가용 시간 수정 · FR-MY-02 목표 관리(종료·바꾸기) · FR-PLAN-08 내 캘린더로 내보내기 — 마이페이지
 // 시간을 바꾸면 아직 안 한 앞으로의 블록이 새 시간에 다시 놓인다 (PUT /plan/{id}/availability).
@@ -13,23 +14,14 @@ import { notifyPlanChanged } from '@/lib/usePlan';
 const DAYS = ['월', '화', '수', '목', '금', '토', '일'];
 const SUNDAY = 6;
 
-// 저장된 시간표 → 온보딩과 같은 '시간대-요일' 칸. 칸과 딱 맞지 않는 시간은 칸으로 옮기지 못해 따로 알린다
-function cellsOf(availability) {
-  const cells = {};
-  let odd = 0;
-  for (const slot of availability?.slots || []) {
-    const band = Object.keys(BANDS).find((b) => BANDS[b].start === slot.start && BANDS[b].end === slot.end);
-    if (band) cells[`${band}-${DAYS[slot.weekday]}`] = true;
-    else odd += 1;
-  }
-  return { cells, odd };
-}
-
+// 저장된 시간표 → 온보딩과 같은 '시간대-요일' 칸 + 하루 최대 시간 (planInput.cellsFromSlots).
+// 칸 시작과 맞지 않는 시간은 칸으로 옮기지 못해 따로 알린다
 function StudyTimeEditor({ plan, onDone }) {
-  const initial = cellsOf(plan.availability);
+  const initial = cellsFromSlots(plan.availability?.slots || []);
   const [cells, setCells] = useState(initial.cells);
+  const [dailyCap, setDailyCap] = useState(initial.dailyCap);
   const [state, setState] = useState({ pending: false, error: '' });
-  const slots = slotsFromExploration(cells);
+  const slots = slotsFromExploration(cells, dailyCap);
 
   async function save() {
     setState({ pending: true, error: '' });
@@ -72,6 +64,7 @@ function StudyTimeEditor({ plan, onDone }) {
           </tbody>
         </table>
       </div>
+      <DailyCapPicker value={dailyCap} onChange={setDailyCap} />
       <p className="tiny muted" style={{ margin: 0 }}>주 {slotsHours(slots)}시간 · 완료한 블록과 직접 옮긴 블록은 그대로 둡니다</p>
       {state.error && <p className="hint hint-error" role="alert">{state.error}</p>}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>

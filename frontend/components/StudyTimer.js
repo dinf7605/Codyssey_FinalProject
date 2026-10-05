@@ -90,12 +90,14 @@ function format(sec) {
   return h ? `${h}:${m}:${r}` : `${m}:${r}`;
 }
 
-// 예상 대비 실제 — "-96%" 대신 몇 분 차이인지 말로 쓴다
-function deviationText(minutes, expected) {
+// 예상 대비 실제 — "-96%" 대신 몇 분 차이인지 말로 쓴다.
+// 끝내지 않고 시간만 기록했으면 차이를 따지지 않는다 — 일부러 멈춘 사람에게 "55분 짧았어요"는 나무라는 말로 들렸다 (10-05 사전 점검 11번)
+function deviationText(minutes, expected, blockDone) {
   if (!expected) return '';
+  if (!blockDone) return ` · 예상 ${expected}분 중 ${minutes}분 했어요. 블록은 일정에 남겨 뒀어요`;
   const diff = minutes - expected;
   if (Math.abs(diff) <= expected * 0.1) return ` · 예상(${expected}분)과 비슷해요`;
-  return ` · 예상(${expected}분)보다 ${Math.abs(diff)}분 ${diff > 0 ? '더 걸렸어요' : '짧았어요'}`;
+  return ` · 예상(${expected}분)보다 ${Math.abs(diff)}분 ${diff > 0 ? '더 걸렸어요' : '빨리 끝냈어요'}`;
 }
 
 function hoursText(minutes) {
@@ -358,7 +360,7 @@ export default function StudyTimer({ blockId = null }) {
       {result?.state === 'saved' && (
         <p className="hint" style={{ color: 'var(--ok)' }} role="status">
           {result.res.minutes}분을 기록했어요
-          {deviationText(result.res.minutes, result.expected)}
+          {deviationText(result.res.minutes, result.expected, result.res.block_done)}
           {result.res.block_done ? ' · 블록을 완료로 표시했어요.' : '.'} <Link href="/schedule">일정 보기</Link>
           {result.res.block_done && result.blockId && (
             <>

@@ -119,7 +119,8 @@ def test_가입_때_선택_동의하면_선택_알림이_켜진다(db):
     db.table("users").insert({"user_id": USER, "agree_marketing": True}).execute()
     s = alarms.settings_for(db, [USER, OTHER])
     assert (s[USER]["notify_replan"], s[USER]["notify_nudge"], s[USER]["notify_deadline"]) == (True, True, True)
-    assert (s[OTHER]["notify_replan"], s[OTHER]["notify_nudge"]) == (False, False)
+    # 재조정 결과는 선택 동의와 상관없이 기본으로 켠다 (10-05) · 독촉·마감은 동의를 따른다
+    assert (s[OTHER]["notify_replan"], s[OTHER]["notify_nudge"], s[OTHER]["notify_deadline"]) == (True, False, False)
     assert (s[OTHER]["quiet_start"], s[OTHER]["quiet_end"]) == ("23:00", "07:00")  # FR-MY-05 기본 방해금지
 
 
@@ -223,11 +224,12 @@ def test_주간_요약에_이번_주_추천_공모전_1건(db):
 
 
 def test_재조정_결과는_켠_사람에게_방해금지가_끝난_뒤_보낸다(db):
-    db.table("user_notification_settings").insert({"user_id": USER, "notify_replan": True}).execute()
+    # 재조정 결과는 기본으로 켜져 있다 (10-05) — OTHER 는 알림 설정에서 직접 껐다
+    db.table("user_notification_settings").insert({"user_id": OTHER, "notify_replan": False}).execute()
     db.table("plan_reschedule_runs").insert([
         {"user_id": USER, "plan_id": "p1", "summary": "지난 블록 2개를 옮겼어요.", "moved": 2,
          "created_at": to_db_time(datetime(2026, 10, 6, 3, 0))},
-        {"user_id": OTHER, "plan_id": "p2", "summary": "x", "moved": 1,  # OTHER 는 선택 동의 없음 → 기본 꺼짐
+        {"user_id": OTHER, "plan_id": "p2", "summary": "x", "moved": 1,  # 꺼 둔 사람에게는 보내지 않는다
          "created_at": to_db_time(datetime(2026, 10, 6, 3, 0))},
     ]).execute()
     assert alarms.run_replan_results(db, datetime(2026, 10, 6, 3, 5))["sent"] == 0  # 방해금지
@@ -342,7 +344,7 @@ def test_오늘_쉬기_API(client, db):
 def test_알림_설정_저장과_조회(client, db):
     assert client.get("/settings/notifications").json() == {
         "enabled": True, "reminder_minutes_before": 10, "quiet_start": "23:00", "quiet_end": "07:00",
-        "intensity": "normal", "notify_replan": False, "notify_deadline": False, "notify_nudge": False,
+        "intensity": "normal", "notify_replan": True, "notify_deadline": False, "notify_nudge": False,
     }
     body = {"enabled": True, "reminder_minutes_before": 15, "quiet_start": "22:30", "quiet_end": "07:00",
             "intensity": "high", "notify_replan": True, "notify_deadline": False, "notify_nudge": True}

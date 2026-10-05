@@ -53,6 +53,13 @@ export function objectParticle(word) {
   return code % 28 ? '을' : '를';
 }
 
+/** 받침에 맞는 보조사 — '공모전은', '정보처리기사는' / 한글이 아니면(괄호·영문으로 끝나면) '은(는)' */
+export function topicParticle(word) {
+  const code = (word || '').trim().slice(-1).charCodeAt(0) - 0xac00;
+  if (Number.isNaN(code) || code < 0 || code > 11171) return '은(는)';
+  return code % 28 ? '은' : '는';
+}
+
 /** 남은 일수 → 'D-12' 형태 (FR-MAIN-04: 기한이 지나면 D+) */
 export function dday(days) {
   if (days === 0) return 'D-DAY';

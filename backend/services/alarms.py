@@ -60,11 +60,13 @@ DEFAULTS = {
     "quiet_start": "23:00",   # FR-MY-05 기본 방해금지 23:00~07:00
     "quiet_end": "07:00",
     "intensity": "normal",
-    "notify_replan": None,    # None = 가입 때 선택 동의(users.agree_marketing)를 따른다
-    "notify_deadline": None,
+    # 재조정 결과는 내 일정이 바뀌었다는 서비스 안내라 기본으로 켠다 — 선택 동의를 따르면 핵심 기능인
+    # 야간 재조정이 일어나도 대부분의 사용자가 몰랐다 (10-05 사전 점검 7번). 끄는 건 알림 설정에서
+    "notify_replan": True,
+    "notify_deadline": None,  # None = 가입 때 선택 동의(users.agree_marketing)를 따른다
     "notify_nudge": None,
 }
-OPTIONAL = ("notify_replan", "notify_deadline", "notify_nudge")
+OPTIONAL = ("notify_deadline", "notify_nudge")
 JOBS_BY_INTENSITY = {
     "low": {"before_block"},                                                     # 약: 시작 알림만
     "normal": {"before_block", "weekly_summary", "replan_result"},               # 보통 (기본)

@@ -11,6 +11,7 @@ import GoalSettings from '@/components/GoalSettings';
 import NotificationSettings from '@/components/NotificationSettings';
 import { isOpen, nextUnlock, LEVELS, UNLOCK_LABEL } from '@/lib/growth';
 import { ddayOf, kstToday } from '@/lib/planView';
+import { unitProgress } from '@/lib/pace';
 import { dday, subjectParticle } from '@/lib/ui';
 import { usePlan } from '@/lib/usePlan';
 import { useStats } from '@/lib/useStats';
@@ -130,7 +131,7 @@ export default function MyPage() {
               <div className="row" key={p.plan_id}>
                 <div className="row-main">
                   <b>{p.goal_title}</b>
-                  <span>기한 {p.deadline} · 블록 {p.blocks.filter((b) => b.done).length}/{p.blocks.length} 완료</span>
+                  <span>기한 {p.deadline} · 단원 {unitProgress(p).done}/{unitProgress(p).total} 완료</span>
                 </div>
                 <span className="mono tiny dim">{dday(ddayOf(p.deadline, today))}</span>
               </div>

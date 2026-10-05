@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import time
 from datetime import date
 from typing import Callable
@@ -69,6 +70,7 @@ SYSTEM_PROMPT = """너는 학습 계획을 세우는 커리큘럼 설계자다.
   - search_curriculum 으로 찾은 범위 안에서 만든다
   - 검색 범위 밖의 내용을 넣어야 하면 그 단위의 estimated 를 true 로 표시한다
   - 단위는 최대 25개. 짧은 항목은 같은 과목끼리만, 묶은 항목의 minutes 합이 600 이하일 때만 한 단위로 묶는다
+  - title 은 30자 이내로 짧게 쓴다. 여러 항목을 묶었으면 '관계·조인·식별자'처럼 핵심어만 이어 쓴다
   - 커리큘럼 minutes 는 한 번 앉아서 공부할 시간이다. 표준 학습시간이 더 크면 반복·문제 풀이로 늘려 맞춘다.
     estimate_effort 는 커리큘럼에 없는 단위에만 쓴다
   - 첫 턴에 search_curriculum 과 get_available_slots 를 함께 부른다
@@ -112,12 +114,34 @@ def _extract_json(text: str) -> dict | None:
     return first
 
 
+TITLE_MAX = 30
+_TRAILING_NOTE = re.compile(r"\s*\([^()]*\)\s*$")
+
+
+def short_title(title: str) -> str:
+    """묶은 단위 이름을 화면에 맞게 줄인다.
+
+    모델이 항목을 묶으며 "관계와 조인의 이해 + Null 속성의 이해 + 본질식별자와 인조식별자 (개념 반복 포함)"처럼
+    이어 붙여, 일정 화면에서 무엇을 하는 블록인지 한눈에 안 들어왔다 (10-05 사전 점검 12번).
+    길면 끝의 괄호 설명을 떼고 '+' 를 '·' 로, 그래도 길면 앞의 두 주제 + '외 N개'.
+    """
+    title = " ".join(str(title).split())
+    if len(title) <= TITLE_MAX:
+        return title.replace(" + ", "·")
+    title = _TRAILING_NOTE.sub("", title)
+    parts = [p.strip() for p in title.split("+") if p.strip()]
+    joined = "·".join(parts)
+    if len(joined) <= TITLE_MAX or len(parts) <= 2:
+        return joined
+    return f"{'·'.join(parts[:2])} 외 {len(parts) - 2}개"
+
+
 def parse_units(payload: dict) -> list[StudyUnit]:
     """고정 스키마로 검증한다. 하나라도 어긋나면 예외가 난다."""
     raw = payload.get("units")
     if not isinstance(raw, list) or not raw:
         raise ValueError("units 배열이 비어 있습니다")
-    return [StudyUnit(**item) for item in raw]
+    return [StudyUnit(**{**item, "title": short_title(item.get("title", ""))}) for item in raw]
 
 
 def standard_minutes(goal_title: str) -> int | None:

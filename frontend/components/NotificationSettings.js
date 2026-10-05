@@ -102,7 +102,7 @@ export default function NotificationSettings() {
         </fieldset>
 
         <fieldset className="stack" style={{ gap: 6, border: 0, padding: 0, margin: 0 }}>
-          <legend className="tiny strong">일정 변경 알림 (선택)</legend>
+          <legend className="tiny strong">일정 변경 · 독촉 알림</legend>
           <Toggle checked={form.notify_replan} onChange={(v) => set({ notify_replan: v })}
             title="재조정 결과" help="밤사이 블록을 옮기면 아침에 알려요" disabled={form.intensity === 'low'} />
           <Toggle checked={form.notify_nudge} onChange={(v) => set({ notify_nudge: v })}

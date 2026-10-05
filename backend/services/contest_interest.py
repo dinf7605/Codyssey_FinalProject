@@ -52,8 +52,27 @@ def _label(day: date) -> str:
     return f"{day.month}/{day.day}({WEEKDAY[day.weekday()]})"
 
 
+def _conflict_reason(day: date, today: date, availability) -> str:
+    """그날과 앞 이틀에 왜 자리가 없는지 — 날마다 '공부하는 날이 아님'과 '이미 차 있음'을 나눠 말한다.
+
+    예전엔 하루라도 공부 시간이 있으면 모두 '다른 블록으로 차 있어요'라고 했다. 평일만 공부하는 사람의
+    D-7 이 일요일이면 토·일은 공부하는 날이 아닌데도 그렇게 안내했다 (10-05 사전 점검 3번)
+    """
+    study_days = {slot.weekday for slot in availability.slots}
+    rest = getattr(availability, "rest_weekday", None)
+    tried = [day - timedelta(days=s) for s in range(SHIFT_DAYS + 1) if day - timedelta(days=s) >= today]
+    off = [t for t in tried if t.weekday() not in study_days or t.weekday() == rest]
+    full = [t for t in tried if t not in off]
+    labels = lambda days: "·".join(_label(t) for t in sorted(days))  # noqa: E731
+    if off and full:
+        return f"{labels(off)}은 공부하는 날이 아니고, {labels(full)}은 이미 다른 블록으로 차 있어요."
+    if off:
+        return f"{labels(off)}{' 모두' if len(off) > 1 else '은'} 공부하는 날이 아니에요."
+    return f"{labels(full)}의 공부 시간이 이미 다른 블록으로 차 있어요."
+
+
 def preview(db, user_id: str, contest_id: str, now: datetime) -> dict:
-    """준비 블록을 어디에 놓을지 계산만 한다. conflicts 가 있으면 넣을 수 없다."""
+    """준비 블록을 어디에 놓을지 계산만 한다. conflicts 는 자리를 못 찾은 날 — 그 블록만 빼고 등록할 수 있다."""
     contest = _contest(db, contest_id)
     if _interest(db, user_id, str(contest["id"])):
         raise ReplanError("이미 관심 등록한 공모전이에요.")
@@ -100,13 +119,9 @@ def preview(db, user_id: str, contest_id: str, now: datetime) -> dict:
                 break
         if new is None:
             same_day = sorted((b for b in fixed if b.start.date() == day), key=lambda b: b.start)
-            # 그날만 보면 '공부 가능 시간이 없다'고 잘못 말했다 — 앞 이틀에 공부 시간이 있는데 차 있었던 경우 (10-02 실사용)
-            tried = [day - timedelta(days=s) for s in range(SHIFT_DAYS + 1)]
-            has_slot = any(slot.weekday == t.weekday() for t in tried for slot in availability.slots)
             conflicts.append({
                 "day": day.isoformat(), "label": f"D-{d} {_label(day)}",
-                "reason": ("그날과 앞 이틀의 공부 시간이 이미 다른 블록으로 차 있어요." if has_slot or same_day
-                           else "그날과 앞 이틀 모두 공부 가능 시간이 없어요."),
+                "reason": _conflict_reason(day, today, availability),
                 "blocks": [{"title": b.title, "start": b.start.isoformat(), "end": b.end.isoformat()} for b in same_day],
             })
             continue
@@ -124,24 +139,28 @@ def preview(db, user_id: str, contest_id: str, now: datetime) -> dict:
 
 
 def register(db, user_id: str, contest_id: str, now: datetime) -> dict:
-    """확인을 받은 뒤 저장한다. 그사이 일정이 바뀌어 자리가 없으면 넣지 않는다."""
+    """확인을 받은 뒤 저장한다. 자리를 찾은 준비 블록만 넣고, 하나도 못 넣어도 관심 등록(마감 알림)은 한다.
+
+    예전엔 둘 중 하나라도 자리가 없으면 등록 자체를 막아, 주말에 공부하지 않는 사람은 D-7 이 주말인 공모전을
+    관심 등록할 수 없었다 (10-05 사전 점검 3번). 화면은 미리보기에서 무엇이 빠지는지 보여 준 뒤 묻는다.
+    """
     plan_view = preview(db, user_id, contest_id, now)
-    if plan_view["conflicts"]:
-        raise ReplanError("빈 시간이 모자라 준비 블록을 넣지 않았어요. 겹치는 일정을 먼저 확인해 주세요.")
     placed = plan_view.pop("_placed")
     plan_id = plan_view["plan_id"]
-    position = len(plan_units(db, plan_id))
-    db.table("study_units").insert([
-        {"plan_id": plan_id, "unit_key": u.id, "title": u.title, "estimated_minutes": u.estimated_minutes,
-         "prerequisites": [], "estimated": False, "position": position + i}
-        for i, (u, _) in enumerate(placed)
-    ]).execute()
-    try:
-        db.table("plan_blocks").insert([
-            {"plan_id": plan_id, "unit_key": b.unit_id, "title": b.title, "start_at": to_db_time(b.start),
-             "end_at": to_db_time(b.end), "minutes": b.minutes, "locked": True, "done": False}
-            for _, b in placed
+    if placed:
+        position = len(plan_units(db, plan_id))
+        db.table("study_units").insert([
+            {"plan_id": plan_id, "unit_key": u.id, "title": u.title, "estimated_minutes": u.estimated_minutes,
+             "prerequisites": [], "estimated": False, "position": position + i}
+            for i, (u, _) in enumerate(placed)
         ]).execute()
+    try:
+        if placed:
+            db.table("plan_blocks").insert([
+                {"plan_id": plan_id, "unit_key": b.unit_id, "title": b.title, "start_at": to_db_time(b.start),
+                 "end_at": to_db_time(b.end), "minutes": b.minutes, "locked": True, "done": False}
+                for _, b in placed
+            ]).execute()
         db.table("contest_interests").insert({
             "user_id": user_id, "contest_id": plan_view["contest"]["id"], "plan_id": plan_id,
             "unit_keys": [u.id for u, _ in placed],
@@ -194,8 +213,11 @@ def move_after_archive(db, user_id: str, plan_id: str, now: datetime) -> dict:
         _remove_prep(db, plan_id, list(r.get("unit_keys") or []))
         db.table("contest_interests").delete().eq("id", r["id"]).eq("user_id", user_id).execute()
         try:
-            register(db, user_id, str(r["contest_id"]), now)
-            moved += 1
+            result = register(db, user_id, str(r["contest_id"]), now)
+            if result["blocks"]:
+                moved += 1
+            else:
+                unplaced += 1  # 관심 등록은 됐지만 남은 목표에 넣을 자리가 없었다
         except ReplanError:
             db.table("contest_interests").insert({
                 "user_id": user_id, "contest_id": r["contest_id"], "plan_id": None, "unit_keys": [],

@@ -139,15 +139,29 @@ def test_정한_날이_꽉_차면_하루_이틀_앞당긴다(client, db):
     assert body["blocks"][1]["shifted_days"] == 0
 
 
-def test_앞당겨도_자리가_없으면_넣지_않고_그날_일정을_알려준다(client, db):
+def test_앞당겨도_자리가_없으면_그_블록만_빼고_등록한다(client, db):
     pid = plan_id(db)
     for day in ("2026-10-21", "2026-10-22", "2026-10-23"):  # D-7 과 그 앞 이틀
         fill_evening(db, pid, day)
     body = client.post("/contest-interests/preview", json={"contest_id": "11111111-aaaa"}).json()
     [conflict] = body["conflicts"]
     assert conflict["day"] == "2026-10-23" and conflict["blocks"]
-    assert client.post("/contest-interests", json={"contest_id": "11111111-aaaa"}).status_code == 409
-    assert db.rows("contest_interests") == []
+    assert "차 있어요" in conflict["reason"]
+    # 예전엔 409 로 등록 자체를 막았다 — 이제 D-3 만 넣고 관심 등록(마감 알림)은 한다 (10-05 사전 점검 3번)
+    res = client.post("/contest-interests", json={"contest_id": "11111111-aaaa"})
+    assert res.status_code == 201 and [b["start"][:10] for b in res.json()["blocks"]] == ["2026-10-27"]
+    assert client.get("/contest-interests").json()["interests"][0]["prep_blocks"] == 1
+
+
+def test_자리를_못_찾은_이유는_쉬는_날과_찬_날을_나눠_말한다():
+    from services.contest_interest import _conflict_reason
+    weekdays = Availability(slots=[TimeSlot(weekday=w, start="19:00", end="21:00") for w in range(5)], rest_weekday=6)
+    # D-7 이 일요일(10/25) — 토·일은 공부하는 날이 아니고 금요일만 차 있다
+    assert _conflict_reason(date(2026, 10, 25), date(2026, 10, 5), weekdays) == (
+        "10/24(토)·10/25(일)은 공부하는 날이 아니고, 10/23(금)은 이미 다른 블록으로 차 있어요."
+    )
+    # 오늘이 그날이라 앞당길 날이 없으면 그날만 말한다
+    assert _conflict_reason(date(2026, 10, 25), date(2026, 10, 25), weekdays) == "10/25(일)은 공부하는 날이 아니에요."
 
 
 def test_마감이_가깝거나_목표_기한_밖이면_거절한다(client):

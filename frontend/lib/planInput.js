@@ -42,7 +42,20 @@ export function slotsHours(slots) {
   return Math.round((minutes / 60) * 10) / 10;
 }
 
-export function slotsFromExploration(cells = {}) {
+const toHHMM = (minutes) => `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
+
+// 하루 최대 공부 시간(분) — 칸은 3~4시간이라 '평일 저녁'만 골라도 주 15시간이 된다.
+// 하루 1~2시간인 사람이 실제보다 큰 계획을 받지 않게 칸 안에서 앞부분만 쓴다 (10-05 사전 점검 1번)
+export const DAILY_CAPS = [
+  { value: null, label: '제한 없음' },
+  { value: 60, label: '1시간' },
+  { value: 90, label: '1시간 30분' },
+  { value: 120, label: '2시간' },
+  { value: 180, label: '3시간' },
+];
+
+/** 고른 칸 → 일정 API 슬롯. dailyCap(분)이 있으면 요일마다 이른 칸부터 그 시간만큼만 쓴다 */
+export function slotsFromExploration(cells = {}, dailyCap = null) {
   const slots = [];
   for (const [key, on] of Object.entries(cells)) {
     if (!on) continue;
@@ -51,7 +64,44 @@ export function slotsFromExploration(cells = {}) {
     if (weekday < 0 || !BANDS[band]) continue;
     slots.push({ weekday, ...BANDS[band] });
   }
-  return slots.sort((a, b) => a.weekday - b.weekday || a.start.localeCompare(b.start));
+  slots.sort((a, b) => a.weekday - b.weekday || a.start.localeCompare(b.start));
+  if (!dailyCap) return slots;
+  const left = {};
+  const capped = [];
+  for (const s of slots) {
+    const remaining = left[s.weekday] ?? dailyCap;
+    const minutes = Math.min(remaining, toMinutes(s.end) - toMinutes(s.start));
+    if (minutes < 30) continue; // 30분 미만 자투리는 블록을 놓을 수 없다
+    left[s.weekday] = remaining - minutes;
+    capped.push({ weekday: s.weekday, start: s.start, end: toHHMM(toMinutes(s.start) + minutes) });
+  }
+  return capped;
+}
+
+/** 저장된 슬롯 → 온보딩과 같은 '시간대-요일' 칸 + 하루 최대 시간. 칸 시작과 맞지 않는 슬롯은 odd 로 센다 */
+export function cellsFromSlots(slots = []) {
+  const cells = {};
+  const perDay = {};
+  let trimmed = false;
+  let odd = 0;
+  for (const slot of slots) {
+    const band = Object.keys(BANDS).find(
+      (b) => BANDS[b].start === slot.start && toMinutes(slot.end) <= toMinutes(BANDS[b].end) && toMinutes(slot.end) > toMinutes(slot.start)
+    );
+    if (!band) {
+      odd += 1;
+      continue;
+    }
+    cells[`${band}-${DAYS[slot.weekday]}`] = true;
+    if (slot.end !== BANDS[band].end) trimmed = true;
+    perDay[slot.weekday] = (perDay[slot.weekday] || 0) + toMinutes(slot.end) - toMinutes(slot.start);
+  }
+  let dailyCap = null;
+  if (trimmed) {
+    const most = Math.max(...Object.values(perDay));
+    dailyCap = DAILY_CAPS.find((c) => c.value && c.value >= most)?.value ?? null;
+  }
+  return { cells, dailyCap, odd };
 }
 
 // 직접 입력한 주당 시간을 월~금에 나누되 하루 6시간을 넘기지 않는다.
@@ -68,8 +118,8 @@ export function slotsFromWeeklyHours(weeklyHours) {
 }
 
 /** 온보딩 칸 선택('저녁-월': true …)의 주간 합계(시간) — 계획이 쓰는 것과 같은 값 */
-export function weeklyHoursOf(cells = {}) {
-  return slotsHours(slotsFromExploration(cells));
+export function weeklyHoursOf(cells = {}, dailyCap = null) {
+  return slotsHours(slotsFromExploration(cells, dailyCap));
 }
 
 export function toISODate(d) {
@@ -136,7 +186,7 @@ export function planInput(saved = loadExploration(), now = new Date(), contest =
     };
   }
   const picked = saved?.picked;
-  const cells = slotsFromExploration(saved?.slots);
+  const cells = slotsFromExploration(saved?.slots, saved?.dailyCap ?? null);
   const slots = cells.length ? cells : DEFAULT_SLOTS;
   const startDay = firstStudyDay(slots, now);
 

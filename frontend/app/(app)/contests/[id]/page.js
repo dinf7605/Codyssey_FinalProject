@@ -9,6 +9,7 @@ import { api, getToken } from '@/lib/api';
 import { saveContestPlanning } from '@/lib/contest-planning';
 import { SOURCE_LABEL, daysLeft, safeUrl } from '@/lib/contests';
 import { dday } from '@/lib/ui';
+import { slotsHours } from '@/lib/planInput';
 
 // FR-CONT-10 준비 기간 산정 — 비회원도 로그인 없이 계산할 수 있다.
 // FR-CONT-11 계산 결과를 일정으로 만들려면 가입으로 유도한다.
@@ -37,6 +38,25 @@ export default function ContestDetailPage() {
   const [estimate, setEstimate] = useState(null);
   const [estimateError, setEstimateError] = useState('');
   const [signedIn] = useState(() => Boolean(getToken()));
+  const [hoursFromPlan, setHoursFromPlan] = useState(null);
+
+  // 로그인했으면 진행 중 계획의 주간 공부 시간으로 채운다 — 기본 8시간이라 주 15시간인 사람도 8시간으로 계산됐다 (10-05 사전 점검 5번)
+  useEffect(() => {
+    if (!signedIn) return undefined;
+    let alive = true;
+    api.plan.active().then(
+      (res) => {
+        const slots = (res?.plans || []).flatMap((p) => p.availability?.slots || []);
+        const weekly = Math.round(slotsHours(slots));
+        if (alive && weekly > 0) {
+          setHours(Math.min(30, Math.max(1, weekly)));
+          setHoursFromPlan(weekly);
+        }
+      },
+      () => {},
+    );
+    return () => { alive = false; };
+  }, [signedIn]);
 
   useEffect(() => {
     let alive = true;
@@ -174,6 +194,9 @@ export default function ContestDetailPage() {
 
         <div className="field" style={{ marginTop: 'var(--gap-4)' }}>
           <label htmlFor="hours">주당 투입 가능 시간: {hours}시간</label>
+          {hoursFromPlan && hours === Math.min(30, hoursFromPlan) && (
+            <p className="micro dim" style={{ margin: 0 }}>진행 중인 계획의 공부 시간(주 {hoursFromPlan}시간)으로 채웠어요</p>
+          )}
           <input
             id="hours"
             type="range"
@@ -201,8 +224,9 @@ export default function ContestDetailPage() {
               aria-live="polite"
             >
               <div className="stack" style={{ gap: 2 }}>
-                <span className="dim tiny">최소 필요 기간 · 마감까지 {estimate.weeks_left}주</span>
-                <span className="mono" style={{ fontSize: '14px', fontWeight: 600 }}>{estimate.weeks_needed}주</span>
+                {/* 마감까지는 날짜로 — '3주' 와 '4주'를 나란히 두면 반올림 때문에 판정과 숫자가 어긋나 보였다 */}
+                <span className="dim tiny">필요한 기간 · 마감까지 {estimate.days_left}일</span>
+                <span className="mono" style={{ fontSize: '14px', fontWeight: 600 }}>약 {estimate.weeks_needed}주</span>
               </div>
               <span className={verdict.cls}>{verdict.label}</span>
             </div>
