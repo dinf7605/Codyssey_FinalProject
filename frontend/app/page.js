@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { AiBadge, AiNotice } from '@/components/AiNotice';
+import HomeAuthActions from '@/components/HomeAuthActions';
 import styles from './home.module.css';
 
 const steps = [
@@ -15,8 +16,7 @@ export default function HomePage() {
       <header className={styles.header}>
         <Link href="/" className={styles.brand}>StudyPace<span>내 속도로, 끝까지.</span></Link>
         <nav aria-label="시작 메뉴" className={styles.actions}>
-          <Link href="/login" className="btn btn-quiet btn-sm">로그인</Link>
-          <Link href="/signup" className="btn btn-sm">회원가입</Link>
+          <HomeAuthActions />
         </nav>
       </header>
       <main>
