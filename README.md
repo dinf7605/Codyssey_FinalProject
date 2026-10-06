@@ -78,6 +78,83 @@ flowchart LR
 
 ---
 
+## 화면 구성
+
+배포 주소(https://codyssey-final-project.vercel.app)에서 10-06 에 찍은 화면이다. 휴대폰 폭 기준이며, PC 에서는 왼쪽 사이드바가 하단 탭을 대신한다.
+화면 속 닉네임은 '학습자'로 가렸다.
+
+### 사용자 화면
+
+| 화면 | 주소 · 로그인 | 하는 일 | 기능 |
+|---|---|---|---|
+| 첫 화면 | `/` · 불필요 | 서비스 소개와 3단계 안내. '내게 맞는 목표 찾기'로 온보딩, '내 학습 보기'로 대시보드 | `FR-MAIN-01` |
+| 온보딩 (목표 찾기) | `/onboarding` · 불필요 | 4단계 — 관심분야(칩·직접 입력) → 공부할 수 있는 시간(요일 × 시간대, 하루 최대 공부 시간) → **AI 목표 추천**(시험일·준비 기간·"시험까지 빠듯해요", 관심없음) → 확정. 비회원은 '가입 전에 계획 먼저 만들어 보기' | `FR-GOAL-01~13` · RAG ① |
+| 일정 | `/schedule` · 계획 만들기는 불필요, 저장·달력은 필요 | **내 학습 일정** — 주·월 달력(목표 최대 2개), 블록 옮기기·지우기·끌어다 놓기, 최근 바뀐 일정·되돌리기<br>**학습 계획 만들기** — AI 에이전트가 학습 단위로 분해 → 규칙으로 빈 시간에 배치 → 규칙 검증. 시험일·마감일 고치기, 범위 줄이기·기한 늘리기, 구글 캘린더 바쁜 시간 가져오기 | `FR-PLAN-01~08` · AI Agent |
+| 학습 | `/study` · 기록은 필요 | 타이머(5분 미만 미기록, 30분 무조작 시 멈춤, 오프라인이면 기기에 보관), 예상보다 짧게 끝내면 블록을 끝냈는지 묻기, 학습 메모, 완료 취소(24시간), 이번 주 집계 | `FR-STUDY-01~06` |
+| 대시보드 | `/dashboard` · 필요 | 오늘의 블록, 목표·D-day, 이번 주 공부 시간, 누적·연속·완료 단원. 레벨이 오르면 진도 신호등·잔디·시간대 패턴·학습 습관이 열린다 | `FR-MAIN-02~06` `FR-PACE-*` `FR-UI-*` |
+| 공모전 | `/contests` · 불필요 | 관심 키워드로 **AI 추천**(Claude 가 공고 제목과 관련성 판단), 조건 검색, 저장된 관심 키워드, 도움됨·안 맞음 피드백 | `FR-CONT-01~09` · RAG ② |
+| 공모전 상세 | `/contests/[id]` · 관심 등록은 필요 | 원문 링크, **관심 등록**(마감 D-7·D-3 준비 블록을 일정에 넣기), 준비 기간 계산, 이 공모전으로 계획 만들기 | `FR-CONT-07·10·11` |
+| 알림 | `/notifications` · 필요 | 블록 시작 전 · 끝내지 못한 블록 · 하루 마감 · 주간 요약 · 재조정 결과 · 관심 공모전 마감. 알림에서 바로 지금 시작 · 미루기 · 오늘 쉬기 | `FR-ALARM-01~04` |
+| 마이페이지 | `/mypage` · 필요 | 레벨·누적·연속, 진행 중 목표, **목표 관리**(공부 시간 바꾸기 · 내 캘린더에 넣기 .ics · 목표 종료), 알림 설정, 관심 키워드 추가·삭제, **저장된 학습 정보**(메모리 조회·삭제), 비밀번호 바꾸기 · 로그아웃 · 탈퇴 | `FR-MY-01~05` `FR-MEM-01/02` |
+| 로그인 · 가입 | `/login` `/signup` `/forgot-password` `/reset-password` | 이메일 로그인·가입(필수 동의 2개), 구글 로그인(`/auth/callback`), 비밀번호 재설정 메일 | `FR-AUTH-*` `FR-JOIN-*` |
+| 기타 | `/privacy` `/calendar/callback` | 개인정보 처리방침, 구글 캘린더 바쁜 시간 가져오기 후 돌아오는 곳 | |
+
+<table>
+<tr>
+<td align="center"><img src="docs/screens/01-landing.jpg" width="260" alt="첫 화면"><br>첫 화면</td>
+<td align="center"><img src="docs/screens/02-onboarding-interest.jpg" width="260" alt="온보딩 1단계 관심분야"><br>온보딩 1 · 관심분야</td>
+<td align="center"><img src="docs/screens/03-onboarding-time.jpg" width="260" alt="온보딩 2단계 공부할 수 있는 시간"><br>온보딩 2 · 공부할 수 있는 시간</td>
+</tr>
+<tr>
+<td align="center"><img src="docs/screens/04-onboarding-recommend.jpg" width="260" alt="온보딩 3단계 AI 목표 추천"><br>온보딩 3 · AI 목표 추천</td>
+<td align="center"><img src="docs/screens/05-schedule.jpg" width="260" alt="일정 화면"><br>일정 · 주간 달력</td>
+<td align="center"><img src="docs/screens/06-study.jpg" width="260" alt="학습 타이머"><br>학습 · 타이머와 메모</td>
+</tr>
+<tr>
+<td align="center"><img src="docs/screens/07-dashboard.jpg" width="260" alt="대시보드"><br>대시보드</td>
+<td align="center"><img src="docs/screens/08-contests.jpg" width="260" alt="공모전 탐색"><br>공모전 탐색</td>
+<td align="center"><img src="docs/screens/09-contests-recommend.jpg" width="260" alt="공모전 AI 추천"><br>공모전 · AI 추천</td>
+</tr>
+<tr>
+<td align="center"><img src="docs/screens/10-contest-detail.jpg" width="260" alt="공모전 상세"><br>공모전 상세 · 관심 등록</td>
+<td align="center"><img src="docs/screens/11-notifications.jpg" width="260" alt="알림"><br>알림</td>
+<td align="center"><img src="docs/screens/12-mypage.jpg" width="260" alt="마이페이지"><br>마이페이지</td>
+</tr>
+</table>
+
+### 관리자 화면 (`/admin`)
+
+관리자 계정만 들어갈 수 있다. 관리자 여부는 Supabase 로그인 계정의 `app_metadata.role` 이 `"admin"` 인지로 정한다(`backend/utils/admin.py`).
+일반 계정은 메뉴에 '관리자'가 보이지 않고, 주소로 들어가면 "관리자 권한이 있는 계정만 이용할 수 있습니다"가 나온다.
+
+| 영역 | 보여 주는 것 | 기능 |
+|---|---|---|
+| AI 처리 기록 | 날짜를 골라 그날의 AI 처리 기록 — 건수, 평균 처리 시간, 도구 호출 합계, 기능(`contest.recommend` · `goal.match` · 학습 분해)별 모델·처리 시간 목록. 템플릿 대체도 포함 | `FR-ADMIN-02` |
+| 오늘 AI 사용량 · 하루 한도 | 오늘 예상 비용 / 하루 한도(`AI_DAILY_BUDGET_USD`, 기본 $5)와 기능별 횟수. 80% 부터 비회원 AI 추천을 막고, 100% 면 새 AI 호출을 막는다 | 비용 관리 |
+| AI 요청 실패율 · 토큰 사용량 | 학습 분해 요청 수 · 응답 성공 · 실패율, 입력·출력·캐시 토큰 합계 (재시도도 각각 1회) | `FR-ADMIN-02` |
+| 수집 공고 점검 | 위비티에서 모은 공고 전체(마감 포함) — 주최·마감일·상태·수집 시각. **고치기**로 제목·주최·마감일·상태·분야를 바로 수정 | `FR-ADMIN-01` |
+| DB 현황 | 테이블마다 행 수와 마지막 기록 시각, 담당 역할. 누르면 최근 행을 펼친다. 읽기 전용이며 이메일·닉네임·사용자 id·사용자가 쓴 글은 서버에서 가려서 보낸다 | 운영 |
+
+<table>
+<tr>
+<td align="center"><img src="docs/screens/13-admin-ai-logs.jpg" width="260" alt="관리자 AI 처리 기록"><br>AI 처리 기록</td>
+<td align="center"><img src="docs/screens/14-admin-usage.jpg" width="260" alt="관리자 AI 사용량과 실패율"><br>AI 사용량 · 실패율 · 토큰</td>
+</tr>
+<tr>
+<td align="center"><img src="docs/screens/15-admin-contests.jpg" width="260" alt="관리자 수집 공고 점검"><br>수집 공고 점검</td>
+<td align="center"><img src="docs/screens/16-admin-db.jpg" width="260" alt="관리자 DB 현황"><br>DB 현황</td>
+</tr>
+</table>
+
+**관리자 지정** — Supabase SQL Editor 에서 실행한다 (공용 DB 인증 정보라 팀 리드가 직접).
+
+```sql
+update auth.users
+set raw_app_meta_data = coalesce(raw_app_meta_data, '{}'::jsonb) || '{"role": "admin"}'::jsonb
+where email = '관리자로 지정할 이메일';
+```
+
+
 ## 팀원 역할
 
 전원 비전공자이므로 **기술 스택이 아니라 "화면부터 API까지 하나의 기능 묶음"** 으로 나눴다.
@@ -132,6 +209,7 @@ flowchart LR
 | [backend/README.md](backend/README.md) | 백엔드 실행 · 학습 분해 Agent · 스케줄 배치 엔진 · 규칙 검증기 · API |
 | [frontend/README.md](frontend/README.md) | 프론트엔드 실행 방법 · 폴더 구조 · 화면↔기능 ID 매핑 · 모바일 대응 |
 | [docs/architecture.md](docs/architecture.md) | **시스템 아키텍처** — 구성 요소 · 파이프라인별 흐름 · 데이터 모델 · 인증·보안 · 자동화 · 배포 |
+| [docs/screens/](docs/screens) | **화면 캡처** — 사용자 화면 12장 · 관리자 화면 4장 (설명은 위 [화면 구성](#화면-구성)) |
 | [docs/user-test/](docs/user-test/README.md) | **실사용자 테스트** — 운영 가이드 · 참여자 안내·동의서 · 설문·인터뷰 · 리포트 · 지표 스크립트(`python -m scripts.user_test_metrics`) |
 | [docs/학습로드맵.md](docs/학습로드맵.md) | 팀 보유 기술(Vercel·Python 등) 기준 **추가 학습 항목** · 스택 조정 근거 · 역할별 학습 순서 |
 | `기능명세서_학습플래너.xlsx` | 기능 69개 상세 명세 + AI 기능 명세(Agent 도구표, RAG 파라미터, 폴백 정책, 평가 방법) |
