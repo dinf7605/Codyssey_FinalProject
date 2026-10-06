@@ -1,9 +1,9 @@
 """실사용자 테스트 지표를 공용 DB 에서 읽어 리포트용 표로 출력한다 (읽기 전용).
 
     cd backend
-    python -m scripts.user_test_metrics --start 2026-10-06 --end 2026-10-10 --emails a@x.com,b@y.com
-    python -m scripts.user_test_metrics --start 2026-10-06 --end 2026-10-10 --emails-file participants.txt
-    python -m scripts.user_test_metrics --start 2026-10-06 --end 2026-10-10 --joined-since 2026-10-05
+    python -m scripts.user_test_metrics --start 2026-10-02 --end 2026-10-06 --emails a@x.com,b@y.com
+    python -m scripts.user_test_metrics --start 2026-10-02 --end 2026-10-06 --emails-file participants.txt
+    python -m scripts.user_test_metrics --start 2026-10-02 --end 2026-10-06 --joined-since 2026-10-01
 
 참여자는 P1, P2 … 로만 표시한다 (리포트에 이메일이 남지 않게). 짝을 보려면 --show-emails.
 계산 규칙은 services/user_test_metrics.py.
