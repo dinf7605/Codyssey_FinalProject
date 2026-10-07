@@ -1,0 +1,141 @@
+name: Uptime monitor
+
+# 운영 모니터링 (평가 #3 보완, 10-07) — 15분마다 밖에서 서비스를 두드린다. 이 워크플로의 실행 기록이 곧 가동률 원장이다.
+#   1) 프론트 첫 화면 200 + 'StudyPace'
+#   2) 백엔드 /health/ready 200 — DB 를 실제로 읽는다 (10차 점검: /health 200 인데 DB 키가 없어 전부 503 이었다)
+#   3) /contests?limit=1 200 — 화면이 쓰는 DB 읽기 API
+#   4) 알림 워커 생존 신호 — 10분 넘게 소식이 없으면(stale) 실패
+# 한 번 실패로 장애로 보지 않는다 — 20초 간격으로 3번까지 다시 본다.
+# 실패하면 'ops-incident' 이슈를 열고(이미 열려 있으면 댓글), 다시 정상이 되면 장애 시간을 적고 닫는다.
+# 가동률 계산 · 대응 절차: docs/operations.md · 관리자 화면 '운영 상태' · backend/scripts/ops_report.py
+#
+# 주소는 저장소 variables UPTIME_API_BASE · UPTIME_WEB_BASE 로 바꿀 수 있다 (없으면 아래 기본값).
+# 선택 — secrets RAILWAY_TOKEN · RAILWAY_ENVIRONMENT_ID · RAILWAY_API_SERVICE_ID 가 있으면
+#        백엔드가 두 번 연속(30분) 실패할 때 Railway 에 다시 배포를 한 번 요청한다 (장애 이슈마다 한 번만).
+
+on:
+  schedule:
+    - cron: '7,22,37,52 * * * *'   # 15분마다 — 정각은 GitHub 이 붐벼 늦게 도는 일이 많아 피한다
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: uptime
+  cancel-in-progress: false
+
+env:
+  API_BASE: ${{ vars.UPTIME_API_BASE || 'https://codysseyfinalproject-production.up.railway.app' }}
+  WEB_BASE: ${{ vars.UPTIME_WEB_BASE || 'https://codyssey-final-project.vercel.app' }}
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Probe services
+        id: probe
+        run: |
+          : > failed.txt
+          {
+            echo "### 외부 점검 $(TZ=Asia/Seoul date '+%Y-%m-%d %H:%M KST')"
+            echo '| 점검 | 결과 | HTTP | 응답 시간 |'
+            echo '|---|---|---|---|'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          check() {  # 이름 · 주소 · (본문에 있어야 할 글자)
+            local name="$1" url="$2" want="${3:-}" code="000" took="0" n
+            for n in 1 2 3; do
+              read -r code took < <(curl -sS -m 20 -o body.txt -w '%{http_code} %{time_total}\n' "$url" 2>/dev/null || echo "000 0")
+              if [ "$code" = "200" ] && { [ -z "$want" ] || grep -q "$want" body.txt; }; then
+                echo "| $name | 정상 | $code | ${took}s |" >> "$GITHUB_STEP_SUMMARY"
+                return 0
+              fi
+              if [ "$n" -lt 3 ]; then sleep 20; fi
+            done
+            echo "| $name | **실패** | $code | ${took}s |" >> "$GITHUB_STEP_SUMMARY"
+            echo "- $name: HTTP $code ($url)" >> failed.txt
+            return 1
+          }
+
+          check '프론트 첫 화면' "${WEB_BASE%/}/" 'StudyPace' || true
+          check '백엔드 준비 상태 (DB 읽기)' "${API_BASE%/}/health/ready" '"db":"ok"' || true
+          cp body.txt ready.json 2>/dev/null || true
+          check '공모전 목록 API' "${API_BASE%/}/contests?limit=1" || true
+
+          worker=$(python3 -c 'import json; print(json.load(open("ready.json"))["checks"]["worker"])' 2>/dev/null || echo unknown)
+          echo "| 알림 워커 생존 신호 | $worker | | |" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$worker" = "stale" ]; then
+            echo "- 알림 워커: 10분 넘게 생존 신호 없음 (Railway 워커 서비스 로그 확인)" >> failed.txt
+          fi
+
+          if [ -s failed.txt ]; then
+            { echo 'failed<<EOF'; cat failed.txt; echo 'EOF'; } >> "$GITHUB_OUTPUT"
+            if grep -q -e '백엔드' -e '공모전' failed.txt; then echo 'api_down=true' >> "$GITHUB_OUTPUT"; fi
+            cat failed.txt
+            exit 1
+          fi
+
+      - name: Open or update incident issue
+        if: failure() && steps.probe.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FAILED: ${{ steps.probe.outputs.failed }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          repo="$GITHUB_REPOSITORY"
+          gh label create ops-incident --repo "$repo" --color B60205 --description '운영 장애 (uptime.yml 이 자동으로 열고 닫음)' 2>/dev/null || true
+          now=$(TZ=Asia/Seoul date '+%Y-%m-%d %H:%M KST')
+          body=$(printf '%s 외부 점검 실패\n\n%s\n\n실행 기록: %s' "$now" "$FAILED" "$RUN_URL")
+          number=$(gh issue list --repo "$repo" --label ops-incident --state open --json number --jq '.[0].number // empty')
+          if [ -z "$number" ]; then
+            gh issue create --repo "$repo" --label ops-incident \
+              --title "[운영 장애] $now 외부 점검 실패" \
+              --body "$(printf '%s\n\n대응 절차: docs/operations.md 「장애 대응」\n다시 정상이 되면 이 이슈는 자동으로 닫힌다.' "$body")"
+          else
+            gh issue comment "$number" --repo "$repo" --body "$body"
+          fi
+
+      - name: Auto redeploy backend (optional)
+        if: failure() && steps.probe.outputs.api_down == 'true'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_ENVIRONMENT_ID: ${{ secrets.RAILWAY_ENVIRONMENT_ID }}
+          RAILWAY_API_SERVICE_ID: ${{ secrets.RAILWAY_API_SERVICE_ID }}
+        run: |
+          if [ -z "$RAILWAY_TOKEN" ] || [ -z "$RAILWAY_ENVIRONMENT_ID" ] || [ -z "$RAILWAY_API_SERVICE_ID" ]; then
+            echo 'Railway 자동 재배포 secrets 가 없어 건너뜀 — docs/operations.md 「자동 재배포 켜기」'
+            exit 0
+          fi
+          repo="$GITHUB_REPOSITORY"
+          number=$(gh issue list --repo "$repo" --label ops-incident --state open --json number --jq '.[0].number // empty')
+          [ -n "$number" ] || exit 0
+          comments=$(gh issue view "$number" --repo "$repo" --json comments --jq '.comments | length')
+          # 첫 실패는 지켜본다(일시적일 수 있다). 두 번째 연속 실패부터, 장애 이슈마다 한 번만 재배포한다
+          if [ "$comments" -lt 1 ]; then echo '첫 실패 — 다음 점검까지 지켜본다'; exit 0; fi
+          if gh issue view "$number" --repo "$repo" --json comments --jq '.comments[].body' | grep -q '자동 재배포 요청'; then
+            echo '이 장애에는 이미 재배포를 요청했다'; exit 0
+          fi
+          payload=$(jq -n --arg e "$RAILWAY_ENVIRONMENT_ID" --arg s "$RAILWAY_API_SERVICE_ID" \
+            '{query: "mutation($e: String!, $s: String!) { serviceInstanceRedeploy(environmentId: $e, serviceId: $s) }", variables: {e: $e, s: $s}}')
+          result=$(curl -sS -m 30 https://backboard.railway.com/graphql/v2 \
+            -H "Authorization: Bearer $RAILWAY_TOKEN" -H 'Content-Type: application/json' -d "$payload" || echo 'request failed')
+          echo "$result"
+          gh issue comment "$number" --repo "$repo" --body "자동 재배포 요청 (Railway API) — 응답: \`$result\`"
+
+      - name: Close incident when recovered
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          repo="$GITHUB_REPOSITORY"
+          for number in $(gh issue list --repo "$repo" --label ops-incident --state open --json number --jq '.[].number'); do
+            opened=$(gh issue view "$number" --repo "$repo" --json createdAt --jq .createdAt)
+            minutes=$(( ( $(date -u +%s) - $(date -u -d "$opened" +%s) ) / 60 ))
+            gh issue close "$number" --repo "$repo" \
+              --comment "$(TZ=Asia/Seoul date '+%Y-%m-%d %H:%M KST') 정상 확인 — 자동으로 닫음. 장애 시간 약 ${minutes}분 (점검 간격 15분만큼 오차)"
+          done

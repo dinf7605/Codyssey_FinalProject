@@ -29,7 +29,7 @@ import config  # noqa: F401,E402 - .env 로드
 from apscheduler.schedulers.blocking import BlockingScheduler  # noqa: E402
 
 from db import get_supabase_client  # noqa: E402
-from services import alarms  # noqa: E402
+from services import alarms, ops_monitor  # noqa: E402
 
 
 def _safe(job):
@@ -41,8 +41,19 @@ def _safe(job):
                 print(f"[알림 워커] {result['job']}: {result['sent']}건 보냄")
         except Exception as exc:  # noqa: BLE001 - 다음 주기에 다시 시도한다
             print(f"[알림 워커] {job.__name__} 실패: {type(exc).__name__}")
+            # 운영 모니터링 — 관리자 화면 '운영 상태'의 오류 요약에 잡힌다 (메시지는 가려서 저장)
+            ops_monitor.record_error(None, source="worker", route=f"worker:{job.__name__}",
+                                     error_type=type(exc).__name__, message=str(exc))
     run.__name__ = job.__name__
     return run
+
+
+def _heartbeat():
+    """1분마다 '살아 있음'을 남긴다 — /health/ready 가 10분 넘게 소식이 없으면 워커가 멈춘 것으로 본다."""
+    try:
+        ops_monitor.beat(get_supabase_client())
+    except Exception:  # noqa: BLE001 - DB 키가 없을 때도 워커는 계속 돈다
+        pass
 
 
 def main():
@@ -59,6 +70,8 @@ def main():
                       id="alarm_replan_result", replace_existing=True)
     scheduler.add_job(_safe(alarms.run_contest_deadlines), "interval", minutes=30,
                       id="alarm_contest_deadline", replace_existing=True)
+    scheduler.add_job(_heartbeat, "interval", minutes=1, id="heartbeat", replace_existing=True)
+    _heartbeat()
 
     print("[알림 워커] 시작됨 — 시작 전(1분) · 미완료(5분) · 하루 마감(21시) · 주간 요약(일 20시) · 재조정 결과(5분) · 공모전 마감(30분)")
 

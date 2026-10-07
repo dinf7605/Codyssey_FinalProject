@@ -203,6 +203,8 @@ export const api = {
     me: () => request('/admin/me'),
     // FR-ADMIN-02 오늘 AI 예상 사용액 · 하루 한도 (80% 부터 비회원 추천 차단, 100% 면 새 AI 호출 차단)
     aiBudget: () => request('/admin/ai-budget', { cache: 'no-store' }),
+    // 운영 상태 — 준비 상태(DB·알림 워커) · 가동률(15분 외부 점검) · 최근 7일 서버 오류 요약 (docs/operations.md)
+    ops: () => request('/admin/ops', { cache: 'no-store' }),
     logs: ({ day = '', page = 1, pageSize = 20 } = {}) => {
       const params = new URLSearchParams({
         page: String(page),

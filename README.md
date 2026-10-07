@@ -129,6 +129,7 @@ flowchart LR
 
 | 영역 | 보여 주는 것 | 기능 |
 |---|---|---|
+| 운영 상태 · 가동률 · 서버 오류 | 준비 상태(DB 읽기 · 알림 워커 생존 신호 · 서버 버전), **가동률**(GitHub Actions 15분 외부 점검 — 최근 24시간 · 7일, 장애 구간), 최근 7일 **서버 오류**(5xx · 예외 · 워커 실패 — 날짜별 건수 · 유형 · 최근 5건과 요청 번호). 10-07 추가 — [운영 문서](docs/operations.md) | 운영 |
 | AI 처리 기록 | 날짜를 골라 그날의 AI 처리 기록 — 건수, 평균 처리 시간, 도구 호출 합계, 기능(`contest.recommend` · `goal.match` · 학습 분해)별 모델·처리 시간 목록. 템플릿 대체도 포함 | `FR-ADMIN-02` |
 | 오늘 AI 사용량 · 하루 한도 | 오늘 예상 비용 / 하루 한도(`AI_DAILY_BUDGET_USD`, 기본 $5)와 기능별 횟수. 80% 부터 비회원 AI 추천을 막고, 100% 면 새 AI 호출을 막는다 | 비용 관리 |
 | AI 요청 실패율 · 토큰 사용량 | 학습 분해 요청 수 · 응답 성공 · 실패율, 입력·출력·캐시 토큰 합계 (재시도도 각각 1회) | `FR-ADMIN-02` |
@@ -209,6 +210,7 @@ where email = '관리자로 지정할 이메일';
 | [backend/README.md](backend/README.md) | 백엔드 실행 · 학습 분해 Agent · 스케줄 배치 엔진 · 규칙 검증기 · API |
 | [frontend/README.md](frontend/README.md) | 프론트엔드 실행 방법 · 폴더 구조 · 화면↔기능 ID 매핑 · 모바일 대응 |
 | [docs/architecture.md](docs/architecture.md) | **시스템 아키텍처** — 구성 요소 · 파이프라인별 흐름 · 데이터 모델 · 인증·보안 · 자동화 · 배포 |
+| [docs/operations.md](docs/operations.md) | **운영 모니터링 · 장애 대응** — 가동률(15분 외부 점검) · 오류·예외 로그 · 배포 후 자동 복구 · 롤백 · 측정 결과(`python -m scripts.ops_report`) |
 | [docs/screens/](docs/screens) | **화면 캡처** — 사용자 화면 12장 · 관리자 화면 4장 (설명은 위 [화면 구성](#화면-구성)) |
 | [docs/user-test/](docs/user-test/README.md) | **실사용자 테스트** — 운영 가이드 · 참여자 안내·동의서 · 설문·인터뷰 · 리포트 · 지표 스크립트(`python -m scripts.user_test_metrics`) |
 | [docs/학습로드맵.md](docs/학습로드맵.md) | 팀 보유 기술(Vercel·Python 등) 기준 **추가 학습 항목** · 스택 조정 근거 · 역할별 학습 순서 |
@@ -529,6 +531,20 @@ AI 학습 분해(ADsP, 에이전트가 단위 25개를 39초에) · 관심 공�
 
 배운 것: **`/health` 200 과 워크플로 초록은 "연결됨"을 뜻하지 않는다.** DB 를 실제로 읽는 요청(`/contests`)과 DB 에 남은 기록(`batch_runs`)으로 확인해야 한다.
 
+#### 11차 — 10-07 (평가 #3 보완: 운영 모니터링 · 자동 복구)
+
+지적 — 헬스 체크와 배포 점검 절차는 있으나 **가동률 · 오류 로그 같은 운영 증빙과 배포 후 자동 복구 절차가 없다.**
+
+| 보완 | 내용 |
+|---|---|
+| 가동률 | GitHub Actions `uptime.yml` 이 15분마다 밖에서 프론트 · `/health/ready`(DB 읽기) · `/contests` · 알림 워커를 점검. 실행 기록이 가동률 원장, 실패하면 `ops-incident` 이슈를 열고 복구되면 장애 시간을 적고 닫음 |
+| 오류 · 예외 로그 | API 5xx · 처리되지 않은 예외 · 워커 작업 실패 → 서버 로그 + `error_logs`(migration 020). 모든 응답에 `X-Request-ID`, 메시지의 이메일 · id 는 가려서 저장 |
+| 준비 상태 | `GET /health/ready` — DB 를 실제로 읽고 워커 생존 신호(1분)를 본다. `/health` 는 지금 도는 커밋 버전을 알려 줌 |
+| 배포 후 자동 복구 | Railway 헬스체크(`/health/ready`)를 통과한 배포만 트래픽 · 프로세스가 죽으면 재시작 (`backend/railway.*.json`) · `deploy-check.yml` 이 새 버전이 떴는지 확인하고 실패하면 `deploy-failure` 이슈 · (선택) 30분 연속 장애면 Railway 재배포 요청 |
+| 보는 곳 | 관리자 화면 **'운영 상태'** · `python -m scripts.ops_report --with-db` · [docs/operations.md](docs/operations.md) (장애 대응 · 롤백 · 측정 결과) |
+
+테스트 **533**개 통과 · lint · build 통과. 남은 설정: 공용 DB 에 migration 020 적용, Railway 서비스에 설정 파일 경로 지정 ([운영 문서 6절](docs/operations.md#6-한-번만-하는-설정)).
+
 ### 아직 풀지 못한 것
 
 - ~~공용 DB 에서 실제 계정으로 끝까지 (E·전원)~~ ✅ 10-06 — 테스트 계정으로 목표 → 계획 → 학습 → 대시보드(7~9차), 앱 가입 → 탈퇴 → 보관본 확인까지 완료
@@ -568,6 +584,7 @@ npm run dev                        # http://localhost:3000
 | 프론트 | https://codyssey-final-project.vercel.app | Vercel · Root Directory `frontend` |
 | 백엔드 API | https://codysseyfinalproject-production.up.railway.app (`/docs`, `/health`) | Railway · Root `backend` · `uvicorn main:app --host 0.0.0.0 --port $PORT` |
 | 알림 워커 | 도메인 없음 | Railway 같은 저장소의 두 번째 서비스 · Root `backend` · `python workers/notification_worker.py` |
+| 운영 모니터링 | `uptime.yml` 15분 외부 점검 · `deploy-check.yml` push 후 배포 확인 | GitHub Actions — secrets 없이 동작. 자동 재배포만 선택 secrets ([운영 문서](docs/operations.md)) |
 | 정해진 시각 배치 | `contest-jobs.yml` 수집 05:00 · 추천 월 09:00 / `plan-jobs.yml` 야간 재조정 03:00 | GitHub Actions — secrets `STUDYPACE_API_BASE` · `BATCH_SECRET`, variables `CONTEST_COLLECTION_ENABLED` · `CONTEST_RECOMMENDATIONS_ENABLED` · `NIGHTLY_REPLAN_ENABLED` |
 
 `main` 에 push 하면 Vercel·Railway 가 자동으로 다시 배포한다. 환경변수 목록은 [아키텍처 문서 8절](docs/architecture.md#8-배포-구성).
@@ -575,6 +592,8 @@ npm run dev                        # http://localhost:3000
 - 주소는 **`https://` 를 포함하고 끝에 `/` 없이** 넣는다 (10차 점검에서 빠뜨려 전부 404·가짜 성공이 났다)
 - `NEXT_PUBLIC_API_BASE` 는 빌드할 때 코드에 들어가므로 바꾼 뒤 Vercel 에서 **Redeploy** 해야 반영된다. 공개 값이라 유형은 Config
 - Railway 의 API·워커 두 서비스에 같은 환경변수를 넣는다. 확인은 `/health` 가 아니라 `/contests` (DB 를 실제로 읽는다)
+- Railway 서비스 Settings › Config-as-code 에 API 는 `/backend/railway.api.json`(헬스체크 `/health/ready` · 실패 시 재시작), 워커는 `/backend/railway.worker.json`(항상 재시작). 헬스체크를 통과하지 못한 배포는 트래픽을 받지 않아 이전 버전이 계속 서비스한다
+- 운영 중 확인은 관리자 화면 '운영 상태'와 [docs/operations.md](docs/operations.md) — 가동률 · 오류 요약 · 장애 대응 · 롤백
 - 배포 주소를 바꾸면 Railway `FRONTEND_ORIGIN`·`PASSWORD_RESET_REDIRECT_URL`, Supabase Redirect URLs(`/auth/callback`·`/reset-password`), 구글 OAuth 리디렉션 URI(`/calendar/callback`)를 함께 바꾼다
 
 ---

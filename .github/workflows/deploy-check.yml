@@ -1,0 +1,119 @@
+name: Deploy check
+
+# 배포 후 확인 (평가 #3 보완, 10-07) — main 에 push 하면 Railway(백엔드)·Vercel(프론트)이 다시 배포한다.
+# 새 버전이 실제로 떴는지, 뜬 뒤 핵심 경로가 사는지 확인한다. 자동 복구는 여러 겹이다 (docs/operations.md 「배포 후 자동 복구」):
+#   1) Railway 는 /health/ready 를 통과한 배포만 트래픽을 받는다 (backend/railway.api.json) → 실패한 배포는 이전 버전이 계속 서비스
+#   2) 프로세스가 죽으면 Railway 가 다시 띄운다 (재시작 정책 ON_FAILURE 10번 · 워커는 ALWAYS)
+#   3) Vercel 은 빌드에 실패한 배포를 올리지 않는다 → 이전 버전 유지
+#   4) 이 워크플로가 실패하면 'deploy-failure' 이슈를 열어 사람이 롤백 여부를 정한다. 다음 배포가 정상이면 자동으로 닫는다
+# 새 버전 확인: 백엔드 GET /health 의 version(커밋 앞 7자리, Railway 의 RAILWAY_GIT_COMMIT_SHA)이 push 한 커밋과 같아질 때까지 기다린다.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: deploy-check
+  cancel-in-progress: true   # 연달아 push 하면 마지막 것만 확인한다
+
+env:
+  API_BASE: ${{ vars.UPTIME_API_BASE || 'https://codysseyfinalproject-production.up.railway.app' }}
+  WEB_BASE: ${{ vars.UPTIME_WEB_BASE || 'https://codyssey-final-project.vercel.app' }}
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Wait for the new backend version
+        id: version
+        env:
+          BEFORE: ${{ github.event.before }}
+        run: |
+          want="${GITHUB_SHA::7}"
+          if [ "$GITHUB_EVENT_NAME" != "push" ]; then exit 0; fi
+          # 백엔드를 건드리지 않은 push 는 Railway 가 다시 배포하지 않을 수 있다(Watch Paths) — 버전 대기 없이 점검만
+          if [ -n "$BEFORE" ] && ! echo "$BEFORE" | grep -q '^0*$' \
+             && ! git diff --name-only "$BEFORE" "$GITHUB_SHA" | grep -q '^backend/'; then
+            echo '백엔드 변경 없음 — 프론트 배포만 기다린다 (2분)'
+            sleep 120
+            exit 0
+          fi
+          seen=""
+          for n in $(seq 1 60); do   # 15초 × 60 = 15분
+            seen=$(curl -sS -m 10 "${API_BASE%/}/health" 2>/dev/null \
+              | python3 -c 'import json, sys; print(json.load(sys.stdin).get("version", ""))' 2>/dev/null || true)
+            if [ "$seen" = "$want" ]; then
+              echo "새 버전 $want 확인 (${n}번째 확인)"
+              echo "| 백엔드 새 버전 | $want | 정상 |" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            if [ "$seen" = "local" ]; then
+              echo '::warning::서버가 커밋 버전을 모른다(RAILWAY_GIT_COMMIT_SHA 없음) — 3분 기다린 뒤 점검만 한다'
+              sleep 180
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "::error::15분 안에 새 버전($want)이 뜨지 않았다. 지금 응답하는 버전: ${seen:-없음} — 헬스체크를 통과하지 못한 배포는 트래픽을 받지 않으므로 이전 버전이 계속 서비스 중일 수 있다. Railway Deployments 로그 확인"
+          echo "| 백엔드 새 버전 | $want | **뜨지 않음** (응답 버전 ${seen:-없음}) |" >> "$GITHUB_STEP_SUMMARY"
+          echo "- 백엔드 새 버전($want)이 15분 안에 뜨지 않음 · 응답 버전 ${seen:-없음}" >> failed.txt
+          exit 1
+
+      - name: Smoke test
+        id: smoke
+        if: ${{ !cancelled() }}   # 새 버전이 안 떠도 지금 서비스 중인 버전은 점검한다
+        run: |
+          touch failed.txt
+          check() {
+            local name="$1" url="$2" want="${3:-}" code="000" n
+            for n in 1 2 3; do
+              code=$(curl -sS -m 20 -o body.txt -w '%{http_code}' "$url" 2>/dev/null || echo 000)
+              if [ "$code" = "200" ] && { [ -z "$want" ] || grep -q "$want" body.txt; }; then
+                echo "| $name | $code | 정상 |" >> "$GITHUB_STEP_SUMMARY"
+                return 0
+              fi
+              if [ "$n" -lt 3 ]; then sleep 20; fi
+            done
+            echo "| $name | $code | **실패** |" >> "$GITHUB_STEP_SUMMARY"
+            echo "- $name: HTTP $code ($url)" >> failed.txt
+            return 1
+          }
+          check '프론트 첫 화면' "${WEB_BASE%/}/" 'StudyPace' || true
+          check '백엔드 준비 상태 (DB 읽기)' "${API_BASE%/}/health/ready" '"db":"ok"' || true
+          check '공모전 목록 API' "${API_BASE%/}/contests?limit=1" || true
+          check 'API 문서' "${API_BASE%/}/openapi.json" '"openapi"' || true
+          if grep -q . failed.txt; then cat failed.txt; exit 1; fi
+
+      - name: Open deploy-failure issue
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          repo="$GITHUB_REPOSITORY"
+          gh label create deploy-failure --repo "$repo" --color D93F0B --description '배포 후 확인 실패 (deploy-check.yml)' 2>/dev/null || true
+          now=$(TZ=Asia/Seoul date '+%Y-%m-%d %H:%M KST')
+          detail=$(cat failed.txt 2>/dev/null || echo '- 실행 기록 참고')
+          gh issue create --repo "$repo" --label deploy-failure \
+            --title "[배포 확인 실패] ${GITHUB_SHA::7} ($now)" \
+            --body "$(printf '커밋 %s 배포 뒤 확인에 실패했다.\n\n%s\n\n실행 기록: %s\n\n대응: docs/operations.md 「롤백」 — Railway Deployments 에서 직전 정상 배포를 Redeploy, Vercel 은 직전 배포를 Promote (Instant Rollback).\n다음 배포 확인이 정상이면 이 이슈는 자동으로 닫힌다.' "${GITHUB_SHA::7}" "$detail" "$RUN_URL")"
+
+      - name: Close resolved deploy-failure issues
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          repo="$GITHUB_REPOSITORY"
+          for number in $(gh issue list --repo "$repo" --label deploy-failure --state open --json number --jq '.[].number'); do
+            gh issue close "$number" --repo "$repo" --comment "커밋 ${GITHUB_SHA::7} 배포 확인 정상 — 자동으로 닫음"
+          done

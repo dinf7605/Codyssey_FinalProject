@@ -97,6 +97,11 @@ CATALOG: tuple[TableSpec, ...] = (
     TableSpec("batch_runs", "배치 실행", "공통", "started_at",
               ("job_name", "source", "status", "collected_count", "failed_count", "error_message", "started_at",
                "finished_at")),
+    # 운영 모니터링 (020) — 오류 메시지는 목록에 보내지 않는다 (관리자 화면 '운영 상태'에서 가려진 채로 본다)
+    TableSpec("error_logs", "서버 오류 기록", "공통", "occurred_at",
+              ("source", "method", "route", "status_code", "error_type", "request_id", "occurred_at")),
+    TableSpec("service_heartbeats", "워커 생존 신호", "공통", "beat_at",
+              ("service", "beat_at", "started_at", "version")),
 )
 
 BY_NAME = {spec.name: spec for spec in CATALOG}

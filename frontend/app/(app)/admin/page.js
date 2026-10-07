@@ -7,6 +7,7 @@ import AdminRequestMetrics from '@/components/AdminRequestMetrics';
 import AdminAiBudget from '@/components/AdminAiBudget';
 import AdminContestInspection from '@/components/AdminContestInspection';
 import AdminDbStatus from '@/components/AdminDbStatus';
+import AdminOpsStatus from '@/components/AdminOpsStatus';
 import { api, getToken } from '@/lib/api';
 
 const SOURCE_LABELS = {
@@ -231,6 +232,10 @@ export default function AdminPage() {
       )}
       {accessAllowed && (
         <>
+          <section className="sec">
+            <SectionTitle>운영 상태 · 가동률 · 서버 오류</SectionTitle>
+            <AdminOpsStatus />
+          </section>
           <section className="sec">
             <SectionTitle>오늘 AI 사용량 · 하루 한도</SectionTitle>
             <AdminAiBudget />

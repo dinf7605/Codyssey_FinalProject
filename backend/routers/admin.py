@@ -133,6 +133,20 @@ def ai_request_metrics(response: Response, day: date | None = Query(default=None
         raise HTTPException(status_code=422, detail="조회할 수 없는 날짜입니다")
 
 
+@router.get("/ops")
+def ops_status(response: Response, days: int = Query(default=7, ge=1, le=30)):
+    """운영 상태 (평가 #3 보완) — 준비 상태 · 가동률(GitHub Actions 15분 외부 점검) · 최근 오류 요약. 관리자 전용 읽기 API."""
+    from services import ops_monitor
+
+    response.headers["Cache-Control"] = "no-store"
+    _, ready = ops_monitor.readiness(get_supabase_client)
+    try:
+        errors = ops_monitor.error_summary(get_supabase_client(), days)
+    except Exception:
+        errors = {"status": "unavailable", "days": days}
+    return {"ready": ready, "uptime": ops_monitor.uptime_status(), "errors": errors}
+
+
 @router.get("/ai-budget")
 def ai_budget_status(response: Response):
     """FR-ADMIN-02 — 오늘 AI 예상 사용액과 하루 한도. 80% 부터 비회원 추천을 막고, 100% 면 새 AI 호출을 막는다."""
