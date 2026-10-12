@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
+import { featureLabel } from '@/lib/aiLabels';
 
 // FR-ADMIN-02 — 오늘 AI 예상 사용액과 하루 한도 (backend/services/ai_budget.py)
 // 80% 를 넘으면 비회원 AI 추천을 먼저 막고, 100% 면 새 AI 호출을 막아 규칙·템플릿으로 대신한다.
@@ -13,8 +14,6 @@ const STATE = {
   blocked: { label: '차단', cls: 'pill pill-late', text: '오늘 한도에 닿아 새 AI 호출을 막았습니다. 학습 분해·추천은 규칙과 템플릿으로 대신합니다.' },
   off: { label: '한도 없음', cls: 'pill', text: 'AI_DAILY_BUDGET_USD 가 0 이하라 한도를 쓰지 않습니다.' },
 };
-
-const FEATURE = { 'plan.decompose': '학습 분해', 'goal.match': '목표 추천', 'contest.recommend': '공모전 추천', 'study.guide': '블록 공부 방법' };
 
 export default function AdminAiBudget() {
   const [result, setResult] = useState(null);
@@ -49,7 +48,7 @@ export default function AdminAiBudget() {
       {view.text && <p className="hint" style={{ margin: 0 }}>{view.text}</p>}
       {Object.keys(d.by_feature || {}).length > 0 && (
         <p className="tiny muted" style={{ margin: 0 }}>
-          {Object.entries(d.by_feature).map(([k, n]) => `${FEATURE[k] || k} ${n}회`).join(' · ')}
+          {Object.entries(d.by_feature).map(([k, n]) => `${featureLabel(k)} ${n}회`).join(' · ')}
         </p>
       )}
     </div>

@@ -9,12 +9,7 @@ import AdminContestInspection from '@/components/AdminContestInspection';
 import AdminDbStatus from '@/components/AdminDbStatus';
 import AdminOpsStatus from '@/components/AdminOpsStatus';
 import { api, getToken } from '@/lib/api';
-
-const SOURCE_LABELS = {
-  agent: 'AI 에이전트',
-  partial: '부분 처리',
-  template: '템플릿 대체',
-};
+import { featureLabel, latencyLabel, modelLabel, sourceLabel } from '@/lib/aiLabels';
 
 function formatTime(value) {
   return new Date(value).toLocaleString('ko-KR', {
@@ -192,13 +187,13 @@ export default function AdminPage() {
                 {data.items.map((item) => (
                   <div className="row" key={item.id}>
                     <div className="row-main">
-                      <b>{item.feature === 'plan.decompose' ? '학습 분해' : item.feature}</b>
+                      <b>{featureLabel(item.feature)}</b>
                       <span>
-                        {formatTime(item.created_at)} · {SOURCE_LABELS[item.source] || item.source || '출처 미기록'}
+                        {formatTime(item.created_at)} · {sourceLabel(item.source)}
                       </span>
                       <span>
-                        모델: {item.model || '미기록'} · 도구 호출: {item.tool_calls}회
-                        {' · '}처리 시간: {item.latency_ms == null ? '미기록' : `${item.latency_ms}ms`}
+                        모델: {modelLabel(item.model)} · 도구 호출: {item.tool_calls}회
+                        {' · '}처리 시간: {latencyLabel(item.latency_ms)}
                       </span>
                     </div>
                   </div>
