@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { api, getToken, tokenOwner } from '@/lib/api';
 import { notifyPlanChanged, usePlan } from '@/lib/usePlan';
 import { dayKey, hhmm, kstIso, kstToday } from '@/lib/planView';
+import { studyGuide } from '@/lib/studyGuide';
 
 // FR-STUDY-01 학습 타이머 / FR-STUDY-02 블록 완료 / FR-STUDY-05 메모 / FR-STUDY-03·04 집계 표시 (담당 C)
 //
@@ -16,6 +17,9 @@ import { dayKey, hhmm, kstIso, kstToday } from '@/lib/planView';
 
 const DRAFT_KEY = 'sp_study_timer';
 const QUEUE_KEY = 'sp_study_pending';
+// 쓰는 중인 메모 — 다른 화면에 다녀오거나 새로고침해도 남게 한다.
+// 메모는 '완료'를 눌러야 기록과 함께 저장되는데, 그 전에 화면을 옮기면 사라져 "메모가 저장 안 된다"는 설문 응답이 있었다 (10-12 P4)
+const NOTE_KEY = 'sp_study_note';
 const MIN_SECONDS = 5 * 60;
 const IDLE_MS = 30 * 60 * 1000;
 // 예상의 이 비율보다 적게 하고 완료를 누르면 블록도 끝냈는지 묻는다.
@@ -48,6 +52,16 @@ function restoreDraft() {
   if (!d || (d.owner && d.owner !== tokenOwner())) return null;
   const ran = d.runStart ? Math.max(0, (d.savedAt - d.runStart) / 1000) : 0;
   return { blockId: d.blockId ?? null, accum: d.accum + ran, runStart: null };
+}
+
+function restoreNote() {
+  if (typeof window === 'undefined') return '';
+  const d = readJson(NOTE_KEY, null);
+  return d && (!d.owner || d.owner === tokenOwner()) ? d.text || '' : '';
+}
+
+function saveNote(text) {
+  writeJson(NOTE_KEY, text ? { owner: tokenOwner(), text } : null);
 }
 
 // 이벤트 처리기에서만 부른다. (lint 가 처리기 안의 Date.now 를 렌더링 중 호출로 오인해 막는다)
@@ -114,7 +128,7 @@ export default function StudyTimer({ blockId = null }) {
   const [timer, setTimer] = useState(restoreDraft); // {blockId, accum(초), runStart(ms|null)} | null
   const [now, setNow] = useState(() => Date.now());
   const [idleSeconds, setIdleSeconds] = useState(0);
-  const [note, setNote] = useState('');
+  const [note, setNote] = useState(restoreNote);
   const [result, setResult] = useState(null);
   const [stats, setStats] = useState(null);
   const [flushed, setFlushed] = useState(0);
@@ -210,6 +224,7 @@ export default function StudyTimer({ blockId = null }) {
   function reset() {
     setTimer(null);
     setNote('');
+    saveNote('');
     setIdleSeconds(0);
     setResult(null);
   }
@@ -248,7 +263,8 @@ export default function StudyTimer({ blockId = null }) {
       const res = await api.study.record(record);
       setTimer(null);
       setNote('');
-      setResult({ state: 'saved', res, blockId: record.blockId, expected: record.expectedMinutes });
+      saveNote('');
+      setResult({ state: 'saved', res, blockId: record.blockId, expected: record.expectedMinutes, noted: Boolean(record.note) });
       notifyPlanChanged();
       loadStats();
     } catch (err) {
@@ -256,6 +272,7 @@ export default function StudyTimer({ blockId = null }) {
         writeJson(QUEUE_KEY, [...readJson(QUEUE_KEY, []), { owner: tokenOwner(), record }]);
         setTimer(null);
         setNote('');
+        saveNote('');
         setResult({ state: 'queued' });
       } else if (needsLogin(err)) {
         setResult({ state: 'login' });
@@ -344,6 +361,8 @@ export default function StudyTimer({ blockId = null }) {
         )}
       </section>
 
+      {block && <StudyGuide title={block.title} minutes={block.minutes} />}
+
       {idleSeconds > 0 && timer && (
         <section className="progress" role="alertdialog" aria-label="자동 일시정지">
           <b>30분 넘게 조작이 없어 타이머를 멈췄어요</b>
@@ -361,7 +380,8 @@ export default function StudyTimer({ blockId = null }) {
         <p className="hint" style={{ color: 'var(--ok)' }} role="status">
           {result.res.minutes}분을 기록했어요
           {deviationText(result.res.minutes, result.expected, result.res.block_done)}
-          {result.res.block_done ? ' · 블록을 완료로 표시했어요.' : '.'} <Link href="/schedule">일정 보기</Link>
+          {result.res.block_done ? ' · 블록을 완료로 표시했어요.' : '.'}
+          {result.noted && ' 메모도 함께 저장했어요 — 아래 메모 모아보기에서 볼 수 있어요.'} <Link href="/schedule">일정 보기</Link>
           {result.res.block_done && result.blockId && (
             <>
               {' · '}
@@ -415,11 +435,14 @@ export default function StudyTimer({ blockId = null }) {
             rows={3}
             maxLength={200}
             value={note}
-            onChange={(e) => setNote(e.target.value)}
+            onChange={(e) => { setNote(e.target.value); saveNote(e.target.value); }}
             placeholder="오늘 이해가 안 된 부분을 200자까지 남길 수 있어요"
             style={{ minHeight: 88, padding: 'var(--gap-3)', resize: 'vertical' }}
           />
-          <p className="hint">메모를 비워도 완료 처리에는 영향이 없습니다</p>
+          <p className="hint">
+            메모는 <b>완료</b>를 누를 때 학습 기록과 함께 저장돼요. 쓰는 중인 메모는 이 기기에 남아 다른 화면에 다녀와도 그대로예요.
+            저장한 메모는 아래 <b>메모 모아보기</b>에서 다시 볼 수 있어요. 비워 둬도 완료에는 영향이 없습니다.
+          </p>
         </div>
       </section>
 
@@ -462,5 +485,29 @@ function StreakHint({ stats }) {
     <p className="hint" style={{ padding: '0 var(--gap-1)' }}>
       오늘 {todayMinutes}분 공부했어요. 하루 {min}분을 채우면 연속 기록에 들어가요.
     </p>
+  );
+}
+
+// 이 블록 공부 방법 — 단원 이름으로 고른 일반 안내 (lib/studyGuide.js). 10-12 설문 "그때 무엇을 어떻게 공부할지 모르겠다" 반영
+function StudyGuide({ title, minutes }) {
+  const guide = studyGuide(title, minutes);
+  return (
+    <section aria-label="이 블록 공부 방법">
+      <div className="sec-head">
+        <h2>이 블록 공부 방법</h2>
+        <span className="dim tiny">{guide.kind}</span>
+      </div>
+      <ol className="rows" style={{ margin: 0, paddingLeft: 0, listStyle: 'none' }}>
+        {guide.steps.map((s, i) => (
+          <li key={s.text} className="row">
+            <div className="row-main">
+              <b>{i + 1}. {s.text}</b>
+            </div>
+            {s.minutes != null && <span className="mono tiny dim">약 {s.minutes}분</span>}
+          </li>
+        ))}
+      </ol>
+      <p className="hint">단원 이름으로 고른 일반적인 순서예요. 가진 교재 · 강의 목차에 맞춰 바꿔 써도 됩니다.</p>
+    </section>
   );
 }

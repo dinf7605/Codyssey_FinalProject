@@ -316,8 +316,8 @@ Railway 의 API·워커 두 서비스에는 같은 환경변수를 넣는다. �
 
 | 문서 | 내용 |
 |---|---|
-| [기획서](../기획서_학습플래너.md) 5-1 · 5-4 | 개념 아키텍처 · 비기능 요구사항 |
-| `기능명세서_학습플래너.xlsx` | 기능 69개 · AI 기능 명세 (Agent 도구, RAG 파라미터, 대체 정책) |
+| [기획서](기획서_학습플래너.md) 5-1 · 5-4 | 개념 아키텍처 · 비기능 요구사항 |
+| [기능명세서_학습플래너.xlsx](기능명세서_학습플래너.xlsx) | 기능 69개 · AI 기능 명세 (Agent 도구, RAG 파라미터, 대체 정책) |
 | [backend/README.md](../backend/README.md) | API · 학습 분해 Agent · 배치 엔진 · 알림 · 마이그레이션 |
 | [frontend/README.md](../frontend/README.md) | 화면 구조 · 화면↔기능 ID |
 | [AI 품질 평가 결과](../backend/evals/RESULTS.md) | 정답셋 측정 결과 |
