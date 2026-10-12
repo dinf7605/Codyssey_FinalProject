@@ -60,3 +60,6 @@ backend/services/_goal_feedback_state.json
 
 # 실사용자 테스트 참여자 이메일 (docs/user-test) — 저장소에 올리지 않는다
 participants*.txt
+
+# 평가용 계정 정보 — 저장소에 올리지 않는다 (제출 양식으로만 전달)
+docs/평가용 테스트 계정.txt
