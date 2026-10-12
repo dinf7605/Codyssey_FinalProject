@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import GoogleLoginButton from '@/components/GoogleLoginButton';
+import ResendConfirmation from '@/components/ResendConfirmation';
 import { api, setAuthTokens } from '@/lib/api';
 import { loadExploration } from '@/lib/goalSession';
 
@@ -27,11 +28,13 @@ export default function LoginPage() {
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
+  const [unconfirmed, setUnconfirmed] = useState(''); // 메일 인증이 남은 이메일 — 다시 보내기 버튼을 띄운다
 
   async function submit(event) {
     event.preventDefault();
     setPending(true);
     setError('');
+    setUnconfirmed('');
     const form = event.currentTarget;
     try {
       const result = await api.auth.login({
@@ -46,8 +49,9 @@ export default function LoginPage() {
       loadExploration(); // 온보딩 입력은 일정 화면에서도 읽을 수 있도록 보존한다.
       router.push(nextPath());
     } catch (err) {
+      if (err.status === 403) setUnconfirmed(form.elements.email.value.trim()); // 비밀번호는 맞고 메일 인증만 남음
       setError(err.status === 401 ? '이메일 또는 비밀번호가 틀렸습니다.'
-        : err.status === 429 ? err.message  // 5회 연속 실패 시 60초 잠금 (FR-AUTH-01)
+        : err.status === 429 || err.status === 403 ? err.message  // 429: 5회 연속 실패 시 60초 잠금 (FR-AUTH-01)
           : '로그인에 실패했습니다. 서버 연결을 확인해 주세요.');
     } finally {
       setPending(false);
@@ -75,6 +79,7 @@ export default function LoginPage() {
         </div>
 
         {error && <p role="alert" style={{ color: 'red' }}>{error}</p>}
+        {unconfirmed && <ResendConfirmation email={unconfirmed} />}
         <button type="submit" className="btn btn-primary" disabled={pending}>{pending ? '로그인 중...' : '로그인'}</button>
         <GoogleLoginButton />
       </form>

@@ -8,10 +8,17 @@ import { api } from '@/lib/api';
 import { loadExploration } from '@/lib/goalSession';
 import SignupConsentFields from '@/components/SignupConsentFields';
 import PasswordFields from '@/components/PasswordFields';
+import ResendConfirmation from '@/components/ResendConfirmation';
 import { passwordValid, authErrorMessage } from '@/lib/password-feedback';
 
 // FR-JOIN-01 정보 입력 / FR-JOIN-02 개인정보 수집 동의 / FR-JOIN-03 AI 이용 고지
 // 필수 동의 2개를 체크해야 가입 버튼이 활성화된다.
+
+// 가입 뒤 로그인 화면 — 받은 next 는 같은 사이트 안 경로일 때만 넘긴다
+function loginHref() {
+  const next = typeof window === 'undefined' ? null : new URLSearchParams(window.location.search).get('next');
+  return next && /^\/(?![/\\])/.test(next) ? `/login?next=${encodeURIComponent(next)}` : '/login';
+}
 
 export default function SignupPage() {
   const router = useRouter();
@@ -24,6 +31,8 @@ export default function SignupPage() {
   const [confirmation, setConfirmation] = useState('');
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState('');
+  // 메일 인증이 필요한 가입이면 보낸 주소 — 안내 화면으로 바꾼다. 예전엔 1.5초 뒤 로그인으로 넘어가 안내를 못 봤다 (10-12)
+  const [sentTo, setSentTo] = useState('');
 
   async function submit(event) {
     event.preventDefault();
@@ -53,23 +62,47 @@ export default function SignupPage() {
     setPending(true);
     setMessage('');
     try {
-      await api.auth.signup({
+      const res = await api.auth.signup({
         email: trimmedEmail, password, nickname: trimmedNickname,
         agreePrivacy: privacy, agreeAiNotice: aiNotice,
         agreeMarketing: marketing,
       });
       loadExploration(); // 30분 내 목표 탐색 정보는 로그인 뒤에도 유지된다.
-      setMessage('가입 요청이 완료되었습니다. 인증 메일이 왔다면 확인한 뒤 로그인해 주세요.');
-      const next = new URLSearchParams(window.location.search).get('next');
-      const login = next && /^\/(?![/\\])/.test(next)
-        ? `/login?next=${encodeURIComponent(next)}` : '/login';
-      setTimeout(() => router.push(login), 1500);
+      if (res?.requires_email_confirmation) {
+        setSentTo(trimmedEmail);
+        window.scrollTo(0, 0);
+        return;
+      }
+      setMessage('가입이 끝났어요. 로그인 화면으로 이동합니다.');
+      setTimeout(() => router.push(loginHref()), 1500);
     } catch (error) {
       setMessage(authErrorMessage(error, 'signup'));
     } finally {
       setPending(false);
     }
   }
+  if (sentTo) {
+    return (
+      <div className="focus">
+      <main className="shell page">
+        <section className="panel stack" style={{ gap: 'var(--gap-4)', marginTop: 'var(--gap-5)', padding: 'var(--gap-5) var(--gap-4)' }} role="status" aria-live="polite">
+          <h1 style={{ fontSize: 22 }}>인증 메일을 보냈어요</h1>
+          <p style={{ margin: 0 }}>
+            <b>{sentTo}</b>(으)로 가입 인증 메일을 보냈습니다. 메일 안의 <b>인증 링크</b>를 누르면 가입이 끝나고 로그인할 수 있어요.
+          </p>
+          <ul className="hint" style={{ margin: 0, paddingLeft: 18 }}>
+            <li>메일이 보이지 않으면 스팸함 · 프로모션함을 확인해 주세요. 도착까지 몇 분 걸릴 수 있어요.</li>
+            <li>인증하기 전에는 로그인되지 않아요.</li>
+            <li>주소를 잘못 적었다면 다시 가입해 주세요.</li>
+          </ul>
+          <Link href={loginHref()} className="btn btn-primary">인증했어요, 로그인하기</Link>
+          <ResendConfirmation email={sentTo} />
+        </section>
+      </main>
+      </div>
+    );
+  }
+
   return (
     <div className="focus">
     <main className="shell page">

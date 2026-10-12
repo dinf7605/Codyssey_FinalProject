@@ -120,3 +120,47 @@ def test_signup_missing_user_does_not_write_or_delete(signup_env):
     assert response.status_code == 400
     db.table.assert_not_called()
     db.auth.admin.delete_user.assert_not_called()
+
+
+# ── 메일 인증 안내 (10-12) ──
+
+class _AuthError(Exception):
+    def __init__(self, code):
+        super().__init__(code)
+        self.code = code
+
+
+def test_signup_tells_when_email_confirmation_is_needed(signup_env):
+    client, db, auth_client = signup_env
+    auth_client.auth.sign_up.return_value = SimpleNamespace(
+        user=SimpleNamespace(id="new-user-id", identities=[{"id": "identity"}]), session=None,
+    )
+    body = client.post("/auth/signup", json=payload()).json()
+    assert body["requires_email_confirmation"] is True and body["access_token"] is None
+
+
+def test_login_before_email_confirmation_says_so_and_does_not_count_as_failure(signup_env, monkeypatch):
+    client, db, auth_client = signup_env
+    failures = []
+    monkeypatch.setattr(auth.login_guard, "locked_for", lambda email: 0)
+    monkeypatch.setattr(auth.login_guard, "record_failure", failures.append)
+    auth_client.auth.sign_in_with_password.side_effect = _AuthError("email_not_confirmed")
+    res = client.post("/auth/login", json={"email": "test@example.com", "password": "Study2026!!"})
+    assert res.status_code == 403 and "인증" in res.json()["detail"]
+    assert failures == []
+
+    auth_client.auth.sign_in_with_password.side_effect = _AuthError("invalid_credentials")
+    res = client.post("/auth/login", json={"email": "test@example.com", "password": "wrong-pass1!"})
+    assert res.status_code == 401 and failures == ["test@example.com"]
+
+
+def test_resend_confirmation_hides_whether_the_account_exists(signup_env):
+    client, db, auth_client = signup_env
+    ok = client.post("/auth/resend-confirmation", json={"email": "test@example.com"})
+    auth_client.auth.resend.assert_called_once_with({"type": "signup", "email": "test@example.com"})
+    auth_client.auth.resend.side_effect = _AuthError("user_not_found")
+    unknown = client.post("/auth/resend-confirmation", json={"email": "nobody@example.com"})
+    assert ok.status_code == unknown.status_code == 200 and ok.json() == unknown.json()
+
+    auth_client.auth.resend.side_effect = _AuthError("over_email_send_rate_limit")
+    assert client.post("/auth/resend-confirmation", json={"email": "test@example.com"}).status_code == 429

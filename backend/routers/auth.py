@@ -22,6 +22,9 @@ LOGIN_FAILED = "이메일 또는 비밀번호가 틀렸습니다."
 DUPLICATE_EMAIL = "이미 가입된 이메일입니다. 로그인하거나 비밀번호를 재설정해 주세요."
 PASSWORD_INVALID = "비밀번호가 보안 조건에 맞지 않습니다. 8~64자, 영문·숫자·특수문자를 확인해 주세요."
 RESET_SENT = "가입된 이메일이라면 비밀번호 재설정 메일이 발송됩니다. 메일함과 스팸함을 확인해 주세요."
+# 인증 전 로그인 — Supabase 는 비밀번호가 맞을 때만 email_not_confirmed 를 준다 (틀리면 invalid_credentials)
+EMAIL_NOT_CONFIRMED = "이메일 인증이 아직 끝나지 않았습니다. 가입할 때 받은 메일의 인증 링크를 누른 뒤 로그인해 주세요."
+CONFIRMATION_SENT = "인증이 필요한 계정이라면 인증 메일을 다시 보냈습니다. 메일함과 스팸함을 확인해 주세요."
 
 # FR-JOIN-03 — AI 이용 고지 문구 버전. 문구(frontend components/SignupConsentFields.js 의 ai 항목)를 바꾸면
 # 여기 버전도 올린다. 저장된 버전이 다르면 다음 로그인 때 다시 동의를 받는다 (frontend components/ReconsentGate.js).
@@ -151,7 +154,10 @@ def login(req: LoginRequest):
             "email": req.email,
             "password": req.password,
         })
-    except Exception:
+    except Exception as error:
+        # 비밀번호는 맞았는데 메일 인증만 남은 경우 — '틀렸습니다'로 뭉뚱그리면 인증을 해야 하는 줄 모른다 (10-12)
+        if _provider_code(error) == "email_not_confirmed":
+            raise HTTPException(status_code=403, detail=EMAIL_NOT_CONFIRMED) from None
         login_guard.record_failure(req.email)
         raise HTTPException(status_code=401, detail=LOGIN_FAILED)
 
@@ -251,6 +257,22 @@ def forgot_password(req: ForgotPasswordRequest):
             raise HTTPException(status_code=503, detail="메일 요청을 처리하지 못했습니다. 잠시 후 다시 시도해 주세요.") from None
 
     return {"message": RESET_SENT}
+
+
+# ── 가입 인증 메일 다시 보내기 ──────────────────────
+# 가입 직후 화면 · 인증 전 로그인 화면의 '인증 메일 다시 보내기'. 가입 여부는 밝히지 않는다 (같은 문구)
+@router.post("/resend-confirmation")
+def resend_confirmation(req: ForgotPasswordRequest):
+    auth_client = new_auth_client()
+    try:
+        auth_client.auth.resend({"type": "signup", "email": req.email})
+    except Exception as error:
+        if _rate_limited(error):
+            raise HTTPException(status_code=429, detail="메일을 너무 자주 요청했습니다. 1분쯤 뒤에 다시 시도해 주세요.") from None
+        if _provider_code(error) not in {"user_not_found", "email_address_not_authorized"}:
+            logger.warning("가입 인증 메일 재발송 실패")
+            raise HTTPException(status_code=503, detail="메일 요청을 처리하지 못했습니다. 잠시 후 다시 시도해 주세요.") from None
+    return {"message": CONFIRMATION_SENT}
 
 
 # ── 새 비밀번호 설정 ──────────────────────────────

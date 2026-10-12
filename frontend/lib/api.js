@@ -283,6 +283,8 @@ export const api = {
       }),
 
     forgotPassword: ({ email }) => post('/auth/forgot-password', { email }),
+    // 가입 인증 메일 다시 보내기 — 가입 여부와 상관없이 같은 문구가 온다
+    resendConfirmation: ({ email }) => post('/auth/resend-confirmation', { email }),
     resetPassword: ({ accessToken, refreshToken, newPassword }) =>
       post('/auth/reset-password', {
         access_token: accessToken, refresh_token: refreshToken, new_password: newPassword,
