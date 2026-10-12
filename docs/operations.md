@@ -7,7 +7,7 @@
 
 | 무엇을 | 어떻게 재나 | 어디서 보나 |
 |---|---|---|
-| **가동률 (가동시간)** | GitHub Actions `uptime.yml` 이 **15분마다 밖에서** 프론트 · 백엔드 준비 상태 · DB 읽기 API · 알림 워커를 점검. 실행 기록 = 가동률 원장 | 관리자 화면 **'운영 상태'** · [Actions › Uptime monitor](https://github.com/dinf7605/Codyssey_FinalProject/actions/workflows/uptime.yml) · `ops_report.py` |
+| **가동률 (가동시간)** | GitHub Actions `uptime.yml` 이 **정기적으로 밖에서**(15분 간격 예약 · 실제 2.7~7.3시간) 프론트 · 백엔드 준비 상태 · DB 읽기 API · 알림 워커를 점검. 실행 기록 = 가동률 원장 | 관리자 화면 **'운영 상태'** · [Actions › Uptime monitor](https://github.com/dinf7605/Codyssey_FinalProject/actions/workflows/uptime.yml) · `ops_report.py` |
 | **장애 이력** | 점검이 실패하면 `ops-incident` 이슈를 자동으로 열고, 다시 정상이면 장애 시간을 적고 자동으로 닫는다 | GitHub Issues (`ops-incident` 라벨) |
 | **오류 · 예외 로그** | API 의 5xx 응답 · 처리되지 않은 예외, 알림 워커 작업 실패를 `error_logs` 에 남긴다 (서버 로그에는 traceback 까지) | 관리자 화면 '운영 상태' · Railway Logs · `ops_report.py --with-db` |
 | **알림 워커 생존** | 워커가 1분마다 `service_heartbeats` 에 신호. 10분 넘게 없으면 stale | `/health/ready` · 외부 점검 |
@@ -16,7 +16,7 @@
 
 ```mermaid
 flowchart LR
-  gha["GitHub Actions<br/>uptime.yml (15분)<br/>deploy-check.yml (push)"] -->|"HTTPS"| web["프론트 (Vercel)"]
+  gha["GitHub Actions<br/>uptime.yml (정기)<br/>deploy-check.yml (push)"] -->|"HTTPS"| web["프론트 (Vercel)"]
   gha -->|"/health/ready · /contests"| api["백엔드 API (Railway)"]
   api -->|"DB 읽기"| db[("Supabase")]
   worker["알림 워커 (Railway)"] -->|"1분마다 생존 신호"| db
@@ -38,9 +38,10 @@ flowchart LR
 | `/contests?limit=1` | 200 | 화면이 쓰는 DB 읽기 API |
 | 알림 워커 | `/health/ready` 의 `worker` 가 `stale` 이 아님 | 워커는 HTTP 가 없어 생존 신호로 본다 |
 
-- **주기** 15분 (`7,22,37,52 * * * *`). 한 점검 안에서 20초 간격으로 3번까지 다시 본다 — 순간 끊김을 장애로 세지 않는다
+- **주기** 15분 간격으로 예약(`7,22,37,52 * * * *`)했지만, **GitHub 무료 예약 실행은 이를 지키지 않았다** — 10-07~12 실제 간격 2.7~7.3시간(중간값 약 5시간), 5일에 24회. GitHub 이 붐빌 때 예약 실행을 늦추거나 건너뛰기 때문이다. 그래서 가동률은 '점검한 순간들이 모두 정상이었다'는 뜻이고, 그 사이의 짧은 장애는 잡지 못할 수 있다 (8절)
+- 한 점검 안에서 20초 간격으로 3번까지 다시 본다 — 순간 끊김을 장애로 세지 않는다
 - **가동률** = 정상 점검 ÷ 끝난 점검 × 100. 취소 · 건너뜀은 점검이 아니라서 뺀다 (`services/ops_monitor.uptime_from_runs`)
-- **장애 구간** = 연달아 실패한 점검의 첫 실패 ~ 다음 정상 점검. 15분 간격이라 실제보다 최대 15분 길게 잡힌다 (보수적)
+- **장애 구간** = 연달아 실패한 점검의 첫 실패 ~ 다음 정상 점검. 점검 간격만큼 실제보다 길게 잡힌다 (보수적)
 - 각 실행의 **Summary** 탭에 점검 표(HTTP 코드 · 응답 시간)가 남는다
 - 저장소가 공개라 Actions 비용이 들지 않는다. 관리자 화면은 GitHub API 를 30분마다 한 번만 읽는다 (비로그인 한도 시간당 60회)
 
@@ -142,19 +143,27 @@ python -m scripts.ops_report --days 7 --with-db --out ../docs/ops-report.md   # 
 | 백엔드 `/health` | 200 × 5 | 0.21 ~ 0.38초 |
 | `/contests?limit=1` (DB 읽기) | 200 × 5 | 0.52 ~ 0.65초 |
 
-### 7-3. 제출 직전에 채울 것
+### 7-3. 10-05 ~ 10-12, 7일 — [운영 보고서](ops-report.md)
 
-- [ ] `ops_report.py --days 7 --with-db --out ../docs/ops-report.md` 실행 → 가동률 · 장애 이력 · 오류 요약을 [ops-report.md](ops-report.md) 로 저장
-- [ ] 관리자 화면 '운영 상태' 캡처 → `docs/screens/17-admin-ops.jpg`
-- [ ] 장애가 있었다면 `ops-incident` 이슈 링크와 원인 · 조치를 아래 표에
+`python -m scripts.ops_report --days 7 --with-db` (10-12 17:22 KST).
 
-| 날짜 | 장애 | 길이 | 원인 | 조치 |
-|---|---|---|---|---|
-| | | | | |
+| 항목 | 결과 |
+|---|---|
+| 가동률 (외부 점검) | **100%** — 25회 모두 정상 (10-07 14:50 ~ 10-12 17:03), 장애 0건 · `ops-incident` 이슈 0건 |
+| 점검 간격 | 중간값 약 5시간 · 가장 길게 7.3시간 — 15분 예약이 지켜지지 않음 (위 2절) |
+| 배포 후 확인 | 7회 모두 성공 — 새 버전이 떴고 핵심 경로 정상 · `deploy-failure` 이슈 0건 |
+| 정해진 시각 작업 | 공고 수집 · 추천 8회 · 야간 재조정 7회 모두 성공 |
+| CI | 12회 모두 성공 |
+| 서버 오류 · 예외 (`error_logs`) | **0건** — 5xx 응답 · 처리되지 않은 예외 · 워커 작업 실패 없음 |
+| 알림 워커 | `/health/ready` 생존 신호 정상 (1분마다) |
+
+장애가 없어 장애 기록 표는 비어 있다. 관리자 화면 '운영 상태'에서 같은 숫자를 볼 수 있다.
+
+**더 촘촘히 재려면** — GitHub 예약 실행 대신 외부 감시 서비스(예: UptimeRobot 무료, 5분 간격)를 붙이면 된다. 계정이 필요해 팀이 직접 만들어야 하고, 만들면 `/health/ready` 를 감시 대상으로 넣는다.
 
 ## 8. 한계
 
-- 외부 점검은 15분 간격이라 그보다 짧은 장애는 놓칠 수 있고, 장애 시간은 15분 단위로 잡힌다. GitHub 이 붐비면 스케줄이 몇 분 늦거나 드물게 건너뛴다 (건너뛴 회차는 가동률 계산에서 빠진다)
+- 외부 점검은 15분 간격으로 예약했지만 GitHub 무료 예약 실행이 늦추거나 건너뛰어 **실제로는 수 시간 간격**이다(10-07~12 실측 2.7~7.3시간). 그 사이의 짧은 장애는 놓칠 수 있고, 장애 시간도 점검 간격 단위로 거칠게 잡힌다. 건너뛴 회차는 가동률 계산에서 빠진다
 - GitHub Actions 자체 장애 시간에는 점검이 없다
 - 오류 기록은 DB 에 남기므로 **DB 장애 중 오류는 Railway 로그에만** 남는다
 - 이용자 화면(브라우저)에서 난 오류는 수집하지 않는다 — 서버 오류만 센다

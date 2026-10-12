@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 
 // 운영 상태 (평가 #3 보완, 10-07) — backend GET /admin/ops (services/ops_monitor.py)
-// 준비 상태(DB 읽기 · 알림 워커 생존 신호) · 가동률(GitHub Actions uptime.yml 15분 외부 점검) · 최근 7일 서버 오류 요약.
+// 준비 상태(DB 읽기 · 알림 워커 생존 신호) · 가동률(GitHub Actions uptime.yml 정기 외부 점검) · 최근 7일 서버 오류 요약.
 // 대응 절차는 docs/operations.md
 
 const READY = {
@@ -27,13 +27,14 @@ function percent(part) {
 
 function Uptime({ uptime }) {
   if (uptime.status === 'unavailable') return <p className="hint" style={{ margin: 0 }}>GitHub 점검 기록을 불러오지 못했습니다. 잠시 후 다시 확인해 주세요.</p>;
-  if (uptime.status !== 'ok') return <p className="hint" style={{ margin: 0 }}>아직 외부 점검 기록이 없습니다. GitHub Actions(uptime.yml)가 15분마다 쌓습니다.</p>;
+  if (uptime.status !== 'ok') return <p className="hint" style={{ margin: 0 }}>아직 외부 점검 기록이 없습니다. GitHub Actions(uptime.yml)가 정기적으로 쌓습니다.</p>;
   const { day, week } = uptime;
   return (
     <div className="stack" style={{ gap: 4 }}>
       <p style={{ margin: 0 }}>
         가동률 <b className="mono">{percent(day)}</b> <span className="tiny muted">최근 24시간 · 점검 {day.checks}회 중 {day.ok}회 정상</span>
         {' · '}<b className="mono">{percent(week)}</b> <span className="tiny muted">7일 · {week.checks}회 중 {week.ok}회</span>
+        {week.median_gap_minutes != null && <span className="tiny muted"> · 점검 간격 약 {Math.round(week.median_gap_minutes / 6) / 10}시간</span>}
       </p>
       {week.incidents.length > 0 ? (
         <ul className="tiny" style={{ margin: 0, paddingLeft: 18 }}>

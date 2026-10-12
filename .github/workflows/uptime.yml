@@ -1,6 +1,7 @@
 name: Uptime monitor
 
-# 운영 모니터링 (평가 #3 보완, 10-07) — 15분마다 밖에서 서비스를 두드린다. 이 워크플로의 실행 기록이 곧 가동률 원장이다.
+# 운영 모니터링 (평가 #3 보완, 10-07) — 정기적으로 밖에서 서비스를 두드린다. 이 워크플로의 실행 기록이 곧 가동률 원장이다.
+# 15분 간격으로 예약하지만 GitHub 무료 예약 실행은 늦추거나 건너뛴다 — 10-07~12 실측 간격 2.7~7.3시간 (docs/operations.md).
 #   1) 프론트 첫 화면 200 + 'StudyPace'
 #   2) 백엔드 /health/ready 200 — DB 를 실제로 읽는다 (10차 점검: /health 200 인데 DB 키가 없어 전부 503 이었다)
 #   3) /contests?limit=1 200 — 화면이 쓰는 DB 읽기 API
@@ -15,7 +16,7 @@ name: Uptime monitor
 
 on:
   schedule:
-    - cron: '7,22,37,52 * * * *'   # 15분마다 — 정각은 GitHub 이 붐벼 늦게 도는 일이 많아 피한다
+    - cron: '7,22,37,52 * * * *'   # 15분 간격 예약 — 정각은 GitHub 이 붐벼 늦게 도는 일이 많아 피한다
   workflow_dispatch:
 
 permissions:
@@ -137,5 +138,5 @@ jobs:
             opened=$(gh issue view "$number" --repo "$repo" --json createdAt --jq .createdAt)
             minutes=$(( ( $(date -u +%s) - $(date -u -d "$opened" +%s) ) / 60 ))
             gh issue close "$number" --repo "$repo" \
-              --comment "$(TZ=Asia/Seoul date '+%Y-%m-%d %H:%M KST') 정상 확인 — 자동으로 닫음. 장애 시간 약 ${minutes}분 (점검 간격 15분만큼 오차)"
+              --comment "$(TZ=Asia/Seoul date '+%Y-%m-%d %H:%M KST') 정상 확인 — 자동으로 닫음. 장애 시간 약 ${minutes}분 (점검 간격만큼 오차)"
           done

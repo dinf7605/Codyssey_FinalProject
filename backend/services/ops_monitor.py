@@ -263,7 +263,8 @@ def fetch_runs(workflow: str, since: datetime, *, repo: str | None = None, token
 def uptime_from_runs(runs: list[dict], since: datetime | None = None) -> dict:
     """점검 기록 → 가동률과 장애 구간.
 
-    가동률 = 정상 점검 / 끝난 점검. 장애 구간 = 연달아 실패한 점검의 첫 실패 ~ 다음 정상 점검 (15분 단위라 최대 15분 길게 잡힌다).
+    가동률 = 정상 점검 / 끝난 점검. 장애 구간 = 연달아 실패한 점검의 첫 실패 ~ 다음 정상 점검 (점검 간격만큼 길게 잡힌다).
+    점검 간격도 함께 돌려준다 — GitHub 무료 예약 실행은 15분 예약을 지키지 않는다 (10-07~12 실측 2.7~7.3시간).
     """
     done = sorted(
         (r for r in runs if r.get("conclusion") in FINISHED and (since is None or parse_time(r["created_at"]) >= since)),
@@ -284,9 +285,13 @@ def uptime_from_runs(runs: list[dict], since: datetime | None = None) -> dict:
             current = None
     if current is not None:   # 아직 복구되지 않음
         incidents.append(current)
+    stamps = [parse_time(r["created_at"]) for r in done]
+    gaps = sorted((b - a).total_seconds() / 60 for a, b in zip(stamps, stamps[1:]))
     return {
         "checks": len(done),
         "ok": ok,
+        "median_gap_minutes": round(gaps[len(gaps) // 2]) if gaps else None,
+        "max_gap_minutes": round(gaps[-1]) if gaps else None,
         "uptime_percent": round(ok / len(done) * 100, 2) if done else None,
         "first_check": done[0]["created_at"] if done else None,
         "last_check": done[-1]["created_at"] if done else None,
@@ -305,7 +310,7 @@ def uptime_status(now: datetime | None = None, fetch=fetch_runs) -> dict:
         return _uptime_cache["value"]
     now = now or datetime.now(timezone.utc)
     links = {
-        "source": f"GitHub Actions {UPTIME_WORKFLOW} (15분마다 외부 점검)",
+        "source": f"GitHub Actions {UPTIME_WORKFLOW} (정기 외부 점검 · 15분 간격 예약)",
         "workflow_url": f"https://github.com/{repo_name()}/actions/workflows/{UPTIME_WORKFLOW}",
     }
     try:

@@ -31,8 +31,14 @@ def _kst(ts: str | None) -> str:
     return parse_time(ts).astimezone(KST).strftime("%m-%d %H:%M") if ts else "—"
 
 
+def _hours(minutes: int | None) -> str:
+    if minutes is None:
+        return "—"
+    return f"{minutes}분" if minutes < 60 else f"{minutes / 60:.1f}시간"
+
+
 def _uptime_section(runs) -> list[str]:
-    lines = ["## 1. 가동률 — 외부 점검 (`uptime.yml`, 15분마다)", ""]
+    lines = ["## 1. 가동률 — 정기 외부 점검 (`uptime.yml`)", ""]
     if isinstance(runs, Exception):
         return lines + [f"GitHub 기록을 읽지 못했다 ({type(runs).__name__}).", ""]
     u = uptime_from_runs(runs)
@@ -43,6 +49,7 @@ def _uptime_section(runs) -> list[str]:
         "|---|---|",
         f"| 점검 | {u['checks']}회 ({_kst(u['first_check'])} ~ {_kst(u['last_check'])} KST) |",
         f"| 정상 | {u['ok']}회 |",
+        f"| 점검 간격 | 중간값 {_hours(u['median_gap_minutes'])} · 가장 길게 {_hours(u['max_gap_minutes'])} (15분 간격으로 예약했지만 GitHub 무료 예약 실행이 늦추거나 건너뛴다) |",
         f"| **가동률** | **{u['uptime_percent']}%** |",
         f"| 장애 | {len(u['incidents'])}건 |",
         "",

@@ -44,7 +44,7 @@ flowchart TB
     llm["Codyssey 게이트웨이<br/>Claude Sonnet 4 · Haiku 4"]
     google["Google<br/>OAuth · Calendar FreeBusy"]
     wevity["위비티<br/>공모전 목록·상세"]
-    gha["GitHub Actions<br/>CI · 공고 수집/추천 · 야간 재조정 cron<br/>15분 외부 점검 · 배포 확인"]
+    gha["GitHub Actions<br/>CI · 공고 수집/추천 · 야간 재조정 cron<br/>정기 외부 점검 · 배포 확인"]
 
     user --> pages
     admin --> pages
@@ -63,7 +63,7 @@ flowchart TB
     api -- "바쁜 시간 1회 읽기 후 토큰 폐기" --> google
     auth -- "OAuth" --> google
     gha -- "POST /contests/collect · recommend-weekly · /plan/nightly<br/>(X-Batch-Key)" --> api
-    gha -- "15분마다 GET /health/ready · /contests · 프론트<br/>push 뒤 새 버전 확인" --> api
+    gha -- "정기적으로 GET /health/ready · /contests · 프론트<br/>push 뒤 새 버전 확인" --> api
     api -- "robots.txt 확인 · 3초 간격" --> wevity
 ```
 
@@ -75,7 +75,7 @@ flowchart TB
 | LLM | Codyssey 게이트웨이 → Claude | Sonnet 4: 학습 분해 Agent / Haiku 4: 관련성 판단·추천 이유·요약 |
 | 외부 연동 | Google OAuth · Calendar · 위비티 | 구글 로그인, 바쁜 시간 읽기, 공모전 수집 |
 | 자동화 | GitHub Actions cron · 알림 워커 · 배치 API | 공고 수집·주간 추천·야간 재조정은 GitHub Actions, 분 단위 알림 6종은 워커 (§5) |
-| 운영 모니터링 | GitHub Actions · 오류 감시 미들웨어 · `/health/ready` | 15분 외부 점검(가동률) · 5xx·예외 기록 · 배포 후 확인 · 자동 복구 ([운영 문서](operations.md)) |
+| 운영 모니터링 | GitHub Actions · 오류 감시 미들웨어 · `/health/ready` | 정기 외부 점검(가동률) · 5xx·예외 기록 · 배포 후 확인 · 자동 복구 ([운영 문서](operations.md)) |
 
 ## 2. 설계 원칙 — LLM 을 쓰는 곳과 쓰지 않는 곳을 가른다
 
@@ -226,7 +226,7 @@ flowchart LR
 | 야간 재조정 | `POST /plan/nightly` | 매일 03:00 | GitHub Actions `plan-jobs.yml` (10-05 연결) |
 | 알림 6종 | `POST /batch/alarm/{before-block · after-block · daily-nightly · weekly-summary · replan-result · contest-deadline}` | 1분 ~ 주 1회 | 알림 워커 `workers/notification_worker.py` (APScheduler, 한국 시각) |
 | 워커 생존 신호 | (DB 직접 — `service_heartbeats`) | 1분 | 알림 워커. `/health/ready` 가 10분 넘게 소식이 없으면 stale |
-| 외부 점검 (가동률) | `GET /health/ready` · `GET /contests?limit=1` · 프론트 `/` | 15분 | GitHub Actions `uptime.yml` — 실패하면 `ops-incident` 이슈, 복구되면 자동 종료 |
+| 외부 점검 (가동률) | `GET /health/ready` · `GET /contests?limit=1` · 프론트 `/` | 15분 간격 예약 (실제 2.7~7.3시간) | GitHub Actions `uptime.yml` — 실패하면 `ops-incident` 이슈, 복구되면 자동 종료 |
 | 배포 후 확인 | `GET /health` (커밋 버전) · 위 점검 | push 마다 | GitHub Actions `deploy-check.yml` — 실패하면 `deploy-failure` 이슈 |
 
 알림은 앱 안 알림(`notification_logs`)으로 쌓이고, 사이트를 열어 둔 브라우저는 허락을 받으면 브라우저 알림으로도 띄운다.
@@ -316,7 +316,7 @@ flowchart LR
     railway --> supabase[("Supabase")]
     railway --> gateway["Codyssey 게이트웨이"]
     gh -- "push 뒤 deploy-check.yml<br/>새 버전 · 핵심 경로 확인" --> railway
-    cron["GitHub Actions uptime.yml<br/>15분 외부 점검"] --> vercel & railway
+    cron["GitHub Actions uptime.yml<br/>정기 외부 점검"] --> vercel & railway
     hc["Railway 배포 규칙<br/>헬스체크 /health/ready 통과한 배포만 트래픽<br/>죽으면 재시작"]
     railway --- hc
 ```

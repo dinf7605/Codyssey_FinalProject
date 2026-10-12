@@ -13,7 +13,7 @@
 | 핵심 AI 기술 요소 | **AI Agent · RAG · 자동화 워크플로우 · Long-term Memory** (4개) |
 | 기능 규모 | 총 69개 — Must 38 / Should 25 / Could 3 / Won't 3 · 비기능 요구사항 12개 |
 | 서비스 주소 | **https://codyssey-final-project.vercel.app** · API 문서 https://codysseyfinalproject-production.up.railway.app/docs |
-| 현재 단계 | 5주차 (10-12) · **배포 완료** · **실사용자 테스트(10-02~06) 5명 · 설문 반영** · 운영 모니터링(15분 외부 점검) ([개발 기록](#개발-기록)) |
+| 현재 단계 | 5주차 (10-12) · **배포 완료** · **실사용자 테스트(10-02~06) 5명 · 설문 반영** · 운영 모니터링(정기 외부 점검 · [운영 보고서](docs/ops-report.md)) ([개발 기록](#개발-기록)) |
 
 ### 제출물 · 필수요건 한눈에
 
@@ -28,7 +28,7 @@
 
 | 필수요건 | 근거 |
 |---|---|
-| 외부에서 접속 가능 | 위 배포 URL · 15분마다 외부 점검 [Uptime monitor](https://github.com/dinf7605/Codyssey_FinalProject/actions/workflows/uptime.yml) ([운영 문서](docs/operations.md)) |
+| 외부에서 접속 가능 | 위 배포 URL · 정기 외부 점검 — 10-07~12 25회 모두 정상 ([운영 보고서](docs/ops-report.md)) · [Uptime monitor](https://github.com/dinf7605/Codyssey_FinalProject/actions/workflows/uptime.yml) ([운영 문서](docs/operations.md)) |
 | 생성형 AI · Agent 가 핵심 기능 | 학습 분해 **AI Agent**(도구 호출) · 목표 · 공고 추천 **RAG** — [4개 파이프라인](#4개-파이프라인) |
 | Must 기능이 적어 둔 대로 동작 | Must 38개 — [화면 구성](#화면-구성) · 점검 기록 1~11차 ([중간 점검](#중간-점검)) · 백엔드 테스트 533개 |
 | 실사용자 5명 이상 피드백 | 5명 (10-02~06 사용, 설문 10-06~12) — [리포트](docs/user-test/리포트.md) |
@@ -149,7 +149,7 @@ flowchart LR
 
 | 영역 | 보여 주는 것 | 기능 |
 |---|---|---|
-| 운영 상태 · 가동률 · 서버 오류 | 준비 상태(DB 읽기 · 알림 워커 생존 신호 · 서버 버전), **가동률**(GitHub Actions 15분 외부 점검 — 최근 24시간 · 7일, 장애 구간), 최근 7일 **서버 오류**(5xx · 예외 · 워커 실패 — 날짜별 건수 · 유형 · 최근 5건과 요청 번호). 10-07 추가 — [운영 문서](docs/operations.md) | 운영 |
+| 운영 상태 · 가동률 · 서버 오류 | 준비 상태(DB 읽기 · 알림 워커 생존 신호 · 서버 버전), **가동률**(GitHub Actions 정기 외부 점검 — 최근 24시간 · 7일, 장애 구간), 최근 7일 **서버 오류**(5xx · 예외 · 워커 실패 — 날짜별 건수 · 유형 · 최근 5건과 요청 번호). 10-07 추가 — [운영 문서](docs/operations.md) | 운영 |
 | AI 처리 기록 | 날짜를 골라 그날의 AI 처리 기록 — 건수, 평균 처리 시간, 도구 호출 합계, 기능(학습 분해 · 목표 추천 · 공모전 추천 · 블록 공부 방법)별 처리 방식 · 모델 · 처리 시간 목록 (모두 한글로 표시). 템플릿 대체도 포함 | `FR-ADMIN-02` |
 | 오늘 AI 사용량 · 하루 한도 | 오늘 예상 비용 / 하루 한도(`AI_DAILY_BUDGET_USD`, 기본 $5)와 기능별 횟수. 80% 부터 비회원 AI 추천을 막고, 100% 면 새 AI 호출을 막는다 | 비용 관리 |
 | AI 요청 실패율 · 토큰 사용량 | 학습 분해 요청 수 · 응답 성공 · 실패율, 입력·출력·캐시 토큰 합계 (재시도도 각각 1회) | `FR-ADMIN-02` |
@@ -246,7 +246,7 @@ where email = '관리자로 지정할 이메일';
 | [backend/README.md](backend/README.md) | 백엔드 실행 · 학습 분해 Agent · 스케줄 배치 엔진 · 규칙 검증기 · API |
 | [frontend/README.md](frontend/README.md) | 프론트엔드 실행 방법 · 폴더 구조 · 화면↔기능 ID 매핑 · 모바일 대응 |
 | [docs/architecture.md](docs/architecture.md) | **시스템 아키텍처** — 구성 요소 · 파이프라인별 흐름 · 데이터 모델 · 인증·보안 · 자동화 · 배포 |
-| [docs/operations.md](docs/operations.md) | **운영 모니터링 · 장애 대응** — 가동률(15분 외부 점검) · 오류·예외 로그 · 배포 후 자동 복구 · 롤백 · 측정 결과(`python -m scripts.ops_report`) |
+| [docs/operations.md](docs/operations.md) | **운영 모니터링 · 장애 대응** — 가동률(정기 외부 점검) · [7일 운영 보고서](docs/ops-report.md) · 오류·예외 로그 · 배포 후 자동 복구 · 롤백 · 측정 결과(`python -m scripts.ops_report`) |
 | [docs/발표자료_StudyPace.pdf](docs/발표자료_StudyPace.pdf) | **발표 자료** (서면 심사용 19장) — 문제 · 타깃 · 4개 파이프라인 · 설계 원칙 · AI Agent · RAG · 품질 근거 · 해결 과정 · 실사용자 피드백 · 운영 · 팀 |
 | [docs/screens/](docs/screens) | **화면 캡처** — 사용자 화면 12장 · 관리자 화면 4장 (설명은 위 [화면 구성](#화면-구성)) |
 | [docs/user-test/](docs/user-test/README.md) | **실사용자 테스트** — 운영 가이드 · 참여자 안내·동의서 · 설문·인터뷰 · **[리포트](docs/user-test/리포트.md)(5명 결과 · 반영)** · 지표 스크립트(`python -m scripts.user_test_metrics`) |
@@ -576,7 +576,7 @@ AI 학습 분해(ADsP, 에이전트가 단위 25개를 39초에) · 관심 공�
 
 | 보완 | 내용 |
 |---|---|
-| 가동률 | GitHub Actions `uptime.yml` 이 15분마다 밖에서 프론트 · `/health/ready`(DB 읽기) · `/contests` · 알림 워커를 점검. 실행 기록이 가동률 원장, 실패하면 `ops-incident` 이슈를 열고 복구되면 장애 시간을 적고 닫음 |
+| 가동률 | GitHub Actions `uptime.yml` 이 정기적으로(15분 간격 예약 — 실제는 GitHub 사정으로 수 시간 간격) 밖에서 프론트 · `/health/ready`(DB 읽기) · `/contests` · 알림 워커를 점검. 실행 기록이 가동률 원장, 실패하면 `ops-incident` 이슈를 열고 복구되면 장애 시간을 적고 닫음 |
 | 오류 · 예외 로그 | API 5xx · 처리되지 않은 예외 · 워커 작업 실패 → 서버 로그 + `error_logs`(migration 020). 모든 응답에 `X-Request-ID`, 메시지의 이메일 · id 는 가려서 저장 |
 | 준비 상태 | `GET /health/ready` — DB 를 실제로 읽고 워커 생존 신호(1분)를 본다. `/health` 는 지금 도는 커밋 버전을 알려 줌 |
 | 배포 후 자동 복구 | Railway 헬스체크(`/health/ready`)를 통과한 배포만 트래픽 · 프로세스가 죽으면 재시작 (`backend/railway.*.json`) · `deploy-check.yml` 이 새 버전이 떴는지 확인하고 실패하면 `deploy-failure` 이슈 · (선택) 30분 연속 장애면 Railway 재배포 요청 |
@@ -637,7 +637,7 @@ npm run dev                        # http://localhost:3000
 | 프론트 | https://codyssey-final-project.vercel.app | Vercel · Root Directory `frontend` |
 | 백엔드 API | https://codysseyfinalproject-production.up.railway.app (`/docs`, `/health`) | Railway · Root `backend` · `uvicorn main:app --host 0.0.0.0 --port $PORT` |
 | 알림 워커 | 도메인 없음 | Railway 같은 저장소의 두 번째 서비스 · Root `backend` · `python workers/notification_worker.py` |
-| 운영 모니터링 | `uptime.yml` 15분 외부 점검 · `deploy-check.yml` push 후 배포 확인 | GitHub Actions — secrets 없이 동작. 자동 재배포만 선택 secrets ([운영 문서](docs/operations.md)) |
+| 운영 모니터링 | `uptime.yml` 정기 외부 점검 · `deploy-check.yml` push 후 배포 확인 | GitHub Actions — secrets 없이 동작. 자동 재배포만 선택 secrets ([운영 문서](docs/operations.md)) |
 | 정해진 시각 배치 | `contest-jobs.yml` 수집 05:00 · 추천 월 09:00 / `plan-jobs.yml` 야간 재조정 03:00 | GitHub Actions — secrets `STUDYPACE_API_BASE` · `BATCH_SECRET`, variables `CONTEST_COLLECTION_ENABLED` · `CONTEST_RECOMMENDATIONS_ENABLED` · `NIGHTLY_REPLAN_ENABLED` |
 
 `main` 에 push 하면 Vercel·Railway 가 자동으로 다시 배포한다. 환경변수 목록은 [아키텍처 문서 8절](docs/architecture.md#8-배포-구성).
