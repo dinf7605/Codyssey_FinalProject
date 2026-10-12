@@ -68,12 +68,12 @@ frontend/
 
 | 경로 | 화면 | 기능 |
 |---|---|---|
-| `/` | 랜딩 | 비회원 진입 · 받게 될 일정 미리보기 · 상단 헤더에 로그인/회원가입 |
+| `/` | 랜딩 | 비회원 진입 · 받게 될 일정 미리보기 · 상단 헤더에 로그인/회원가입 (로그인했으면 마이페이지 · 내 학습 보기) |
 | `/onboarding` | 목표 탐색 | `FR-GOAL-01` `FR-GOAL-02` `FR-GOAL-05` `FR-GOAL-11` |
-| `/login` `/signup` | 인증 | `FR-AUTH-01~03` `FR-JOIN-01~03` |
+| `/login` `/signup` | 인증 | `FR-AUTH-01~03` `FR-JOIN-01~03` · 가입 후 '인증 메일을 보냈어요' 화면 · 인증 메일 다시 보내기(`ResendConfirmation`) |
 | `/dashboard` | 대시보드 | `FR-MAIN-03~05` `FR-PACE-04` |
 | `/schedule` | 일정 | `FR-PLAN-04` `FR-PLAN-05` `FR-PLAN-07` `FR-PACE-01` |
-| `/study` | 학습 실행 | `FR-STUDY-01` `FR-STUDY-02` `FR-STUDY-05` |
+| `/study` | 학습 실행 | `FR-STUDY-01` `FR-STUDY-02` `FR-STUDY-05` · 이 블록 공부 방법(AI, 실패 시 `lib/studyGuide.js` 규칙) · 쓰는 중인 메모 기기 보관 |
 | `/contests` | 공모전 목록 | `FR-CONT-03` `FR-CONT-04` `FR-CONT-05` |
 | `/contests/[id]` | 공모전 상세 | `FR-CONT-10` `FR-CONT-11` |
 | `/mypage` | 마이페이지 | `FR-MEM-01` `FR-MEM-02` `FR-MY-01~05` |

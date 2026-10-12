@@ -1,6 +1,6 @@
 # 시스템 아키텍처 — 스터디페이스 (StudyPace)
 
-> 기준: 2026-10-02 `main` 코드. 기획서 5-1절의 개념도를 실제 구현에 맞춰 풀어 쓴 문서다.
+> 기준: 2026-10-12 `main` 코드 (운영 모니터링 · AI 블록 공부 방법 · 가입 인증 메일 재발송까지). 기획서 5-1절의 개념도를 실제 구현에 맞춰 풀어 쓴 문서다.
 > 그림은 GitHub 에서 바로 보이는 Mermaid 로 그렸다. 구현이 바뀌면 이 문서도 함께 고친다.
 
 ## 1. 한눈에 보기
@@ -22,6 +22,7 @@ flowchart TB
             rag1["RAG ① 목표 카탈로그 관련성<br/>goal_claude"]
             rag2["RAG ② 공모전 제목 관련성<br/>contest_claude"]
             words["추천 이유 · 재조정 요약 문장"]
+            guide["블록 공부 방법<br/>study_guide"]
         end
         subgraph DL["결정론 레이어 (LLM 미사용)"]
             feas["기간 적합성 · 최소/권장 기간<br/>goal_feasibility · scope"]
@@ -31,18 +32,19 @@ flowchart TB
             pace["진도·레벨·스트릭 집계<br/>aggregator"]
         end
         guard["보호 장치<br/>비회원 한도 · AI 하루 비용 한도<br/>로그인 잠금 · 비밀번호 규칙"]
+        ops["운영 모니터링<br/>오류 감시 미들웨어 · /health/ready<br/>ops_monitor"]
         worker["알림 워커<br/>workers/notification_worker.py (APScheduler)"]
     end
 
     subgraph SB["Supabase"]
         auth[("Auth<br/>이메일 · 구글 로그인")]
-        pg[("PostgreSQL<br/>테이블 22개 · RLS")]
+        pg[("PostgreSQL<br/>테이블 24개 · RLS")]
     end
 
     llm["Codyssey 게이트웨이<br/>Claude Sonnet 4 · Haiku 4"]
     google["Google<br/>OAuth · Calendar FreeBusy"]
     wevity["위비티<br/>공모전 목록·상세"]
-    gha["GitHub Actions<br/>CI · 공고 수집/추천 · 야간 재조정 cron"]
+    gha["GitHub Actions<br/>CI · 공고 수집/추천 · 야간 재조정 cron<br/>15분 외부 점검 · 배포 확인"]
 
     user --> pages
     admin --> pages
@@ -52,6 +54,8 @@ flowchart TB
     api --> AIL
     api --> DL
     api --> guard
+    api --> ops
+    ops -- "5xx · 예외 · 워커 실패" --> pg
     AIL -- "Messages API" --> llm
     api --> pg
     api --> auth
@@ -59,6 +63,7 @@ flowchart TB
     api -- "바쁜 시간 1회 읽기 후 토큰 폐기" --> google
     auth -- "OAuth" --> google
     gha -- "POST /contests/collect · recommend-weekly · /plan/nightly<br/>(X-Batch-Key)" --> api
+    gha -- "15분마다 GET /health/ready · /contests · 프론트<br/>push 뒤 새 버전 확인" --> api
     api -- "robots.txt 확인 · 3초 간격" --> wevity
 ```
 
@@ -70,16 +75,17 @@ flowchart TB
 | LLM | Codyssey 게이트웨이 → Claude | Sonnet 4: 학습 분해 Agent / Haiku 4: 관련성 판단·추천 이유·요약 |
 | 외부 연동 | Google OAuth · Calendar · 위비티 | 구글 로그인, 바쁜 시간 읽기, 공모전 수집 |
 | 자동화 | GitHub Actions cron · 알림 워커 · 배치 API | 공고 수집·주간 추천·야간 재조정은 GitHub Actions, 분 단위 알림 6종은 워커 (§5) |
+| 운영 모니터링 | GitHub Actions · 오류 감시 미들웨어 · `/health/ready` | 15분 외부 점검(가동률) · 5xx·예외 기록 · 배포 후 확인 · 자동 복구 ([운영 문서](operations.md)) |
 
 ## 2. 설계 원칙 — LLM 을 쓰는 곳과 쓰지 않는 곳을 가른다
 
 | 구간 | 방식 | 이유 |
 |---|---|---|
 | 판정 · 계산 (기간 적합성, 스케줄 배치, 진도 기준선, 규칙 검증) | **LLM 미사용** | 같은 입력이면 같은 결과가 나와야 검증할 수 있다. 마감 초과·선후 위반 0건을 코드로 보장한다 |
-| 분해 · 언어화 (학습 분해, 관련성 판단, 추천 이유, 재조정 요약) | **LLM 사용** | 규칙으로 열거할 수 없는 영역 |
+| 분해 · 언어화 (학습 분해, 관련성 판단, 추천 이유, 재조정 요약, 블록 공부 방법) | **LLM 사용** | 규칙으로 열거할 수 없는 영역 |
 
 모든 AI 호출에는 **대체 경로**가 있다. 키가 없거나, 시간이 넘거나, 응답 검증에 실패하거나, 하루 비용 한도를 넘으면
-학습 분해는 표준 커리큘럼 템플릿, 관련성 판단은 태그·제목 키워드, 추천 이유는 템플릿 문장으로 대신한다.
+학습 분해는 표준 커리큘럼 템플릿, 관련성 판단은 태그·제목 키워드, 추천 이유는 템플릿 문장, 블록 공부 방법은 단원 유형·순서별 규칙 안내로 대신한다.
 그래서 **AI 가 멈춰도 일정은 항상 만들어진다.** Claude 클라이언트는 `backend/services/llm.py` 한 곳에서만 만든다.
 
 ## 3. 백엔드 내부 구조
@@ -99,10 +105,10 @@ flowchart LR
     subgraph S["services/ — 업무 로직"]
         sgoal["goal_catalog · goal_claude<br/>goal_feasibility · goal_recommender<br/>goal_feedback · goal_limiter"]
         splan["decomposer · agent_tools · curriculum · template<br/>scheduler · validator · scope<br/>plan_store · replan · calendar_export"]
-        sstudy["aggregator · study_memory"]
+        sstudy["aggregator · study_memory<br/>study_guide"]
         scont["wevity_collector · wevity_parser<br/>contest_repository · contest_claude<br/>contest_recommender · contest_interest"]
         snoti["alarms"]
-        sbase["llm · ai_budget · login_guard<br/>password_policy · ai_request_metrics"]
+        sbase["llm · ai_budget · login_guard<br/>password_policy · ai_request_metrics<br/>ops_monitor"]
     end
     db[("Supabase<br/>db.py")]
     rgoal --> sgoal
@@ -117,9 +123,11 @@ flowchart LR
 ```
 
 - **schemas/** — 요청·응답과 도메인 모델(Pydantic). 학습 분해 결과는 고정 JSON 스키마로 검증한다
-- **migrations/** — 공용 DB 스키마 000~019. 적용 이력은 Supabase → Database → Migrations
+- **utils/** — 토큰 확인(`auth`) · 관리자 권한(`admin`) · 오류 감시 미들웨어(`error_monitor` — 5xx·예외를 로그와 `error_logs` 에, 모든 응답에 `X-Request-ID`)
+- **migrations/** — 공용 DB 스키마 000~020. 적용 이력은 Supabase → Database → Migrations
 - **evals/** — AI 품질 평가 정답셋·측정 스크립트 (`python -m evals.run_eval`)
-- **tests/** — `FakeSupabase` 로 실제 DB·Claude 없이 도는 테스트 약 500개 (CI 에서 실행)
+- **tests/** — `FakeSupabase` 로 실제 DB·Claude 없이 도는 테스트 546개 (CI 에서 실행)
+- **scripts/** — 실사용자 테스트 지표(`user_test_metrics`) · 운영 보고서(`ops_report` — 가동률 · 장애 · 오류 요약)
 
 ## 4. 핵심 흐름 — 4개 파이프라인
 
@@ -201,6 +209,10 @@ flowchart LR
     agg --> pace["진도 신호등<br/>3일 주의 · 7일 경고 · 조정 제안"]
     sessions --> mem["학습 메모리 (user_memories)<br/>선호 시간대 · 예상 대비 실제 · 완료율"]
     mem --> my["마이페이지에서 근거와 함께 보기·지우기"]
+    blk["학습 화면에서 블록 열기"] --> guide["이 블록 공부 방법<br/>GET /study/guide/{id}"]
+    guide --> haiku["Claude Haiku — 같은 단원의 1/3·2/3·3/3 을 한 번에<br/>앞뒤 단원 · 다른 단원 이름을 함께 줌"]
+    haiku --> steps["블록마다 3단계 할 일 + 시간<br/>'AI 추천' 표시 · 블록마다 저장"]
+    guide -. "키 없음 · 비용 한도 · 형식 오류" .-> rule["단원 유형 · 순서별 규칙 안내<br/>(frontend lib/studyGuide.js)"]
 ```
 
 ## 5. 자동화 · 배치
@@ -213,6 +225,9 @@ flowchart LR
 | 주간 공모전 추천 | `POST /contests/recommend-weekly` | 월 09:00 | GitHub Actions `contest-jobs.yml` |
 | 야간 재조정 | `POST /plan/nightly` | 매일 03:00 | GitHub Actions `plan-jobs.yml` (10-05 연결) |
 | 알림 6종 | `POST /batch/alarm/{before-block · after-block · daily-nightly · weekly-summary · replan-result · contest-deadline}` | 1분 ~ 주 1회 | 알림 워커 `workers/notification_worker.py` (APScheduler, 한국 시각) |
+| 워커 생존 신호 | (DB 직접 — `service_heartbeats`) | 1분 | 알림 워커. `/health/ready` 가 10분 넘게 소식이 없으면 stale |
+| 외부 점검 (가동률) | `GET /health/ready` · `GET /contests?limit=1` · 프론트 `/` | 15분 | GitHub Actions `uptime.yml` — 실패하면 `ops-incident` 이슈, 복구되면 자동 종료 |
+| 배포 후 확인 | `GET /health` (커밋 버전) · 위 점검 | push 마다 | GitHub Actions `deploy-check.yml` — 실패하면 `deploy-failure` 이슈 |
 
 알림은 앱 안 알림(`notification_logs`)으로 쌓이고, 사이트를 열어 둔 브라우저는 허락을 받으면 브라우저 알림으로도 띄운다.
 방해금지(기본 23~07시), 알림 강도, 선택 알림 3종, 독촉 하루 3회 같은 규칙은 `services/alarms.py` 가 보낼 때마다 확인한다.
@@ -247,7 +262,7 @@ erDiagram
 | 메모리 | `user_memories` · `goal_feedback` · `contest_feedback` | 근거·갱신 시점과 함께 저장, 사용자가 항목별·전체 삭제 |
 | 공모전 | `contests` · `contest_recommendations` · `contest_interests` · `preparation_time_standards` | 원문·포스터는 저장하지 않는다 |
 | 알림 | `notification_logs` · `user_notification_settings` | 같은 블록·같은 종류는 고유 인덱스로 한 번만 |
-| 운영 | `ai_call_logs` · `ai_request_logs` · `batch_runs` · `curriculum_units` | AI 호출에는 프롬프트·답변 본문을 남기지 않는다 |
+| 운영 | `ai_call_logs` · `ai_request_logs` · `batch_runs` · `curriculum_units` · `error_logs` · `service_heartbeats` | AI 호출에는 프롬프트·답변 본문을 남기지 않는다. 오류 기록은 사용자 id 없이 경로 틀 · 가린 메시지 · 요청 번호만 (020) |
 
 모든 테이블에 RLS 를 켜서 브라우저(익명 키)는 **본인 행만 읽기**가 가능하다. 쓰기는 백엔드(서비스 키)만 하며,
 서비스 키는 RLS 를 통과하므로 백엔드 코드가 모든 조회에 본인 조건(`user_id`)을 건다.
@@ -260,8 +275,13 @@ sequenceDiagram
     participant API as FastAPI
     participant SA as Supabase Auth
     participant G as Google
+    opt 이메일 가입
+        FE->>API: POST /auth/signup (필수 동의 2개)
+        API->>SA: sign_up → 인증 메일 발송
+        API-->>FE: requires_email_confirmation → '인증 메일을 보냈어요' 화면 · 다시 보내기(POST /auth/resend-confirmation)
+    end
     alt 이메일
-        FE->>API: POST /auth/login (5회 실패 시 60초 잠금)
+        FE->>API: POST /auth/login (5회 실패 시 60초 잠금 · 인증 전이면 403 안내)
         API->>SA: sign_in_with_password
         SA-->>FE: access · refresh 토큰
     else 구글
@@ -277,6 +297,8 @@ sequenceDiagram
 | 위협·요구 | 대응 |
 |---|---|
 | 계정 탈취 | 로그인 5회 실패 60초 잠금 · 실패 문구 통일 · 흔한 비밀번호 1만 개·이메일/닉네임 포함 거부 · 재설정 시 전체 로그아웃 |
+| 계정 확인 | 이메일 가입은 인증 메일 링크를 눌러야 로그인 · 인증 전 로그인은 '인증이 남았다'고 안내(비밀번호가 맞을 때만) · 재발송은 가입 여부와 상관없이 같은 문구 |
+| 오류 정보 노출 | 처리되지 않은 예외는 사용자에게 traceback 대신 짧은 안내와 요청 번호만 · 오류 기록의 이메일 · id · 긴 숫자는 가려서 저장 |
 | 남용·비용 | 비회원 AI 24시간 3회(세션) + IP 해시 15회 · AI 하루 비용 한도(80% 비회원 차단, 100% 전체 차단 후 규칙으로 대체) · 에이전트 도구 5회 상한 |
 | 개인정보 최소화 | 캘린더는 바쁜 시간대만 1회 읽고 토큰 폐기 · AI 에 이메일·닉네임을 보내지 않음 · IP 는 해시로만 |
 | AI 윤리 | AI 결과에 'AI 추천' 표시와 부정확 가능 문구 상시 노출 · 가입 시 AI 고지 동의, 문구가 바뀌면 재동의 |
@@ -293,6 +315,10 @@ flowchart LR
     vercel -- NEXT_PUBLIC_API_BASE --> railway
     railway --> supabase[("Supabase")]
     railway --> gateway["Codyssey 게이트웨이"]
+    gh -- "push 뒤 deploy-check.yml<br/>새 버전 · 핵심 경로 확인" --> railway
+    cron["GitHub Actions uptime.yml<br/>15분 외부 점검"] --> vercel & railway
+    hc["Railway 배포 규칙<br/>헬스체크 /health/ready 통과한 배포만 트래픽<br/>죽으면 재시작"]
+    railway --- hc
 ```
 
 | 환경변수 | 어디에 | 용도 |
@@ -306,9 +332,14 @@ flowchart LR
 | `AI_DAILY_BUDGET_USD` · `IP_HASH_SALT` | Railway | 비용 한도 · IP 해시 |
 | `WEVITY_CRAWLING_ENABLED` | Railway | 위비티 수집 허용 (`true`) |
 | `STUDYPACE_API_BASE` | GitHub Actions secret | 배치가 부를 백엔드 주소 (`https://` 포함) |
+| `RAILWAY_GIT_COMMIT_SHA` | Railway (자동) | `/health` 의 `version` — 배포 확인이 새 버전을 알아본다 |
+| `UPTIME_API_BASE` · `UPTIME_WEB_BASE` | GitHub Actions variables (선택) | 외부 점검 주소 (없으면 현재 배포 주소) |
+| `RAILWAY_TOKEN` · `RAILWAY_ENVIRONMENT_ID` · `RAILWAY_API_SERVICE_ID` | GitHub Actions secrets (선택) | 30분 연속 장애 시 자동 재배포 요청 |
 
 **10-05 배포 완료** — 프론트 https://codyssey-final-project.vercel.app · API https://codysseyfinalproject-production.up.railway.app · 알림 워커는 Railway 의 두 번째 서비스.
 Railway 의 API·워커 두 서비스에는 같은 환경변수를 넣는다. 구글 OAuth 리디렉션 URI 와 Supabase Redirect URLs 에 배포 주소가 등록돼 있다.
+두 서비스는 설정 파일로 배포 규칙을 둔다 — API `backend/railway.api.json`(헬스체크 `/health/ready` 120초 · 실패 시 재시작 10번), 워커 `backend/railway.worker.json`(항상 재시작). 10-07 적용.
+가동률 · 오류 요약 · 장애 대응 · 롤백 절차는 [운영 문서](operations.md).
 배포하며 겪은 문제(주소의 `https://` 누락, Railway Supabase 키 누락, 워크플로의 가짜 성공)는 [README 10차 점검](../README.md#10차--10-05-배포-후-점검-6413175-까지).
 현재 로컬 실행은 [README 실행 방법](../README.md#실행-방법)을 따른다.
 
@@ -321,3 +352,6 @@ Railway 의 API·워커 두 서비스에는 같은 환경변수를 넣는다. �
 | [backend/README.md](../backend/README.md) | API · 학습 분해 Agent · 배치 엔진 · 알림 · 마이그레이션 |
 | [frontend/README.md](../frontend/README.md) | 화면 구조 · 화면↔기능 ID |
 | [AI 품질 평가 결과](../backend/evals/RESULTS.md) | 정답셋 측정 결과 |
+| [operations.md](operations.md) | 운영 모니터링 · 장애 대응 · 배포 후 자동 복구 |
+| [user-test/리포트.md](user-test/리포트.md) | 실사용자 테스트 결과 · 피드백 반영 |
+| [발표자료_StudyPace.pdf](발표자료_StudyPace.pdf) | 서면 심사용 발표 자료 |

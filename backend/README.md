@@ -263,6 +263,7 @@ pytest -q                     # 테스트
 | POST | `/study/stats` | 받은 기록으로 계산만 (DB 없이 시험용) |
 | DELETE | `/study/blocks/{id}/done` | 완료 취소 — 24시간 안에만. 공부한 시간 기록은 남긴다 (`FR-STUDY-02`, 로그인) |
 | GET | `/study/notes` | 학습 메모를 목표별로 모아보기, 끝낸 목표 포함 (`FR-STUDY-05`, 로그인) |
+| GET | `/study/guide/{id}` | 이 블록 공부 방법 — Claude Haiku 가 같은 단원의 블록들을 한 번에 받아 블록마다 3단계 (`services/study_guide.py`, 로그인). 못 쓰면 `{"source": "rule"}` → 화면이 규칙 안내. 호출은 `ai_call_logs` 에 `study.guide` |
 | POST | `/plan/scope` | 공부량이 기한까지 가용시간의 1.5배를 넘으면 범위 축소안(뺄 단위·늘릴 기한) (`FR-PLAN-02`) |
 | GET | `/plan/changes` | 최근 7일 재조정 내역 + 3일 연속 밀림 여부 (`FR-PLAN-07`, 로그인) |
 | POST | `/plan/changes/{id}/undo` | 가장 최근 재조정 되돌리기 — 한 번만 (`FR-PLAN-06`, 로그인) |
@@ -442,6 +443,7 @@ Supabase Auth 의 Google 공급자를 쓴다. 코드는 `routers/auth_google.py`
 `services/ai_budget.py` — 오늘(한국 시각) `ai_call_logs` 기록 × 모델별 1회 예상 비용(Sonnet 0.03 · Haiku 0.002 달러)으로 어림한다 (게이트웨이가 청구액을 주지 않아 예상치).
 `AI_DAILY_BUDGET_USD`(기본 5) 의 80% 를 넘으면 비회원 AI 추천을 먼저 막고, 100% 면 `llm.get_client()` 가 None 을 돌려 모든 기능이 규칙·템플릿으로 대신한다. 관리자 화면 `GET /admin/ai-budget`.
 비회원 한도는 세션 키 24시간 3회에 더해 IP 해시 24시간 15회(`IP_HASH_SALT` 를 섞은 SHA-256, 원문 IP 는 두지 않음).
+집계 대상 기능: `plan.decompose`(Sonnet) · `goal.match` · `contest.recommend` · `study.guide`(Haiku). 관리자 화면은 한글 이름으로 보여 준다 (`frontend/lib/aiLabels.js`).
 
 ## 가입 · 계정 보안 세부 (FR-JOIN-01 · FR-JOIN-03 · FR-AUTH-03)
 
@@ -449,6 +451,22 @@ Supabase Auth 의 Google 공급자를 쓴다. 코드는 `routers/auth_google.py`
 - AI 이용 고지 문구를 바꾸면 `routers/auth.py` 의 `AI_NOTICE_VERSION` 을 올린다 → 다음 로그인 때 `GET /auth/consent` 가 재동의를 요구하고 화면(`ReconsentGate`)이 묻는다
 - 비밀번호를 재설정하면 `sign_out(scope=global)` 로 다른 기기의 로그인도 모두 끝낸다
 - 재설정 링크 유효시간(30분)은 Supabase 대시보드 Authentication → Email → OTP expiry 에서 정한다 (코드 밖 설정)
+- 이메일 가입은 인증 메일 확인 후 로그인 — `POST /auth/signup` 이 `requires_email_confirmation` 을 주면 화면이 '인증 메일을 보냈어요'로 바뀐다. `POST /auth/resend-confirmation` 은 가입 여부와 상관없이 같은 문구. 인증 전 로그인은 Supabase `email_not_confirmed` → 403 안내(잠금 횟수에 넣지 않음)
+
+## 운영 모니터링 (평가 #3 보완, 10-07)
+
+자세한 내용 · 장애 대응 · 롤백은 [docs/operations.md](../docs/operations.md).
+
+| 무엇 | 어디 |
+|---|---|
+| `GET /health` | 살아 있음 + 지금 도는 커밋(`version`, Railway `RAILWAY_GIT_COMMIT_SHA`) |
+| `GET /health/ready` | DB 를 실제로 읽고 알림 워커 생존 신호(1분, 10분 넘으면 stale)를 본다. DB 를 못 읽으면 503 — Railway 배포 헬스체크 · 15분 외부 점검이 쓴다 |
+| 오류 감시 | `utils/error_monitor.py` — 5xx · 처리되지 않은 예외를 서버 로그와 `error_logs` 에 (경로 틀 · 가린 메시지 · 요청 번호, 분당 30건까지). 모든 응답에 `X-Request-ID` |
+| 워커 | `workers/notification_worker.py` 가 1분마다 `service_heartbeats` 에 신호, 작업 실패는 `error_logs` 에 |
+| 관리자 | `GET /admin/ops` — 준비 상태 · 가동률(GitHub Actions `uptime.yml`, 30분 저장) · 최근 오류 요약 |
+| 보고서 | `python -m scripts.ops_report --days 7 [--with-db]` |
+| 배포 규칙 | `railway.api.json`(헬스체크 · 재시작) · `railway.worker.json`(항상 재시작) |
+| DB | migration `020_ops_monitoring.sql` (`error_logs` · `service_heartbeats`) |
 
 ---
 
