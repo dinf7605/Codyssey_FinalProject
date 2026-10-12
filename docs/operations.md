@@ -16,15 +16,15 @@
 
 ```mermaid
 flowchart LR
-  gha["GitHub Actions<br/>uptime.yml (15분)<br/>deploy-check.yml (push)"] -->|HTTPS| web["프론트 (Vercel)"]
-  gha -->|/health/ready · /contests| api["백엔드 API (Railway)"]
-  api -->|DB 읽기| db[("Supabase")]
-  worker["알림 워커 (Railway)"] -->|1분마다 생존 신호| db
-  api -->|5xx · 예외| db
-  worker -->|작업 실패| db
-  gha -->|실패 · 복구| issue["GitHub Issues<br/>ops-incident · deploy-failure"]
-  admin["관리자 화면 '운영 상태'"] -->|GET /admin/ops| api
-  api -->|실행 기록 (30분 저장)| gha
+  gha["GitHub Actions<br/>uptime.yml (15분)<br/>deploy-check.yml (push)"] -->|"HTTPS"| web["프론트 (Vercel)"]
+  gha -->|"/health/ready · /contests"| api["백엔드 API (Railway)"]
+  api -->|"DB 읽기"| db[("Supabase")]
+  worker["알림 워커 (Railway)"] -->|"1분마다 생존 신호"| db
+  api -->|"5xx · 예외"| db
+  worker -->|"작업 실패"| db
+  gha -->|"실패 · 복구"| issue["GitHub Issues<br/>ops-incident · deploy-failure"]
+  admin["관리자 화면 '운영 상태'"] -->|"GET /admin/ops"| api
+  api -->|"실행 기록 (30분 저장)"| gha
 ```
 
 가동률을 서버 **밖**에서 재는 이유 — 서버가 죽으면 스스로는 "죽었다"는 기록을 못 남긴다. 외부 점검 기록은 서버 · DB 장애와 상관없이 남는다.
