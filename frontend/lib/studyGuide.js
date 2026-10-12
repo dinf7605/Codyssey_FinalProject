@@ -58,11 +58,29 @@ function split(minutes, ratio) {
   return parts;
 }
 
+// 한 단원을 블록 여러 개로 나누면 제목 끝에 (2/3) 이 붙는다 — 같은 안내가 세 번 나오지 않게 순서별로 바꾼다 (10-12)
+// 개념 학습 · 복습처럼 순서가 중요한 유형만. 첫 블록은 처음 배우기, 가운데는 이어서 넓히기, 마지막은 정리 · 확인
+const BY_POSITION = {
+  first: { steps: ['이 단원의 목차를 훑고 오늘 볼 앞부분 범위 정하기', '앞부분 핵심 개념을 읽고 내 말로 3줄 요약', '예제 1~2개로 확인하고 모르는 점은 메모'], ratio: [0.1, 0.65, 0.25] },
+  middle: { steps: ['지난 블록 메모를 보며 5분 되짚기', '이어서 나머지 개념을 읽고 요약에 보태기', '예제 · 연습문제 2~3개 풀어 보기'], ratio: [0.1, 0.6, 0.3] },
+  last: { steps: ['지난 블록 요약을 다시 읽기', '단원 전체를 한 장으로 정리하기', '관련 문제를 풀고 헷갈린 곳을 메모'], ratio: [0.15, 0.4, 0.45] },
+};
+
+export function splitPart(title = '') {
+  const m = title.match(/\s*\((\d+)\/(\d+)\)\s*$/);
+  return m ? { part: Number(m[1]), total: Number(m[2]) } : { part: null, total: null };
+}
+
 export function studyGuide(title = '', minutes = 0) {
-  const found = KINDS.find((k) => k.match.test(title)) || CONCEPT;
+  let found = KINDS.find((k) => k.match.test(title)) || CONCEPT;
+  const { part, total } = splitPart(title);
+  if (total > 1 && (found === CONCEPT || found.kind === '복습')) {
+    const position = part === 1 ? 'first' : part === total ? 'last' : 'middle';
+    found = { ...found, ...BY_POSITION[position] };
+  }
   const parts = minutes >= 20 ? split(minutes, found.ratio) : null;
   return {
-    kind: found.kind,
+    kind: total > 1 ? `${found.kind} · ${part}/${total}` : found.kind,
     steps: found.steps.map((text, i) => ({ text, minutes: parts ? parts[i] : null })),
   };
 }

@@ -14,7 +14,7 @@ const STATE = {
   off: { label: '한도 없음', cls: 'pill', text: 'AI_DAILY_BUDGET_USD 가 0 이하라 한도를 쓰지 않습니다.' },
 };
 
-const FEATURE = { 'plan.decompose': '학습 분해', 'goal.match': '목표 추천', 'contest.recommend': '공모전 추천' };
+const FEATURE = { 'plan.decompose': '학습 분해', 'goal.match': '목표 추천', 'contest.recommend': '공모전 추천', 'study.guide': '블록 공부 방법' };
 
 export default function AdminAiBudget() {
   const [result, setResult] = useState(null);

@@ -567,6 +567,9 @@ export const api = {
     // 누적·주간·연속·레벨 + 이번 주 달성률
     stats: () => request('/study/stats'),
 
+    // 이 블록 공부 방법 — AI 가 블록에 맞춘 3단계 { source: 'ai'|'rule', steps, tip }
+    guide: (blockId) => request(`/study/guide/${encodeURIComponent(blockId)}`),
+
     // FR-STUDY-02 — 완료 취소 (24시간 안에만)
     cancelDone: (blockId) => del(`/study/blocks/${encodeURIComponent(blockId)}/done`),
 

@@ -5,6 +5,7 @@
   POST /study/stats     받은 기록으로 계산만 (DB 없이 화면 시험용)
   DELETE /study/blocks/{id}/done  완료 취소 — 24시간 안에만 (로그인)
   GET  /study/notes     학습 메모를 목표별로 모아보기 (로그인)
+  GET  /study/guide/{id} 이 블록 공부 방법 — AI 가 블록에 맞춘 3단계 (로그인, 못 쓰면 source=rule)
 """
 
 from __future__ import annotations
@@ -23,8 +24,8 @@ from services.aggregator import (
     hour_pattern,
     summarize,
 )
-from services import replan
-from services.plan_store import KST, active_plan_rows, plan_blocks, record_session, session_starts, study_notes
+from services import llm, replan, study_guide
+from services.plan_store import KST, active_plan_rows, log_ai_call, plan_blocks, record_session, session_starts, study_notes
 from services.study_memory import refresh_study_memories
 from utils.auth import get_current_user
 
@@ -159,6 +160,22 @@ def stats(req: StatsRequest) -> dict:
     """계산만 한다 — DB 없이 화면·테스트에서 레벨 구간을 확인할 때."""
     events = [(e.date, e.minutes) for e in req.events]
     return summarize(events, req.today)
+
+
+@router.get("/guide/{block_id}")
+def block_guide(block_id: str, user=Depends(get_current_user), db=Depends(get_db)):
+    """이 블록 공부 방법 (10-12 실사용자 피드백) — 같은 단원의 (1/3)·(2/3)·(3/3) 블록마다 다른 할 일을 AI 가 만든다.
+
+    AI 를 못 쓰면(키 없음 · 비용 한도 · 형식 오류) {"source": "rule"} — 화면이 규칙 안내를 보여 준다.
+    """
+    def logged(source: str, latency_ms: int, message: str) -> None:
+        log_ai_call(db, user_id=user.id, feature=study_guide.FEATURE, model=llm.model("fast"),
+                    source=source, tool_calls=0, latency_ms=latency_ms, message=message)
+
+    try:
+        return study_guide.guide_for_block(db, user.id, block_id, on_call=logged)
+    except study_guide.BlockNotFound:
+        raise HTTPException(status_code=404, detail="내 계획에서 그 블록을 찾지 못했어요.")
 
 
 @router.delete("/blocks/{block_id}/done", status_code=204)

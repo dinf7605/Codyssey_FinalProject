@@ -6,6 +6,7 @@ import { api, getToken, tokenOwner } from '@/lib/api';
 import { notifyPlanChanged, usePlan } from '@/lib/usePlan';
 import { dayKey, hhmm, kstIso, kstToday } from '@/lib/planView';
 import { studyGuide } from '@/lib/studyGuide';
+import { AiBadge, AiNotice } from '@/components/AiNotice';
 
 // FR-STUDY-01 학습 타이머 / FR-STUDY-02 블록 완료 / FR-STUDY-05 메모 / FR-STUDY-03·04 집계 표시 (담당 C)
 //
@@ -361,7 +362,7 @@ export default function StudyTimer({ blockId = null }) {
         )}
       </section>
 
-      {block && <StudyGuide title={block.title} minutes={block.minutes} />}
+      {block && <StudyGuide key={block.id} block={block} />}
 
       {idleSeconds > 0 && timer && (
         <section className="progress" role="alertdialog" aria-label="자동 일시정지">
@@ -488,18 +489,51 @@ function StreakHint({ stats }) {
   );
 }
 
-// 이 블록 공부 방법 — 단원 이름으로 고른 일반 안내 (lib/studyGuide.js). 10-12 설문 "그때 무엇을 어떻게 공부할지 모르겠다" 반영
-function StudyGuide({ title, minutes }) {
-  const guide = studyGuide(title, minutes);
+// 이 블록 공부 방법 (10-12 설문 "그때 무엇을 어떻게 공부할지 모르겠다" 반영)
+// 저장된 계획 블록이면 AI 가 블록에 맞춘 3단계를 만든다 (backend GET /study/guide) — 같은 단원의 1/3 · 2/3 · 3/3 이 서로 다르게.
+// 받기 전 · 못 받으면(비회원 · 키 없음 · 비용 한도) 단원 이름과 순서로 고른 규칙 안내(lib/studyGuide.js)를 보여 준다.
+// 받은 안내는 기기에 저장해 같은 블록을 다시 열 때 또 묻지 않는다 (제목 · 시간이 바뀌면 다시 묻는다).
+const UUID_LIKE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function StudyGuide({ block }) {
+  const cacheKey = `sp_guide_${block.id}`;
+  const canAsk = Boolean(getToken()) && UUID_LIKE.test(block.id || '');
+  const [ai, setAi] = useState(() => {
+    const c = readJson(cacheKey, null);
+    return c && c.title === block.title && c.minutes === block.minutes ? c.guide : null;
+  });
+  const [tried, setTried] = useState(false);
+
+  useEffect(() => {
+    if (ai || !canAsk) return undefined;
+    let alive = true;
+    api.study.guide(block.id).then(
+      (res) => {
+        if (!alive) return;
+        if (res?.source === 'ai' && Array.isArray(res.steps)) {
+          writeJson(cacheKey, { title: block.title, minutes: block.minutes, guide: res });
+          setAi(res);
+        }
+        setTried(true);
+      },
+      () => alive && setTried(true),
+    );
+    return () => { alive = false; };
+  }, [ai, canAsk, block.id, block.title, block.minutes, cacheKey]);
+
+  const rule = studyGuide(block.title, block.minutes);
+  const steps = ai ? ai.steps : rule.steps;
+  const loading = canAsk && !ai && !tried;
   return (
-    <section aria-label="이 블록 공부 방법">
+    <section aria-label="이 블록 공부 방법" aria-busy={loading}>
       <div className="sec-head">
         <h2>이 블록 공부 방법</h2>
-        <span className="dim tiny">{guide.kind}</span>
+        {ai ? <AiBadge /> : <span className="dim tiny">{rule.kind}</span>}
       </div>
+      {loading && <p className="hint" role="status">AI 가 이 블록에 맞춘 방법을 만들고 있어요…</p>}
       <ol className="rows" style={{ margin: 0, paddingLeft: 0, listStyle: 'none' }}>
-        {guide.steps.map((s, i) => (
-          <li key={s.text} className="row">
+        {steps.map((s, i) => (
+          <li key={`${i}-${s.text}`} className="row">
             <div className="row-main">
               <b>{i + 1}. {s.text}</b>
             </div>
@@ -507,7 +541,11 @@ function StudyGuide({ title, minutes }) {
           </li>
         ))}
       </ol>
-      <p className="hint">단원 이름으로 고른 일반적인 순서예요. 가진 교재 · 강의 목차에 맞춰 바꿔 써도 됩니다.</p>
+      {ai ? (
+        <AiNotice>AI 가 단원 이름과 순서를 보고 만든 안내라 부정확할 수 있어요. 가진 교재 · 강의 목차에 맞춰 바꿔 써도 됩니다.</AiNotice>
+      ) : (
+        <p className="hint">단원 이름과 순서로 고른 일반적인 순서예요. 가진 교재 · 강의 목차에 맞춰 바꿔 써도 됩니다.</p>
+      )}
     </section>
   );
 }
