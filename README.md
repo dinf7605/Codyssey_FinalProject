@@ -8,7 +8,7 @@
 
 | 항목 | 내용 |
 |---|---|
-| 개발 기간 | 2026-09-14 ~ 2026-10-18 (5주) · 발표 10-19~20 |
+| 개발 기간 | 2026-09-14 ~ 2026-10-18 (5주) · 100% 서면 평가 (발표 없음 — [발표 자료](docs/발표자료_StudyPace.pdf)) |
 | 팀 구성 | 5인 · 전원 비전공자 · AI 도구를 활용해 개발 |
 | 핵심 AI 기술 요소 | **AI Agent · RAG · 자동화 워크플로우 · Long-term Memory** (4개) |
 | 기능 규모 | 총 69개 — Must 38 / Should 25 / Could 3 / Won't 3 · 비기능 요구사항 12개 |
@@ -30,7 +30,7 @@
 |---|---|
 | 외부에서 접속 가능 | 위 배포 URL · 정기 외부 점검 — 10-07~12 25회 모두 정상 ([운영 보고서](docs/ops-report.md)) · [Uptime monitor](https://github.com/dinf7605/Codyssey_FinalProject/actions/workflows/uptime.yml) ([운영 문서](docs/operations.md)) |
 | 생성형 AI · Agent 가 핵심 기능 | 학습 분해 **AI Agent**(도구 호출) · 목표 · 공고 추천 **RAG** — [4개 파이프라인](#4개-파이프라인) |
-| Must 기능이 적어 둔 대로 동작 | Must 38개 — [화면 구성](#화면-구성) · 점검 기록 1~11차 ([중간 점검](#중간-점검)) · 백엔드 테스트 533개 |
+| Must 기능이 적어 둔 대로 동작 | **[Must 38개 확인표](docs/must-check.md)** — 기능마다 화면 · API · 구현 · 테스트 · [화면 구성](#화면-구성) · 점검 1~12차 ([중간 점검](#중간-점검)) · 백엔드 테스트 546개 |
 | 실사용자 5명 이상 피드백 | 5명 (10-02~06 사용, 설문 10-06~12) — [리포트](docs/user-test/리포트.md) |
 | 전 팀원 기여 기록 | [팀원별 기여 기록](#팀원별-기여-기록) — 5명 모두 커밋 · 담당 기능 묶음 · [진행 흐름](#진행-흐름) |
 | AI 생성물 표기 · 개인정보 동의 | [AI 윤리](#ai-윤리) — 'AI 추천' 배지 상시 노출 · 가입 시 필수 동의 2개(개인정보 · AI 생성 고지) |
@@ -210,7 +210,7 @@ where email = '관리자로 지정할 이메일';
 ### AI 협업 규칙
 
 1. **설명할 수 없는 코드는 병합하지 않는다** — PR 본문에 3줄 설명 필수
-2. **쓴 프롬프트를 남긴다** — PR 본문 또는 `docs/prompt-log/`
+2. **쓴 프롬프트를 남긴다** — 서비스가 쓰는 프롬프트는 코드 안 `SYSTEM` 상수로 두고 커밋으로 바뀐 이력을 남긴다 (`services/goal_claude.py`(목표 관련성 · 추천 이유) · `decomposer.py`(학습 분해 Agent) · `contest_claude.py`(공고 관련성 · 이유) · `replan.py`(재조정 요약) · `study_guide.py`(블록 공부 방법))
 3. **30분 룰** — 혼자 30분 막히면 팀 채널에 올린다
 4. **AI에게 물을 것과 팀에게 물을 것을 구분한다** — 문법·에러는 AI, 사양 판단은 팀
 5. **실행해 보지 않은 코드는 커밋하지 않는다**
@@ -246,6 +246,7 @@ where email = '관리자로 지정할 이메일';
 | [backend/README.md](backend/README.md) | 백엔드 실행 · 학습 분해 Agent · 스케줄 배치 엔진 · 규칙 검증기 · API |
 | [frontend/README.md](frontend/README.md) | 프론트엔드 실행 방법 · 폴더 구조 · 화면↔기능 ID 매핑 · 모바일 대응 |
 | [docs/architecture.md](docs/architecture.md) | **시스템 아키텍처** — 구성 요소 · 파이프라인별 흐름 · 데이터 모델 · 인증·보안 · 자동화 · 배포 |
+| [docs/must-check.md](docs/must-check.md) | **Must 38개 확인표** — 기능마다 확인할 화면 · API · 구현 파일 · 테스트 · 점검 근거 |
 | [docs/operations.md](docs/operations.md) | **운영 모니터링 · 장애 대응** — 가동률(정기 외부 점검) · [7일 운영 보고서](docs/ops-report.md) · 오류·예외 로그 · 배포 후 자동 복구 · 롤백 · 측정 결과(`python -m scripts.ops_report`) |
 | [docs/발표자료_StudyPace.pdf](docs/발표자료_StudyPace.pdf) | **발표 자료** (서면 심사용 19장) — 문제 · 타깃 · 4개 파이프라인 · 설계 원칙 · AI Agent · RAG · 품질 근거 · 해결 과정 · 실사용자 피드백 · 운영 · 팀 |
 | [docs/screens/](docs/screens) | **화면 캡처** — 사용자 화면 12장 · 관리자 화면 4장 (설명은 위 [화면 구성](#화면-구성)) |
