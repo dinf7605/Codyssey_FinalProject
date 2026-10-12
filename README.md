@@ -24,7 +24,7 @@
 | ③ 배포 URL | **https://codyssey-final-project.vercel.app** — 평가용 테스트 계정은 저장소에 적지 않고 제출할 때 따로 전달 |
 | ④ GitHub 저장소 | 이 저장소 — 소스 · 문서 · 커밋 기록, 진행 기록은 아래 [개발 기록](#개발-기록) |
 | ⑤ 사용자 피드백 기록 | [docs/user-test/리포트.md](docs/user-test/리포트.md) — 대상 · 일자 · 질문 · 응답 원본 · 개선 반영 ([설문 원본 CSV](docs/user-test/설문응답_2026-10.csv)) |
-| ⑥ 발표 자료 | ⬜ |
+| ⑥ 발표 자료 | [docs/발표자료_StudyPace.pdf](docs/발표자료_StudyPace.pdf) (19장, 서면 심사용) · 원본 [.pptx](docs/발표자료_StudyPace.pptx) — 문제 정의 · 해결 과정 · AI 활용 방식과 근거 · 피드백과 개선 |
 
 | 필수요건 | 근거 |
 |---|---|
@@ -231,6 +231,7 @@ where email = '관리자로 지정할 이메일';
 | [frontend/README.md](frontend/README.md) | 프론트엔드 실행 방법 · 폴더 구조 · 화면↔기능 ID 매핑 · 모바일 대응 |
 | [docs/architecture.md](docs/architecture.md) | **시스템 아키텍처** — 구성 요소 · 파이프라인별 흐름 · 데이터 모델 · 인증·보안 · 자동화 · 배포 |
 | [docs/operations.md](docs/operations.md) | **운영 모니터링 · 장애 대응** — 가동률(15분 외부 점검) · 오류·예외 로그 · 배포 후 자동 복구 · 롤백 · 측정 결과(`python -m scripts.ops_report`) |
+| [docs/발표자료_StudyPace.pdf](docs/발표자료_StudyPace.pdf) | **발표 자료** (서면 심사용 19장) — 문제 · 타깃 · 4개 파이프라인 · 설계 원칙 · AI Agent · RAG · 품질 근거 · 해결 과정 · 실사용자 피드백 · 운영 · 팀 |
 | [docs/screens/](docs/screens) | **화면 캡처** — 사용자 화면 12장 · 관리자 화면 4장 (설명은 위 [화면 구성](#화면-구성)) |
 | [docs/user-test/](docs/user-test/README.md) | **실사용자 테스트** — 운영 가이드 · 참여자 안내·동의서 · 설문·인터뷰 · **[리포트](docs/user-test/리포트.md)(5명 결과 · 반영)** · 지표 스크립트(`python -m scripts.user_test_metrics`) |
 | [docs/학습로드맵.md](docs/학습로드맵.md) | 팀 보유 기술(Vercel·Python 등) 기준 **추가 학습 항목** · 스택 조정 근거 · 역할별 학습 순서 |
