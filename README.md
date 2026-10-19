@@ -11,7 +11,7 @@
 | 개발 기간 | 2026-09-14 ~ 2026-10-18 (5주) · 100% 서면 평가 (발표 없음 — [발표 자료](docs/발표자료_StudyPace.pdf)) |
 | 팀 구성 | 5인 · 전원 비전공자 · AI 도구를 활용해 개발 |
 | 핵심 AI 기술 요소 | **AI Agent · RAG · 자동화 워크플로우 · Long-term Memory** (4개) |
-| 기능 규모 | 총 69개 — Must 38 / Should 25 / Could 3 / Won't 3 · 비기능 요구사항 12개 |
+| 기능 규모 | 총 69개 — **Must 10** (원래 ID 18개를 묶음) / Should 45 / Could 3 / Won't 3 · 비기능 요구사항 12개 (10-19 운영진 요청으로 Must 38 → 10 — [기능요구명세서](docs/기능요구명세서.md)) |
 | 서비스 주소 | **https://codyssey-final-project.vercel.app** · API 문서 https://codysseyfinalproject-production.up.railway.app/docs |
 | 현재 단계 | 5주차 (10-12) · **배포 완료** · **실사용자 테스트(10-02~06) 5명 · 설문 반영** · 운영 모니터링(정기 외부 점검 · [운영 보고서](docs/ops-report.md)) ([개발 기록](#개발-기록)) |
 
@@ -20,7 +20,7 @@
 | 제출물 | 위치 |
 |---|---|
 | ① 기획서 | [docs/기획서_학습플래너.md](docs/기획서_학습플래너.md) — 문제 정의 · 타깃 사용자 · AI 활용 방식 · 기술적 접근 · 일정 계획 |
-| ② 기능 요구 명세서 | [docs/기능명세서_학습플래너.xlsx](docs/기능명세서_학습플래너.xlsx) (기능 69개 · 비기능 12개 · AI 기능 명세) · 시스템 아키텍처 [docs/architecture.md](docs/architecture.md) |
+| ② 기능 요구 명세서 | **[docs/기능요구명세서.md](docs/기능요구명세서.md) (Must 10개 · 합격 기준)** · [docs/기능명세서_학습플래너.xlsx](docs/기능명세서_학습플래너.xlsx) (기능 69개 · 비기능 12개 · AI 기능 명세) · 시스템 아키텍처 [docs/architecture.md](docs/architecture.md) |
 | ③ 배포 URL | **https://codyssey-final-project.vercel.app** — 평가용 테스트 계정은 저장소에 적지 않고 제출할 때 따로 전달 · [평가자 접속 방법](#평가자-접속-방법) |
 | ④ GitHub 저장소 | 이 저장소 — 소스 · 문서 · 커밋 기록, 진행 기록은 아래 [개발 기록](#개발-기록) |
 | ⑤ 사용자 피드백 기록 | [docs/user-test/리포트.md](docs/user-test/리포트.md) — 대상 · 일자 · 질문 · 응답 원본 · 개선 반영 ([설문 원본 CSV](docs/user-test/설문응답_2026-10.csv)) |
@@ -30,7 +30,7 @@
 |---|---|
 | 외부에서 접속 가능 | 위 배포 URL · 정기 외부 점검 — 10-07~12 25회 모두 정상 ([운영 보고서](docs/ops-report.md)) · [Uptime monitor](https://github.com/dinf7605/Codyssey_FinalProject/actions/workflows/uptime.yml) ([운영 문서](docs/operations.md)) |
 | 생성형 AI · Agent 가 핵심 기능 | 학습 분해 **AI Agent**(도구 호출) · 목표 · 공고 추천 **RAG** — [4개 파이프라인](#4개-파이프라인) |
-| Must 기능이 적어 둔 대로 동작 | **[Must 38개 확인표](docs/must-check.md)** — 기능마다 화면 · API · 구현 · 테스트 · [화면 구성](#화면-구성) · 점검 1~12차 ([중간 점검](#중간-점검)) · 백엔드 테스트 546개 |
+| Must 기능이 적어 둔 대로 동작 | **[Must 10개 명세](docs/기능요구명세서.md)** (합격 기준 · 10분 확인 순서) · [Must 확인표](docs/must-check.md) — 기능마다 화면 · API · 구현 · 테스트 · [화면 구성](#화면-구성) · 점검 1~12차 ([중간 점검](#중간-점검)) · 백엔드 테스트 546개 |
 | 실사용자 5명 이상 피드백 | 5명 (10-02~06 사용, 설문 10-06~12) — [리포트](docs/user-test/리포트.md) |
 | 전 팀원 기여 기록 | [팀원별 기여 기록](#팀원별-기여-기록) — 5명 모두 커밋 · 담당 기능 묶음 · [진행 흐름](#진행-흐름) |
 | AI 생성물 표기 · 개인정보 동의 | [AI 윤리](#ai-윤리) — 'AI 추천' 배지 상시 노출 · 가입 시 필수 동의 2개(개인정보 · AI 생성 고지) |
@@ -54,7 +54,7 @@
 
 - 계정 없이 확인하려면 **회원가입**으로 새로 만들 수 있다 (가입 인증 메일 확인 후 로그인)
 - **관리자 화면(`/admin`) 평가에 관리자 계정이 필요하면 디스코드 `in_come` 또는 이메일 dinf7605@gmail.com 으로 연락 주세요.** 관리자 권한은 가입한 계정에 따로 부여한다 (화면 미리보기는 [화면 구성 › 관리자 화면](#관리자-화면-admin) 캡처 4장)
-- 기능별 확인 위치 전체는 [Must 38개 확인표](docs/must-check.md)
+- Must 10개와 확인 순서(약 10분)는 [기능요구명세서](docs/기능요구명세서.md), 기능별 확인 위치 전체는 [Must 확인표](docs/must-check.md)
 
 ---
 
@@ -267,13 +267,14 @@ where email = '관리자로 지정할 이메일';
 | [backend/README.md](backend/README.md) | 백엔드 실행 · 학습 분해 Agent · 스케줄 배치 엔진 · 규칙 검증기 · API |
 | [frontend/README.md](frontend/README.md) | 프론트엔드 실행 방법 · 폴더 구조 · 화면↔기능 ID 매핑 · 모바일 대응 |
 | [docs/architecture.md](docs/architecture.md) | **시스템 아키텍처** — 구성 요소 · 파이프라인별 흐름 · 데이터 모델 · 인증·보안 · 자동화 · 배포 |
-| [docs/must-check.md](docs/must-check.md) | **Must 38개 확인표** — 기능마다 확인할 화면 · API · 구현 파일 · 테스트 · 점검 근거 |
+| [docs/기능요구명세서.md](docs/기능요구명세서.md) | **기능 요구 명세서 — Must 10개** (10-19 개정) · 합격 기준 · 확인 순서 · Should 로 내린 20개와 이유 |
+| [docs/must-check.md](docs/must-check.md) | **Must 확인표** — 개정 전 Must 38개(지금 Must 10개 = M1~M10 표시)마다 확인할 화면 · API · 구현 파일 · 테스트 · 점검 근거 |
 | [docs/operations.md](docs/operations.md) | **운영 모니터링 · 장애 대응** — 가동률(정기 외부 점검) · [7일 운영 보고서](docs/ops-report.md) · 오류·예외 로그 · 배포 후 자동 복구 · 롤백 · 측정 결과(`python -m scripts.ops_report`) |
 | [docs/발표자료_StudyPace.pdf](docs/발표자료_StudyPace.pdf) | **발표 자료** (서면 심사용 19장) — 문제 · 타깃 · 4개 파이프라인 · 설계 원칙 · AI Agent · RAG · 품질 근거 · 해결 과정 · 실사용자 피드백 · 운영 · 팀 |
 | [docs/screens/](docs/screens) | **화면 캡처** — 사용자 화면 12장 · 관리자 화면 4장 (설명은 위 [화면 구성](#화면-구성)) |
 | [docs/user-test/](docs/user-test/README.md) | **실사용자 테스트** — 운영 가이드 · 참여자 안내·동의서 · 설문·인터뷰 · **[리포트](docs/user-test/리포트.md)(5명 결과 · 반영)** · 지표 스크립트(`python -m scripts.user_test_metrics`) |
 | [docs/학습로드맵.md](docs/학습로드맵.md) | 팀 보유 기술(Vercel·Python 등) 기준 **추가 학습 항목** · 스택 조정 근거 · 역할별 학습 순서 |
-| [docs/기능명세서_학습플래너.xlsx](docs/기능명세서_학습플래너.xlsx) | 기능 69개 상세 명세 + AI 기능 명세(Agent 도구표, RAG 파라미터, 폴백 정책, 평가 방법) |
+| [docs/기능명세서_학습플래너.xlsx](docs/기능명세서_학습플래너.xlsx) | 기능 69개 상세 명세 (10-19 우선순위 개정 반영) + AI 기능 명세(Agent 도구표, RAG 파라미터, 폴백 정책, 평가 방법) |
 | `-1.png` | 4개 파이프라인 다이어그램 |
 
 ---
