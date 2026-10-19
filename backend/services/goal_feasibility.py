@@ -46,12 +46,23 @@ def evaluate_candidate(
     weeks_to_deadline = _weeks_between(today, candidate.deadline)
     feasible = weeks_to_deadline is None or min_weeks <= weeks_to_deadline
 
+    fields = candidate.model_dump()
+    next_round = False
+    # 해마다 돌아오는 자격증은 이번 회차를 못 맞춰도 빼지 않고 다음 회차를 목표로 남긴다.
+    # 다음 회차 날짜는 공지 전이라 지어내지 않고 기한 없이(None) 둔다 — 일정 화면은 권장 기간으로 기한을 잡는다.
+    # 공모전은 마감이 지나면 끝이라 그대로 뺀다.
+    if not feasible and candidate.recurring and min_weeks != float("inf"):
+        fields["deadline"] = None
+        feasible = next_round = True
+
     return FeasibleCandidate(
-        **candidate.model_dump(),
+        **fields,
         weekly_hours=weekly_hours,
         min_weeks=round(min_weeks, 1) if min_weeks != float("inf") else -1,
         recommended_weeks=round(recommended_weeks, 1) if recommended_weeks != float("inf") else -1,
         feasible=feasible,
+        next_round=next_round,
+        skipped_deadline=candidate.deadline if next_round else None,
     )
 
 

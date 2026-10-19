@@ -41,7 +41,7 @@
 | FR-GOAL-11 | 관심분야 없이도 비슷한 분야 추천 | 1단계 건너뛰기 → `GET /goal/popular` · `POST /goal/suggest` | `routers/goal.py` · `services/goal_recommender.py` | `tests/test_goal_router.py` | ✅ · Should |
 | FR-GOAL-02 (M2) | 주간 가용 시간 입력 | `/onboarding` 2단계 (요일 × 시간대 · 하루 최대 공부 시간) | `onboarding/page.js` · `lib/planInput.js` | 점검 7 · 사전 점검 | ✅ |
 | FR-GOAL-03 (M3) | 관심분야에 맞는 목표 후보 | 3단계 · `POST /goal/recommend` (Claude 관련성 0.60 이상) | `services/goal_claude.py` · `goal_catalog.py` | `tests/test_goal_claude.py` · 정답셋 100% | ✅* 임베딩 대신 Claude 관련성 판단 (09-29, 게이트웨이에 임베딩 API 없음) |
-| FR-GOAL-04 (M3) | 기간 적합성 판정 | 3단계 — 기한 안에 못 끝내는 목표는 빼고 빠듯하면 표시 | `services/goal_feasibility.py` | `tests/test_goal_feasibility.py` | ✅ |
+| FR-GOAL-04 (M3) | 기간 적합성 판정 | 3단계 — 기한 안에 못 끝내는 공모전은 빼고 자격증은 '다음 회차 목표'로 (10-19) · 빠듯하면 표시 | `services/goal_feasibility.py` | `tests/test_goal_feasibility.py` | ✅ |
 | FR-GOAL-09 (M3) | 최소 필요 기간 | 추천 카드 '준비 약 N주' · `POST /goal/feasibility` | `goal_feasibility.py` | `tests/test_goal_feasibility.py` | ✅ |
 | FR-GOAL-05 (M3) | 추천 카드 3~5개 + 이유 | 3단계 카드 · 'AI 추천' 배지 · 이유가 계산과 반대면 템플릿 | `goal_recommender.py` · `goal_claude.py` | `tests/test_goal_router.py` · 정답셋 사실성 100% | ✅ |
 | FR-GOAL-07 (M4) | 목표 확정 → 일정 생성 | 4단계 확정 · `POST /goal/confirm` → `/schedule` (목표 최대 2개) | `routers/goal.py` · `components/PlanBuilder.js` | `tests/test_multiplan.py` | ✅ |

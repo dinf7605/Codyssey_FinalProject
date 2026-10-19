@@ -269,6 +269,7 @@ export default function OnboardingPage() {
             recommendedWeeks: g.recommended_weeks,
             weeklyHours: g.weekly_hours,
             deadline: g.deadline || null, // 다음 시험일 — 일정 화면이 기한으로 이어받는다
+            skippedDeadline: g.next_round ? g.skipped_deadline : null,
             kind: g.kind, // 공모전이면 '시험' 대신 '마감'이라고 부른다
             source: 'popular_pick',
           });
@@ -400,6 +401,7 @@ export default function OnboardingPage() {
       recommendedWeeks: candidate.recommended_weeks,
       weeklyHours: candidate.weekly_hours,
       deadline: candidate.deadline || null, // 다음 시험일 — 일정 화면이 기한으로 이어받는다
+      skippedDeadline: candidate.next_round ? candidate.skipped_deadline : null,
       kind: candidate.kind, // 공모전이면 '시험' 대신 '마감'이라고 부른다
       source: 'recommend',
     });
@@ -786,6 +788,12 @@ export default function OnboardingPage() {
                         {g.deadline &&
                           plannedWeeks({ minWeeks: g.min_weeks, recommendedWeeks: g.recommended_weeks }) >
                             deadlineWeeksLeft(g) && <span className="pill pill-late">{dueWord(g)}까지 빠듯해요</span>}
+                        {/* 이번 회차를 못 맞추는 자격증은 빼지 않고 다음 회차 목표로 보여 준다 (10-19, backend goal_feasibility) */}
+                        {g.next_round && (
+                          <span className="pill" title={`이번 ${dueWord(g)}(${g.skipped_deadline})까지는 시간이 모자라요`}>
+                            다음 회차 목표
+                          </span>
+                        )}
                         <span className="pill mono">주 {g.weekly_hours}시간</span>
                       </div>
                       <b style={{ fontSize: '14px' }}>{g.title}</b>
@@ -985,6 +993,12 @@ export default function OnboardingPage() {
                 </p>
               )}
             </div>
+            {picked.skippedDeadline && (
+              <p className="hint">
+                이번 {dueWord(picked)}({picked.skippedDeadline})까지는 시간이 모자라 다음 회차를 목표로 해요. 다음 회차 일정이 공지되기 전이라
+                기한은 준비 기간에 맞춰 잡고, 일정 화면에서 바꿀 수 있어요.
+              </p>
+            )}
             <p className="hint">동시 진행 목표는 최대 2개까지예요.</p>
           </section>
         )}

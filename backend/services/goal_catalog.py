@@ -20,6 +20,8 @@ from schemas.goal import GoalCandidate
 # ── 카탈로그 ──────────────────────────────────────────
 # 코드 안 목록이다. 기획서의 50건(자격증 30 + 공모전 20)까지 늘릴 때도
 # Claude 에 한 번에 넣을 수 있는 크기라 DB·벡터 색인 없이 이 목록을 그대로 쓴다.
+# recurring — 해마다 회차가 돌아오는 자격증. deadline(이번 회차)을 못 맞추면 다음 회차를 목표로 추천한다
+#   (10-19: 9월에 적은 시험일이 하나씩 지나 주 10시간이면 토익만 남았다 — services/goal_feasibility.py)
 _CATALOG: list[dict] = [
     {
         "goal_id": "cert-info-eng",
@@ -30,6 +32,7 @@ _CATALOG: list[dict] = [
         "standard_hours": 120,
         "deadline": "2026-12-06",
         "popularity": 982,
+        "recurring": True,
     },
     {
         "goal_id": "cert-sqld",
@@ -40,6 +43,7 @@ _CATALOG: list[dict] = [
         "standard_hours": 48,
         "deadline": "2026-11-15",
         "popularity": 1204,
+        "recurring": True,
     },
     {
         "goal_id": "cert-adsp",
@@ -50,6 +54,7 @@ _CATALOG: list[dict] = [
         "standard_hours": 40,
         "deadline": "2026-11-22",
         "popularity": 511,
+        "recurring": True,
     },
     {
         "goal_id": "cert-comp1",
@@ -60,6 +65,7 @@ _CATALOG: list[dict] = [
         "standard_hours": 60,
         "deadline": "2026-11-08",
         "popularity": 733,
+        "recurring": True,
     },
     {
         "goal_id": "cert-toeic",
@@ -80,6 +86,7 @@ _CATALOG: list[dict] = [
         "standard_hours": 50,
         "deadline": "2026-10-25",
         "popularity": 402,
+        "recurring": True,
     },
     {
         "goal_id": "cert-elec",
@@ -90,6 +97,7 @@ _CATALOG: list[dict] = [
         "standard_hours": 200,
         "deadline": "2027-02-14",
         "popularity": 355,
+        "recurring": True,
     },
     {
         "goal_id": "contest-ux",
@@ -163,6 +171,7 @@ def _to_candidate(item: dict, similarity: float = 0.0) -> GoalCandidate:
         similarity=round(similarity, 3),
         estimated_hours=estimated,
         popularity=item["popularity"],
+        recurring=item.get("recurring", False),
     )
 
 

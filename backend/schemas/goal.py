@@ -43,6 +43,7 @@ class GoalCandidate(BaseModel):
     similarity: float = 0.0
     estimated_hours: bool = False  # 표준 학습시간이 없어 카탈로그 중앙값으로 대체했으면 True
     popularity: int = 0
+    recurring: bool = False  # 해마다 회차가 돌아오는 자격증 — 이번 회차를 못 맞추면 다음 회차로 (FR-GOAL-04)
 
 
 class FeasibleCandidate(GoalCandidate):
@@ -54,6 +55,8 @@ class FeasibleCandidate(GoalCandidate):
     feasible: bool
     reason: str = ""
     ai_generated: bool = False
+    next_round: bool = False  # 이번 회차는 시간이 모자라 다음 회차를 목표로 했다 (deadline 은 None — 다음 회차 일정 미정)
+    skipped_deadline: str | None = None  # 그때 건너뛴 이번 회차 시험일
 
 
 class UsageInfo(BaseModel):

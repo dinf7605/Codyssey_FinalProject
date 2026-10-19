@@ -79,7 +79,9 @@ def _template_reason(candidate: FeasibleCandidate, tags: list[str]) -> str:
     else:
         tag_part = "지금 인기 있는 목표예요."
     left = _weeks_between(date.today(), candidate.deadline)
-    if left is not None and candidate.recommended_weeks > left:
+    if candidate.next_round:
+        time_part = f"이번 {_due_word(candidate)}({candidate.skipped_deadline})까지는 시간이 모자라 다음 회차를 목표로 준비해요."
+    elif left is not None and candidate.recommended_weeks > left:
         time_part = f"{_due_word(candidate)}까지 권장 기간보다 짧아 빠듯하게 준비해야 해요."
     elif candidate.min_weeks >= 0 and candidate.min_weeks <= candidate.recommended_weeks:
         time_part = "지금 가용시간이면 기한 안에 준비할 수 있어요."
@@ -100,6 +102,8 @@ def _ai_reason(candidate: FeasibleCandidate, tags: list[str], client, model: str
         f"추천 목표: {candidate.title} ({candidate.field})\n"
         + (f"예상 준비 기간: 약 {weeks}주 (주당 {candidate.weekly_hours}시간 기준)\n" if weeks else "")
         + (f"다음 {_due_word(candidate)}까지: 약 {math.floor(left)}주\n" if left is not None else "")
+        + (f"이번 회차 {_due_word(candidate)}({candidate.skipped_deadline})까지는 준비 기간이 모자라 다음 회차를 목표로 한다 "
+           "(다음 회차 날짜는 아직 공지 전이니 날짜를 쓰지 마세요)\n" if candidate.next_round else "")
         + ({True: f"기간 판정: 빠듯함 ({_due_word(candidate)}까지 남은 기간이 예상 기간보다 짧다)\n",
             False: f"기간 판정: 여유 있음 ({_due_word(candidate)}까지 남은 기간이 예상 기간보다 길다) — 빠듯하다고 쓰지 마세요\n"}
            .get(_is_tight(candidate), ""))
