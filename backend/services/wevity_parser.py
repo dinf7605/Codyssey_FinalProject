@@ -44,6 +44,27 @@ class WevityDetail:
     raw_text: str = ""
 
 
+WEVITY_HOSTS = ("www.wevity.com", "wevity.com")
+
+
+def is_wevity_url(url: str) -> bool:
+    """https 로 된 위비티 주소인가 — 목록에 섞인 다른 사이트 주소를 수집기가 요청하지 않게 한다."""
+    try:
+        parsed = urlsplit(url)
+    except ValueError:  # 'https://[' 처럼 읽을 수 없는 주소
+        return False
+    return parsed.scheme == "https" and parsed.hostname in WEVITY_HOSTS
+
+
+def _web_url(url: str) -> str | None:
+    """http(s) 주소만 돌려준다 — 'javascript:' 같은 주소가 원문 링크로 저장되지 않게 한다."""
+    try:
+        parsed = urlsplit(url)
+    except ValueError:
+        return None
+    return url if parsed.scheme in ("http", "https") and parsed.hostname else None
+
+
 def _clean_text(value: str) -> str:
     return re.sub(r"\s+", " ", value).strip()
 
@@ -67,8 +88,7 @@ def parse_wevity_links(html: str, *, base_url: str = "https://www.wevity.com") -
         if link is None:
             continue
         url = urljoin(base_url.rstrip("/") + "/", link.get("href", ""))
-        parsed = urlsplit(url)
-        if parsed.scheme != "https" or parsed.hostname not in ("www.wevity.com", "wevity.com"):
+        if not is_wevity_url(url):
             continue
         source_id = _source_id(url)
         title = _title_without_badges(link)
@@ -96,6 +116,8 @@ def parse_wevity_list(
             continue
 
         source_url = urljoin(base_url, link.get("href", ""))
+        if not is_wevity_url(source_url):  # 수집기가 이 주소로 상세를 요청한다 — 위비티 밖이면 버린다
+            continue
         source_id = _source_id(source_url)
         if source_id is None or source_id in seen:
             continue
@@ -156,7 +178,7 @@ def parse_wevity_detail(html: str, *, source_url: str) -> WevityDetail:
         if label == "홈페이지":
             link = row.find("a", href=True)
             if link:
-                official_url = urljoin(source_url, link["href"])
+                official_url = _web_url(urljoin(source_url, link["href"]))
 
     start_date = None
     deadline = None

@@ -6,6 +6,8 @@
 개인정보는 줄여서 보여 준다 (관리자도 필요한 만큼만 본다)
   - 이메일 ks***@naver.com · 닉네임 첫 글자만 · 사용자 id 는 앞 8자리
   - 사용자가 직접 쓴 글(학습 메모 · 피드백 사유)은 "12자" 처럼 길이만
+  - 사용자의 목표에서 나온 글(목표 이름 · 단원/블록 제목 · 그 제목이 들어가는 알림 문구와 재조정 요약)도 길이만
+    — 목표 이름은 사용자가 직접 적을 수 있고, 무엇을 공부하는지가 그대로 드러난다
   - 학습 메모리 값 · 임베딩 벡터 · 공고 원문 같은 큰 값은 아예 뺀다
 수정·삭제는 하지 않는다. 서비스 키로 읽으므로 이 모듈은 관리자 전용 라우터에서만 부른다.
 """
@@ -44,7 +46,7 @@ CATALOG: tuple[TableSpec, ...] = (
               {"user_id": SHORT}),
     TableSpec("notification_logs", "알림 기록", "E", "sent_at",
               ("id", "user_id", "type", "message", "is_read", "block_id", "sent_at"),
-              {"user_id": SHORT, "block_id": SHORT}),
+              {"user_id": SHORT, "block_id": SHORT, "message": LENGTH}),
     TableSpec("ai_call_logs", "AI 처리 기록", "C", "created_at",
               ("id", "feature", "model", "source", "tool_calls", "latency_ms", "message", "created_at")),
     TableSpec("ai_request_logs", "AI 요청 기록", "E", "created_at",
@@ -58,22 +60,22 @@ CATALOG: tuple[TableSpec, ...] = (
     # 일정 · 학습 (C)
     TableSpec("study_plans", "학습 계획", "C", "created_at",
               ("id", "user_id", "goal_title", "deadline", "source", "status", "created_at"),
-              {"id": SHORT, "user_id": SHORT}),
+              {"id": SHORT, "user_id": SHORT, "goal_title": LENGTH}),
     TableSpec("study_units", "학습 단위", "C", "position",
               ("plan_id", "unit_key", "title", "estimated_minutes", "estimated", "removed_at"),
-              {"plan_id": SHORT}, order_is_time=False),
+              {"plan_id": SHORT, "title": LENGTH}, order_is_time=False),
     TableSpec("plan_blocks", "일정 블록", "C", "updated_at",
               ("id", "plan_id", "title", "start_at", "minutes", "locked", "done", "done_at", "updated_at"),
-              {"id": SHORT, "plan_id": SHORT}),
+              {"id": SHORT, "plan_id": SHORT, "title": LENGTH}),
     TableSpec("study_sessions", "학습 기록", "C", "created_at",
               ("id", "user_id", "block_id", "started_at", "minutes", "expected_minutes", "note", "created_at"),
               {"user_id": SHORT, "block_id": SHORT, "note": LENGTH}),
     TableSpec("plan_reschedule_runs", "재조정 실행", "C", "created_at",
               ("id", "user_id", "summary", "summary_source", "moved", "unplaced", "undone_at", "created_at"),
-              {"id": SHORT, "user_id": SHORT}),
+              {"id": SHORT, "user_id": SHORT, "summary": LENGTH}),
     TableSpec("plan_changes", "일정 변경 내역", "C", "created_at",
               ("id", "user_id", "origin", "change_type", "title", "reason", "created_at"),
-              {"user_id": SHORT}),
+              {"user_id": SHORT, "title": LENGTH}),
     TableSpec("curriculum_units", "표준 커리큘럼", "C", "id",
               ("id", "goal_title", "subject", "topic", "standard_minutes", "verified"), order_is_time=False),
     # 공모전 (D)

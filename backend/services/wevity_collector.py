@@ -6,6 +6,7 @@
 지키는 것
   - WEVITY_CRAWLING_ENABLED=true 일 때만 실제로 요청한다
   - 한 번 받은 robots.txt 로 목록·상세 주소를 모두 확인한다. robots 를 못 읽으면 수집하지 않는다
+  - https 위비티 주소만 요청한다 — 목록에 섞인 다른 사이트 주소나 밖으로 보내는 이동(redirect)은 따라가지 않는다
   - 요청 사이 3초씩 쉬고, 한 번에 상세는 최대 MAX_DETAILS 건만 받는다
   - 공고 원문(raw_text)은 저장하지 않는다 — 사실 정보만 남기고 자세한 내용은 원문 링크로 보낸다
   - 이미 상세까지 저장한 공고는 다시 받지 않는다 (refresh 일 때만). 제목·링크만 있는 옛 행은 채운다
@@ -19,11 +20,14 @@ import time
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from typing import Callable
+from urllib.parse import urljoin
 from urllib.robotparser import RobotFileParser
 
 import httpx
 
-from services.wevity_parser import WevityDetail, WevityListItem, parse_wevity_detail, parse_wevity_list
+from services.wevity_parser import (
+    WevityDetail, WevityListItem, is_wevity_url, parse_wevity_detail, parse_wevity_list,
+)
 
 SOURCE = "wevity"
 JOB_NAME = "contest.collect"
@@ -31,6 +35,7 @@ BASE_URL = "https://www.wevity.com"
 USER_AGENT = "StudyPace/0.1 (non-commercial student project; codyssey final project)"
 REQUEST_GAP_SECONDS = 3.0
 MAX_DETAILS = 100  # 한 번에 받는 상세 수 상한 — 3초 간격이면 약 5분
+MAX_REDIRECTS = 5  # 이동(redirect)은 이만큼만 따라간다
 KST = timezone(timedelta(hours=9))
 
 # 학습 목표와 이어지기 쉬운 분야만 본다 (위비티 분야 번호 → 이름)
@@ -55,9 +60,16 @@ def list_url(category: int, page: int = 1) -> str:
 
 
 def fetch_html(url: str) -> str:
-    response = httpx.get(url, headers={"User-Agent": USER_AGENT}, timeout=20.0, follow_redirects=True)
-    response.raise_for_status()
-    return response.text
+    """위비티 주소만 요청한다. 이동(redirect)도 한 단계씩 확인해, 위비티 밖으로 보내면 따라가지 않는다."""
+    for _ in range(MAX_REDIRECTS + 1):
+        if not is_wevity_url(url):
+            raise ValueError("위비티 밖의 주소는 요청하지 않습니다")
+        response = httpx.get(url, headers={"User-Agent": USER_AGENT}, timeout=20.0, follow_redirects=False)
+        if not response.is_redirect:
+            response.raise_for_status()
+            return response.text
+        url = urljoin(url, response.headers["location"])
+    raise ValueError("이동(redirect)이 너무 많습니다")
 
 
 def robots_checker() -> Callable[[str], bool]:

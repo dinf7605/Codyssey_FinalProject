@@ -5,6 +5,7 @@
 
 from datetime import datetime
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 
@@ -214,6 +215,58 @@ def test_robots_가_상세를_막으면_상세를_요청하지_않는다(db):
     result = wc.collect(db, categories=[20], fetch=s.fetch, allowed=lambda url: "gbn=view" not in url,
                         sleep=lambda _: None, now=NOW)
     assert len(s.requests) == 1 and result.saved == 0 and result.failed == 2
+
+
+class FakeHttp:
+    """httpx.get 대신 — 주소별로 정해 둔 응답을 돌려주고, 요청한 주소를 기록한다."""
+
+    def __init__(self, responses):
+        self.responses, self.requests = responses, []
+
+    def get(self, url, **kwargs):
+        self.requests.append(url)
+        assert kwargs.get("follow_redirects") is False, "이동은 직접 확인하며 따라가야 한다"
+        status, value = self.responses[url]
+        request = httpx.Request("GET", url)
+        if status in (301, 302):
+            return httpx.Response(status, headers={"location": value}, request=request)
+        return httpx.Response(status, text=value, request=request)
+
+
+def test_위비티_밖의_주소는_요청하지_않는다(monkeypatch):
+    http = FakeHttp({})
+    monkeypatch.setattr(wc.httpx, "get", http.get)
+
+    for url in ("https://evil.example/?gbn=view&ix=1", "http://www.wevity.com/?ix=1", "file:///etc/hosts"):
+        with pytest.raises(ValueError, match="위비티 밖"):
+            wc.fetch_html(url)
+    assert http.requests == []
+
+
+def test_위비티_안의_이동은_따라가고_밖으로_보내면_멈춘다(monkeypatch):
+    inside, moved = "https://wevity.com/?ix=1", "https://www.wevity.com/?ix=1"
+    outside = "https://www.wevity.com/?ix=2"
+    http = FakeHttp({
+        inside: (301, moved),
+        moved: (200, "<html>상세</html>"),
+        outside: (302, "https://evil.example/steal"),
+    })
+    monkeypatch.setattr(wc.httpx, "get", http.get)
+
+    assert wc.fetch_html(inside) == "<html>상세</html>"
+    with pytest.raises(ValueError, match="위비티 밖"):
+        wc.fetch_html(outside)
+    assert http.requests == [inside, moved, outside], "밖의 주소로는 요청이 나가지 않는다"
+
+
+def test_이동이_끝없이_이어지면_멈춘다(monkeypatch):
+    loop = "https://www.wevity.com/?ix=1"
+    http = FakeHttp({loop: (302, loop)})
+    monkeypatch.setattr(wc.httpx, "get", http.get)
+
+    with pytest.raises(ValueError, match="너무 많"):
+        wc.fetch_html(loop)
+    assert len(http.requests) == wc.MAX_REDIRECTS + 1
 
 
 # ── 수집 API (POST /contests/collect) ──────────────────

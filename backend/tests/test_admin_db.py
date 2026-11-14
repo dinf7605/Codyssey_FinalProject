@@ -73,6 +73,34 @@ def test_최근_행은_보여_줄_열만_개인정보는_가려서(db, as_user):
     assert "email" in users["masked"] and "note" in sessions["masked"]
 
 
+def test_목표에서_나온_글은_길이만_보여_준다(db, as_user):
+    """목표 이름 · 블록 제목 · 그 제목이 들어간 알림 문구 — 무엇을 공부하는지 관리자 화면에 그대로 나오지 않게."""
+    db.table("study_plans").insert({
+        "id": "0b8a1c2d-0000-4000-8000-000000000001", "user_id": USER_ID, "goal_title": "이직용 포트폴리오 준비",
+        "deadline": "2026-11-30", "source": "agent", "status": "active", "created_at": "2026-09-29T10:00:00+00:00",
+    }).execute()
+    db.table("plan_blocks").insert({
+        "id": "0b8a1c2d-0000-4000-8000-000000000002", "plan_id": "0b8a1c2d-0000-4000-8000-000000000001",
+        "title": "자기소개서 초안", "start_at": "2026-09-30T19:00:00+00:00", "minutes": 90,
+        "updated_at": "2026-09-29T10:00:00+00:00",
+    }).execute()
+    db.table("notification_logs").insert({
+        "id": 3, "user_id": USER_ID, "type": "block_start", "message": "곧 '자기소개서 초안' 시작이에요",
+        "is_read": False, "block_id": None, "sent_at": "2026-09-30T18:50:00+00:00",
+    }).execute()
+    client = as_user(ADMIN)
+
+    plans = client.get("/admin/db/tables/study_plans").json()
+    blocks = client.get("/admin/db/tables/plan_blocks").json()
+    notices = client.get("/admin/db/tables/notification_logs").json()
+
+    assert plans["rows"][0]["goal_title"] == "12자" and "goal_title" in plans["masked"]
+    assert blocks["rows"][0]["title"] == "8자" and blocks["rows"][0]["minutes"] == 90
+    assert notices["rows"][0]["message"] == "18자" and notices["rows"][0]["type"] == "block_start"
+    for payload in (plans, blocks, notices):
+        assert "자기소개서" not in str(payload) and "포트폴리오" not in str(payload)
+
+
 def test_최근_순으로_쪽을_나눠_보여_준다(db, as_user):
     db.table("ai_call_logs").insert([
         {"id": i, "feature": "plan.decompose", "tool_calls": 0, "created_at": f"2026-09-29T0{i}:00:00+00:00"}

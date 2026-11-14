@@ -10,14 +10,15 @@ import SignupConsentFields from '@/components/SignupConsentFields';
 import PasswordFields from '@/components/PasswordFields';
 import ResendConfirmation from '@/components/ResendConfirmation';
 import { passwordValid, authErrorMessage } from '@/lib/password-feedback';
+import { safeNext } from '@/lib/safeNext';
 
 // FR-JOIN-01 정보 입력 / FR-JOIN-02 개인정보 수집 동의 / FR-JOIN-03 AI 이용 고지
 // 필수 동의 2개를 체크해야 가입 버튼이 활성화된다.
 
 // 가입 뒤 로그인 화면 — 받은 next 는 같은 사이트 안 경로일 때만 넘긴다
 function loginHref() {
-  const next = typeof window === 'undefined' ? null : new URLSearchParams(window.location.search).get('next');
-  return next && /^\/(?![/\\])/.test(next) ? `/login?next=${encodeURIComponent(next)}` : '/login';
+  const next = typeof window === 'undefined' ? null : safeNext(new URLSearchParams(window.location.search).get('next'));
+  return next ? `/login?next=${encodeURIComponent(next)}` : '/login';
 }
 
 export default function SignupPage() {

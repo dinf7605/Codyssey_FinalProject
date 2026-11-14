@@ -3,7 +3,8 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { GOOGLE_NEXT_KEY, safeNext } from '@/components/GoogleLoginButton';
+import { GOOGLE_NEXT_KEY } from '@/components/GoogleLoginButton';
+import { safeNext } from '@/lib/safeNext';
 import { api, clearAuthTokens, setAuthTokens, tokenOwner } from '@/lib/api';
 import { loadExploration } from '@/lib/goalSession';
 

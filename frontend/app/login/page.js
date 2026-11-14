@@ -7,6 +7,7 @@ import GoogleLoginButton from '@/components/GoogleLoginButton';
 import ResendConfirmation from '@/components/ResendConfirmation';
 import { api, setAuthTokens } from '@/lib/api';
 import { loadExploration } from '@/lib/goalSession';
+import { safeNext } from '@/lib/safeNext';
 
 // FR-AUTH-01 이메일 로그인 / FR-AUTH-02 구글 로그인 / FR-AUTH-03 비밀번호 재설정
 // 실패 문구는 '아이디 또는 비밀번호가 올바르지 않습니다'로 통일한다 (NFR-SEC-01).
@@ -19,9 +20,7 @@ import { loadExploration } from '@/lib/goalSession';
 const AFTER_LOGIN = '/dashboard';
 
 function nextPath() {
-  const next = new URLSearchParams(window.location.search).get('next');
-  // '/' 로 시작하되 '//' · '/\' 로 시작하지 않는 경로만 (브라우저는 둘 다 다른 사이트 주소로 읽는다)
-  return next && /^\/(?![/\\])/.test(next) ? next : AFTER_LOGIN;
+  return safeNext(new URLSearchParams(window.location.search).get('next')) || AFTER_LOGIN;
 }
 
 export default function LoginPage() {

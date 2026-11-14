@@ -88,6 +88,36 @@ def test_parse_wevity_detail_extracts_allowed_metadata():
     assert detail.raw_text == "공모 주제 지원 자격 안내"
 
 
+def test_parse_wevity_list_drops_links_outside_wevity():
+    """수집기가 source_url 로 상세를 요청하므로, 위비티 밖 주소는 목록에서부터 버린다."""
+    outside = "".join(
+        f'<li><div class="tit"><a href="{href}">밖으로 가는 링크</a></div></li>'
+        for href in (
+            "https://evil.example/?gbn=view&ix=901",       # 다른 사이트
+            "//evil.example/?gbn=view&ix=902",             # 주소 형식만 바꾼 다른 사이트
+            "http://www.wevity.com/?gbn=view&ix=903",      # https 가 아님
+            "https://www.wevity.com.evil.example/?gbn=view&ix=904",  # 이름만 비슷한 사이트
+        )
+    )
+    items = parse_wevity_list(LIST_HTML.replace("</ul>", outside + "</ul>"))
+
+    assert [item.source_id for item in items] == ["111155", "222222"]
+    assert all(item.source_url.startswith("https://www.wevity.com?") for item in items)
+
+
+def test_parse_wevity_detail_keeps_only_web_links_as_official_url():
+    source_url = "https://www.wevity.com/?c=find&gbn=viewok&ix=111155"
+
+    def official(href):
+        html = DETAIL_HTML.replace("https://example.org/contest", href)
+        return parse_wevity_detail(html, source_url=source_url).official_url
+
+    assert official("http://example.org/contest") == "http://example.org/contest"
+    assert official("javascript:alert(1)") is None
+    assert official("data:text/html,x") is None
+    assert official("mailto:host@example.org") is None
+
+
 def test_parse_wevity_detail_rejects_non_detail_html():
     try:
         parse_wevity_detail("<html></html>", source_url="https://www.wevity.com/")

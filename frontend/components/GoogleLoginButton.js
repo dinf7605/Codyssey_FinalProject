@@ -2,17 +2,13 @@
 
 import { useState } from 'react';
 import { api } from '@/lib/api';
+import { safeNext } from '@/lib/safeNext';
 
 // FR-AUTH-02 구글로 계속하기 — 로그인·회원가입 화면 공통.
 // 돌아올 곳(next)은 이 탭의 세션에 잠깐 두고, 구글에서 돌아온 /auth/callback 이 꺼내 쓴다.
 // 캘린더 권한은 여기서 요구하지 않는다 (기본 email·profile 만).
 
 export const GOOGLE_NEXT_KEY = 'sp_google_next';
-
-// '/' 로 시작하되 '//' · '/\' 로 시작하지 않는 우리 사이트 안 경로만 받는다
-export function safeNext(value) {
-  return value && /^\/(?![/\\])/.test(value) ? value : null;
-}
 
 export default function GoogleLoginButton({ next = null, label = '구글 계정으로 계속하기' }) {
   const [pending, setPending] = useState(false);
